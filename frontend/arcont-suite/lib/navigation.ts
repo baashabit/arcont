@@ -96,6 +96,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["projects:*"]
   },
   {
+    href: "/field",
+    label: "Field App",
+    description: "Mobile site execution",
+    domain: "projects",
+    moduleKeys: ["projects.control"],
+    requiredPermissions: ["projects:*"]
+  },
+  {
     href: "/procurement",
     label: "Procurement",
     description: "Requests and sourcing",
