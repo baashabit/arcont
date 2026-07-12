@@ -260,6 +260,33 @@ type DocumentControlRiskRecord = {
   status: string;
 };
 
+type QualityInspectionRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  areaName: string;
+  checklistName: string;
+  contractorName: string;
+  severity: "minor" | "major" | "critical";
+  openFindings: number;
+  evidenceCompletion: number;
+  releaseReadiness: number;
+  reworkRate: number;
+  status: "scheduled" | "in_progress" | "pending_release" | "released" | "blocked";
+  nextAction: string;
+  updatedAt: string;
+};
+
+type QualityRiskRecord = {
+  id: string;
+  inspectionId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -283,6 +310,8 @@ export type PlatformRepository = {
   listIntegrationRisks(companyId: string): Promise<IntegrationRiskRecord[]>;
   listDocumentControlItems(companyId: string): Promise<DocumentControlItemRecord[]>;
   listDocumentControlRisks(companyId: string): Promise<DocumentControlRiskRecord[]>;
+  listQualityInspections(companyId: string): Promise<QualityInspectionRecord[]>;
+  listQualityRisks(companyId: string): Promise<QualityRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -1267,6 +1296,103 @@ function createSeedState() {
     }
   ];
 
+  const qualityInspections: QualityInspectionRecord[] = [
+    {
+      id: "qlt_torrec_bath_demo",
+      companyId: "cmp_arcont_demo",
+      code: "QIN-320",
+      areaName: "Torre C · Banos muestra",
+      checklistName: "Acabados y sellos",
+      contractorName: "Acabados del Sureste",
+      severity: "critical",
+      openFindings: 5,
+      evidenceCompletion: 82,
+      releaseReadiness: 61,
+      reworkRate: 6.2,
+      status: "blocked",
+      nextAction: "Correct alignment and upload closeout evidence before release",
+      updatedAt: "2026-07-11T10:05:00.000Z"
+    },
+    {
+      id: "qlt_torreb_lvl12_demo",
+      companyId: "cmp_arcont_demo",
+      code: "QIN-334",
+      areaName: "Torre B · Acabados nivel 12",
+      checklistName: "Punch list menor",
+      contractorName: "Acabados del Sureste",
+      severity: "major",
+      openFindings: 3,
+      evidenceCompletion: 91,
+      releaseReadiness: 78,
+      reworkRate: 3.6,
+      status: "pending_release",
+      nextAction: "Close cosmetic punch items and confirm release walk",
+      updatedAt: "2026-07-11T09:00:00.000Z"
+    },
+    {
+      id: "qlt_urbanizacion_demo",
+      companyId: "cmp_arcont_demo",
+      code: "QIN-347",
+      areaName: "Urbanizacion E2",
+      checklistName: "Base y nivelacion",
+      contractorName: "Urbaniza MX",
+      severity: "major",
+      openFindings: 4,
+      evidenceCompletion: 74,
+      releaseReadiness: 68,
+      reworkRate: 4.9,
+      status: "in_progress",
+      nextAction: "Finish base correction and attach georeferenced evidence",
+      updatedAt: "2026-07-11T08:45:00.000Z"
+    },
+    {
+      id: "qlt_bienestar_demo",
+      companyId: "cmp_bienestar_gov",
+      code: "QIN-402",
+      areaName: "Paquete Bienestar Sur",
+      checklistName: "Inspeccion de liberacion",
+      contractorName: "Cuadrillas Bienestar Oriente",
+      severity: "major",
+      openFindings: 6,
+      evidenceCompletion: 79,
+      releaseReadiness: 65,
+      reworkRate: 5.1,
+      status: "blocked",
+      nextAction: "Close federal observations before next release gate",
+      updatedAt: "2026-07-11T11:15:00.000Z"
+    }
+  ];
+
+  const qualityRisks: QualityRiskRecord[] = [
+    {
+      id: "qltr_torrec_seal",
+      inspectionId: "qlt_torrec_bath_demo",
+      title: "Canceleria alignment and wet seal issue still blocks release",
+      category: "finish quality",
+      severity: "critical",
+      owner: "Site quality",
+      status: "Waiting for contractor correction and new inspection round"
+    },
+    {
+      id: "qltr_urbanizacion_base",
+      inspectionId: "qlt_urbanizacion_demo",
+      title: "Base and leveling issue still open in urbanization front",
+      category: "field release",
+      severity: "warning",
+      owner: "Field QA",
+      status: "Reinspection planned after contractor correction"
+    },
+    {
+      id: "qltr_bienestar_release",
+      inspectionId: "qlt_bienestar_demo",
+      title: "Government release package still lacks complete evidence set",
+      category: "handover quality",
+      severity: "critical",
+      owner: "Regional PMO",
+      status: "Coordinating evidence closure with field and compliance"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -1312,6 +1438,8 @@ function createSeedState() {
       integrationRisks,
       documentControlItems,
       documentControlRisks,
+      qualityInspections,
+      qualityRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -1411,6 +1539,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.documentControlItems.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.documentControlRisks.filter((risk) => itemIds.has(risk.itemId));
+    },
+    async listQualityInspections(companyId: string) {
+      return state.qualityInspections.filter((item) => item.companyId === companyId);
+    },
+    async listQualityRisks(companyId: string) {
+      const inspectionIds = new Set(
+        state.qualityInspections.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.qualityRisks.filter((risk) => inspectionIds.has(risk.inspectionId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -1928,6 +2065,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listDocumentControlRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listQualityInspections(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listQualityRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;

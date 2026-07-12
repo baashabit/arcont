@@ -459,6 +459,45 @@ export const DocumentControlOverviewSchema = z.object({
   focusItem: DocumentControlItemSchema.nullable()
 });
 
+export const QualityRiskSchema = z.object({
+  id: z.string(),
+  inspectionId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const QualityInspectionSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  areaName: z.string(),
+  checklistName: z.string(),
+  contractorName: z.string(),
+  severity: z.enum(["minor", "major", "critical"]),
+  openFindings: z.number().int().nonnegative(),
+  evidenceCompletion: z.number().min(0).max(100),
+  releaseReadiness: z.number().min(0).max(100),
+  reworkRate: z.number().min(0),
+  status: z.enum(["scheduled", "in_progress", "pending_release", "released", "blocked"]),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const QualityOverviewSchema = z.object({
+  summary: z.object({
+    inspections: z.number().int().nonnegative(),
+    openFindings: z.number().int().nonnegative(),
+    releaseReadiness: z.number().min(0).max(100),
+    averageReworkRate: z.number().min(0)
+  }),
+  inspectionsBoard: z.array(QualityInspectionSchema),
+  risks: z.array(QualityRiskSchema),
+  focusInspection: QualityInspectionSchema.nullable()
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -627,6 +666,9 @@ export type IntegrationOverviewContract = z.infer<typeof IntegrationOverviewSche
 export type DocumentControlRiskContract = z.infer<typeof DocumentControlRiskSchema>;
 export type DocumentControlItemContract = z.infer<typeof DocumentControlItemSchema>;
 export type DocumentControlOverviewContract = z.infer<typeof DocumentControlOverviewSchema>;
+export type QualityRiskContract = z.infer<typeof QualityRiskSchema>;
+export type QualityInspectionContract = z.infer<typeof QualityInspectionSchema>;
+export type QualityOverviewContract = z.infer<typeof QualityOverviewSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

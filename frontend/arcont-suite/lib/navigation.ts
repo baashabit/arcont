@@ -88,6 +88,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["projects:*"]
   },
   {
+    href: "/quality",
+    label: "Quality",
+    description: "Inspections and punch list",
+    domain: "projects",
+    moduleKeys: ["projects.control"],
+    requiredPermissions: ["projects:*"]
+  },
+  {
     href: "/procurement",
     label: "Procurement",
     description: "Requests and sourcing",

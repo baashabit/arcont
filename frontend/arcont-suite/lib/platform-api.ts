@@ -20,6 +20,7 @@ import {
   PlatformSettingsSchema,
   ProcurementOverviewSchema,
   ProjectPortfolioOverviewSchema,
+  QualityOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
   UpdatePlatformUserRoleRequestSchema,
@@ -49,6 +50,7 @@ import {
   type PlatformSettingsContract,
   type ProcurementOverviewContract,
   type ProjectPortfolioOverviewContract,
+  type QualityOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
   type UpdatePlatformUserRoleRequestContract,
@@ -355,6 +357,15 @@ export async function fetchDocumentControlOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/document-control/overview${query}`, options);
   return response ? DocumentControlOverviewSchema.parse(response) : null;
+}
+
+export async function fetchQualityOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<QualityOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/quality/overview${query}`, options);
+  return response ? QualityOverviewSchema.parse(response) : null;
 }
 
 export async function fetchHrOverview(
