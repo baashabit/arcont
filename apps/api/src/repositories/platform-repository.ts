@@ -21,11 +21,42 @@ import type {
 import { createPrefixedId } from "../lib/ids.js";
 import { generateTemporaryPassword, hashPassword } from "../lib/passwords.js";
 
+type ProjectPortfolioItemRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  name: string;
+  client: string;
+  segment: string;
+  status: "planning" | "active" | "at_risk" | "blocked" | "closed";
+  stage: string;
+  progress: number;
+  scheduleVarianceDays: number;
+  budgetHealth: "on_track" | "warning" | "critical";
+  qualityHolds: number;
+  permitBlockers: number;
+  activeFronts: number;
+  updatedAt: string;
+  nextMilestone: string;
+};
+
+type ProjectRiskRecord = {
+  id: string;
+  projectId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
   listRoles(): Promise<typeof defaultRoles>;
   listUsers(companyId?: string): Promise<UserRecord[]>;
+  listProjects(companyId: string): Promise<ProjectPortfolioItemRecord[]>;
+  listProjectRisks(companyId: string): Promise<ProjectRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -116,6 +147,120 @@ function createSeedState() {
     }
   ];
 
+  const projects: ProjectPortfolioItemRecord[] = [
+    {
+      id: "prj_torre_b",
+      companyId: "cmp_arcont_demo",
+      code: "ARB-TB-01",
+      name: "Torre B Residencial",
+      client: "Capital Habitat",
+      segment: "Vertical housing",
+      status: "active",
+      stage: "Structural progress",
+      progress: 84,
+      scheduleVarianceDays: 2.1,
+      budgetHealth: "warning",
+      qualityHolds: 5,
+      permitBlockers: 0,
+      activeFronts: 4,
+      updatedAt: "2026-07-11T18:20:00.000Z",
+      nextMilestone: "Level 12 slab pour"
+    },
+    {
+      id: "prj_etapa_2",
+      companyId: "cmp_arcont_demo",
+      code: "ARB-ET2-02",
+      name: "Etapa 2 Urbanizacion",
+      client: "ARCONT Desarrollos",
+      segment: "Horizontal housing",
+      status: "at_risk",
+      stage: "Permits and kickoff",
+      progress: 61,
+      scheduleVarianceDays: 4.3,
+      budgetHealth: "critical",
+      qualityHolds: 3,
+      permitBlockers: 2,
+      activeFronts: 2,
+      updatedAt: "2026-07-11T17:10:00.000Z",
+      nextMilestone: "Municipal utility approval"
+    },
+    {
+      id: "prj_cobalto",
+      companyId: "cmp_bienestar_gov",
+      code: "IBS-GOV-07",
+      name: "Infraestructura Vial y Vivienda",
+      client: "Gobierno Federal",
+      segment: "Government housing",
+      status: "active",
+      stage: "Government control",
+      progress: 73,
+      scheduleVarianceDays: 1.6,
+      budgetHealth: "on_track",
+      qualityHolds: 6,
+      permitBlockers: 1,
+      activeFronts: 5,
+      updatedAt: "2026-07-11T16:45:00.000Z",
+      nextMilestone: "Third supervision audit"
+    },
+    {
+      id: "prj_bienestar_norte",
+      companyId: "cmp_bienestar_gov",
+      code: "IBS-BN-11",
+      name: "Paquete Bienestar Norte",
+      client: "SEDATU",
+      segment: "Government housing",
+      status: "blocked",
+      stage: "Site readiness",
+      progress: 48,
+      scheduleVarianceDays: 6.2,
+      budgetHealth: "warning",
+      qualityHolds: 0,
+      permitBlockers: 3,
+      activeFronts: 1,
+      updatedAt: "2026-07-11T15:30:00.000Z",
+      nextMilestone: "Land release and mobilization"
+    }
+  ];
+
+  const projectRisks: ProjectRiskRecord[] = [
+    {
+      id: "rsk_etapa_2_permits",
+      projectId: "prj_etapa_2",
+      title: "Utility permit package still pending",
+      category: "Permits",
+      severity: "critical",
+      owner: "Permitting PM",
+      status: "Escalated with municipality"
+    },
+    {
+      id: "rsk_torre_b_concrete",
+      projectId: "prj_torre_b",
+      title: "Concrete cycle slipping on tower core",
+      category: "Schedule",
+      severity: "warning",
+      owner: "Site superintendent",
+      status: "Recovery sequence in progress"
+    },
+    {
+      id: "rsk_bn_land_release",
+      projectId: "prj_bienestar_norte",
+      title: "Land release blocks full mobilization",
+      category: "Government control",
+      severity: "critical",
+      owner: "Regional director",
+      status: "Awaiting final release letter"
+    },
+    {
+      id: "rsk_cobalto_quality",
+      projectId: "prj_cobalto",
+      title: "Repeated rebar inspection comments",
+      category: "Quality",
+      severity: "warning",
+      owner: "Quality lead",
+      status: "Crew retraining scheduled"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -140,12 +285,14 @@ function createSeedState() {
   const refreshTokens: RefreshTokenRecord[] = [];
   const auditEvents: AuditEventRecord[] = [];
 
-  return {
-    companies,
-    users,
-    settings,
-    refreshTokens,
-    auditEvents
+    return {
+      companies,
+      users,
+      projects,
+      projectRisks,
+      settings,
+      refreshTokens,
+      auditEvents
   };
 }
 
@@ -161,6 +308,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
     },
     async listRoles() {
       return defaultRoles;
+    },
+    async listProjects(companyId: string) {
+      return state.projects.filter((project) => project.companyId === companyId);
+    },
+    async listProjectRisks(companyId: string) {
+      const projectIds = new Set(
+        state.projects.filter((project) => project.companyId === companyId).map((project) => project.id)
+      );
+      return state.projectRisks.filter((risk) => projectIds.has(risk.projectId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -513,6 +669,81 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     },
     async listRoles() {
       return defaultRoles;
+    },
+    async listProjects(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            p.id,
+            p.company_id,
+            p.external_key,
+            p.name,
+            p.client_name,
+            p.segment,
+            p.status,
+            p.stage,
+            p.progress_percent,
+            p.schedule_variance_days,
+            p.budget_health,
+            p.quality_holds,
+            p.permit_blockers,
+            p.active_fronts,
+            p.updated_at,
+            p.next_milestone
+          from project_portfolio p
+          where p.company_id = $1
+          order by p.updated_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map((row) => ({
+        id: String(row.id),
+        companyId: String(row.company_id),
+        code: String(row.external_key),
+        name: String(row.name),
+        client: String(row.client_name),
+        segment: String(row.segment),
+        status: row.status as ProjectPortfolioItemRecord["status"],
+        stage: String(row.stage),
+        progress: Number(row.progress_percent),
+        scheduleVarianceDays: Number(row.schedule_variance_days),
+        budgetHealth: row.budget_health as ProjectPortfolioItemRecord["budgetHealth"],
+        qualityHolds: Number(row.quality_holds),
+        permitBlockers: Number(row.permit_blockers),
+        activeFronts: Number(row.active_fronts),
+        updatedAt: String(row.updated_at),
+        nextMilestone: String(row.next_milestone)
+      }));
+    },
+    async listProjectRisks(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.project_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from project_risks r
+          inner join project_portfolio p on p.id = r.project_id
+          where p.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map((row) => ({
+        id: String(row.id),
+        projectId: String(row.project_id),
+        title: String(row.title),
+        category: String(row.category),
+        severity: row.severity as ProjectRiskRecord["severity"],
+        owner: String(row.owner_name),
+        status: String(row.status)
+      }));
     },
     async listUsers(companyId?: string) {
       const result = companyId

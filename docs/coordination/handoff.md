@@ -4,44 +4,41 @@ Update this file from PC 1 before Antonio starts the next task.
 
 ## Branch
 
-`feat/web-session-shell-hardening`
+`feat/web-projects-live-portfolio`
 
 ## Objective
 
-Implement the real session lifecycle and protected shell in `frontend/arcont-suite` using the backend auth endpoints that already exist.
+Refine and elevate the live `Projects` portfolio in `frontend/arcont-suite` on top of the backend portfolio endpoint that PC 1 already left working.
 
 ## Available Backend Endpoints
 
-- `POST /auth/login`
-- `POST /auth/refresh`
-- `GET /auth/me`
-- `POST /auth/logout`
-- all `/platform/*` routes now require bearer token
+- `GET /projects/overview?companyId=...`
+- bearer token is still required
 
 ## Important Backend Behavior
 
-- missing token returns `401`
-- invalid or expired token returns `401`
-- missing permission returns `403 AUTH_PERMISSION_DENIED`
-- cross-company access returns `403 AUTH_COMPANY_SCOPE_FORBIDDEN`
-- platform management writes still require the same permissions as before
-- live user administration already exists on your branch; do not redo it
+- response will represent real construction portfolio data, not route mocks
+- active tenant scope still applies
+- keep the page compatible with the current shell and permission model
 
 ## Scope
 
-- make login/session state rely on real backend session endpoints first
-- restore session on reload using `GET /auth/me`
-- if access token is stale but refresh token exists, try `POST /auth/refresh`
-- on sign out, call `POST /auth/logout`
-- protect shell routes when session is not valid
-- show clear UI state when session expires or auth fails
-- keep a dev fallback only if backend is unreachable, not when backend explicitly rejects auth
-- keep the interface coherent with the current premium shell
+- take the existing live `/projects` portfolio baseline and improve the interface quality
+- keep consuming backend data instead of `route-mocks`
+- show:
+  - portfolio KPIs
+  - project table
+  - risk / blocker panel
+  - selected project detail or highlights
+- preserve current visual language of the shell
+- improve scanability, hierarchy and action clarity for directors / PMO / supervision
+- avoid giant refactors outside the projects route and the minimum shared helpers it needs
 
 ## Out Of Scope
 
-- contract changes
 - backend changes
+- contract changes
+- auth redesign
 - redesign of platform users page
 - module governance rewrites
 - company provisioning changes

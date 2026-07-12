@@ -16,6 +16,8 @@ export const moduleAreas = [
 export const moduleScopes = ["platform", "operations"] as const;
 export const companyStatuses = ["draft", "active", "suspended"] as const;
 export const userStatuses = ["invited", "active", "disabled"] as const;
+export const projectStatuses = ["planning", "active", "at_risk", "blocked", "closed"] as const;
+export const projectBudgetHealth = ["on_track", "warning", "critical"] as const;
 
 export const ModuleSchema = z.object({
   key: z.string(),
@@ -108,6 +110,47 @@ export const AuthSessionActivitySchema = z.object({
 
 export const AuthSessionActivitiesSchema = z.object({
   items: z.array(AuthSessionActivitySchema)
+});
+
+export const ProjectRiskSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const ProjectPortfolioItemSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  name: z.string(),
+  client: z.string(),
+  segment: z.string(),
+  status: z.enum(projectStatuses),
+  stage: z.string(),
+  progress: z.number().min(0).max(100),
+  scheduleVarianceDays: z.number(),
+  budgetHealth: z.enum(projectBudgetHealth),
+  qualityHolds: z.number().int().nonnegative(),
+  permitBlockers: z.number().int().nonnegative(),
+  activeFronts: z.number().int().nonnegative(),
+  updatedAt: z.string(),
+  nextMilestone: z.string()
+});
+
+export const ProjectPortfolioOverviewSchema = z.object({
+  summary: z.object({
+    activeProjects: z.number().int().nonnegative(),
+    averageProgress: z.number().min(0).max(100),
+    qualityHolds: z.number().int().nonnegative(),
+    permitBlockers: z.number().int().nonnegative()
+  }),
+  projects: z.array(ProjectPortfolioItemSchema),
+  risks: z.array(ProjectRiskSchema),
+  focusProject: ProjectPortfolioItemSchema.nullable()
 });
 
 export const CompanyModuleStateSchema = z.object({
@@ -251,6 +294,9 @@ export type AuthCurrentSessionContract = z.infer<typeof AuthCurrentSessionSchema
 export type AuthLogoutResponseContract = z.infer<typeof AuthLogoutResponseSchema>;
 export type AuthSessionActivityContract = z.infer<typeof AuthSessionActivitySchema>;
 export type AuthSessionActivitiesContract = z.infer<typeof AuthSessionActivitiesSchema>;
+export type ProjectRiskContract = z.infer<typeof ProjectRiskSchema>;
+export type ProjectPortfolioItemContract = z.infer<typeof ProjectPortfolioItemSchema>;
+export type ProjectPortfolioOverviewContract = z.infer<typeof ProjectPortfolioOverviewSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

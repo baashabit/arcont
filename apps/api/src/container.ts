@@ -5,6 +5,7 @@ import {
   createPostgresPlatformRepository
 } from "./repositories/platform-repository.js";
 import { createAuthService } from "./services/auth-service.js";
+import { createProjectsService } from "./services/projects-service.js";
 import { createPlatformService } from "./services/platform-service.js";
 
 export function createContainer() {
@@ -14,10 +15,12 @@ export function createContainer() {
       : createInMemoryPlatformRepository();
   const platformService = createPlatformService(platformRepository);
   const authService = createAuthService(platformRepository);
+  const projectsService = createProjectsService(platformRepository);
 
   return {
     platformRepository,
     platformService,
-    authService
+    authService,
+    projectsService
   };
 }

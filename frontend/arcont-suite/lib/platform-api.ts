@@ -11,6 +11,7 @@ import {
   PlatformBootstrapSchema,
   PlatformDashboardSummarySchema,
   PlatformSettingsSchema,
+  ProjectPortfolioOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
   UpdatePlatformUserRoleRequestSchema,
@@ -31,6 +32,7 @@ import {
   type PlatformBootstrapContract,
   type PlatformDashboardSummaryContract,
   type PlatformSettingsContract,
+  type ProjectPortfolioOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
   type UpdatePlatformUserRoleRequestContract,
@@ -265,6 +267,15 @@ export async function fetchAuditEvents(
   );
 
   return response ? AuditEventSchema.array().parse(response.items) : null;
+}
+
+export async function fetchProjectsOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<ProjectPortfolioOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/projects/overview${query}`, options);
+  return response ? ProjectPortfolioOverviewSchema.parse(response) : null;
 }
 
 export async function fetchUserDetail(

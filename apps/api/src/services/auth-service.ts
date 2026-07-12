@@ -43,6 +43,10 @@ function createRefreshToken(userId: string) {
 }
 
 function matchesPermission(grantedPermission: string, requiredPermission: string) {
+  if (grantedPermission === "platform:*") {
+    return true;
+  }
+
   if (grantedPermission === requiredPermission) {
     return true;
   }

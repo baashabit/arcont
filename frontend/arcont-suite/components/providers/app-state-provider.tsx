@@ -121,6 +121,10 @@ function mergeUsersByCompany(current: UserContract[], next: UserContract[], comp
 }
 
 function matchesPermission(grantedPermission: string, requiredPermission: string) {
+  if (grantedPermission === "platform:*") {
+    return true;
+  }
+
   if (grantedPermission === requiredPermission) {
     return true;
   }

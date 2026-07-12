@@ -95,3 +95,37 @@ create index if not exists idx_platform_users_company on platform_users(company_
 create index if not exists idx_platform_company_modules_company on platform_company_modules(company_id);
 create index if not exists idx_auth_refresh_tokens_user on auth_refresh_tokens(user_id, created_at desc);
 create index if not exists idx_audit_events_company on audit_events(company_id, created_at desc);
+
+create table if not exists project_portfolio (
+  id text primary key,
+  company_id text not null references platform_companies(id) on delete cascade,
+  external_key text not null,
+  name text not null,
+  client_name text not null,
+  segment text not null,
+  status text not null check (status in ('planning', 'active', 'at_risk', 'blocked', 'closed')),
+  stage text not null,
+  progress_percent numeric(5,2) not null default 0,
+  schedule_variance_days numeric(8,2) not null default 0,
+  budget_health text not null check (budget_health in ('on_track', 'warning', 'critical')),
+  quality_holds integer not null default 0,
+  permit_blockers integer not null default 0,
+  active_fronts integer not null default 0,
+  next_milestone text not null,
+  updated_at timestamptz not null default now(),
+  unique (company_id, external_key)
+);
+
+create table if not exists project_risks (
+  id text primary key,
+  project_id text not null references project_portfolio(id) on delete cascade,
+  title text not null,
+  category text not null,
+  severity text not null check (severity in ('info', 'warning', 'critical')),
+  owner_name text not null,
+  status text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_project_portfolio_company on project_portfolio(company_id, updated_at desc);
+create index if not exists idx_project_risks_project on project_risks(project_id, severity);

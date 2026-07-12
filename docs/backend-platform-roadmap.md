@@ -10,6 +10,7 @@
 - current session lifecycle with login, refresh, me, and logout
 - route-level authorization and tenant scope enforcement on `/platform/*`
 - auth session activity endpoints for listing and revoking refresh-session records
+- first live operations module endpoint: projects portfolio overview
 - provisioning endpoint for new companies
 - migration script and PostgreSQL foundation
 - domain validation and normalized error responses

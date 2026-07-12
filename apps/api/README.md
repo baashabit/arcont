@@ -26,6 +26,7 @@ This API currently exposes the first platform capabilities that the web app can 
 - `POST /auth/logout`
 - `GET /auth/sessions`
 - `DELETE /auth/sessions/:sessionId`
+- `GET /projects/overview?companyId=...`
 - `GET /platform/companies`
 - `GET /platform/modules`
 - `GET /platform/roles`
@@ -51,6 +52,12 @@ This API currently exposes the first platform capabilities that the web app can 
 - write access keeps using role permissions such as `users:write`, `settings:write`, `modules:*`, `companies:*`
 - cross-company access for non-platform roles returns `403 AUTH_COMPANY_SCOPE_FORBIDDEN`
 - missing permission returns `403 AUTH_PERMISSION_DENIED`
+
+## Projects Portfolio
+
+- `GET /projects/overview` returns a real portfolio payload for the active tenant
+- includes summary KPIs, project rows, risk watchlist, and a focus project
+- current in-memory seed already differentiates private development and government housing portfolios
 
 ## Local Run
 
