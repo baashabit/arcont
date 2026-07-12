@@ -267,6 +267,44 @@ export const FinanceOverviewSchema = z.object({
   focusItem: FinanceLedgerItemSchema.nullable()
 });
 
+export const CrmRiskSchema = z.object({
+  id: z.string(),
+  leadBucketId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const CrmLeadBucketSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  projectName: z.string(),
+  segment: z.string(),
+  openOpportunities: z.number().int().nonnegative(),
+  conversionRate: z.number().min(0).max(100),
+  reservations: z.number().int().nonnegative(),
+  forecastRevenue: z.number().nonnegative(),
+  health: z.enum(["healthy", "watch", "critical"]),
+  signal: z.string(),
+  owner: z.string(),
+  updatedAt: z.string()
+});
+
+export const CrmOverviewSchema = z.object({
+  summary: z.object({
+    qualifiedLeads: z.number().int().nonnegative(),
+    visitConversion: z.number().min(0).max(100),
+    reservations: z.number().int().nonnegative(),
+    forecastRevenue: z.number().nonnegative()
+  }),
+  leadBuckets: z.array(CrmLeadBucketSchema),
+  risks: z.array(CrmRiskSchema),
+  focusBucket: CrmLeadBucketSchema.nullable()
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -420,6 +458,9 @@ export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;
 export type FinanceRiskContract = z.infer<typeof FinanceRiskSchema>;
 export type FinanceLedgerItemContract = z.infer<typeof FinanceLedgerItemSchema>;
 export type FinanceOverviewContract = z.infer<typeof FinanceOverviewSchema>;
+export type CrmRiskContract = z.infer<typeof CrmRiskSchema>;
+export type CrmLeadBucketContract = z.infer<typeof CrmLeadBucketSchema>;
+export type CrmOverviewContract = z.infer<typeof CrmOverviewSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

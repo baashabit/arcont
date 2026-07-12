@@ -5,6 +5,7 @@ import {
   createPostgresPlatformRepository
 } from "./repositories/platform-repository.js";
 import { createAuthService } from "./services/auth-service.js";
+import { createCrmService } from "./services/crm-service.js";
 import { createFinanceService } from "./services/finance-service.js";
 import { createInventoryService } from "./services/inventory-service.js";
 import { createProcurementService } from "./services/procurement-service.js";
@@ -22,6 +23,7 @@ export function createContainer() {
   const procurementService = createProcurementService(platformRepository);
   const inventoryService = createInventoryService(platformRepository);
   const financeService = createFinanceService(platformRepository);
+  const crmService = createCrmService(platformRepository);
 
   return {
     platformRepository,
@@ -30,6 +32,7 @@ export function createContainer() {
     projectsService,
     procurementService,
     inventoryService,
-    financeService
+    financeService,
+    crmService
   };
 }

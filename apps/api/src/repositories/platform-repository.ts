@@ -128,6 +128,32 @@ type FinanceRiskRecord = {
   status: string;
 };
 
+type CrmLeadBucketRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  projectName: string;
+  segment: string;
+  openOpportunities: number;
+  conversionRate: number;
+  reservations: number;
+  forecastRevenue: number;
+  health: "healthy" | "watch" | "critical";
+  signal: string;
+  owner: string;
+  updatedAt: string;
+};
+
+type CrmRiskRecord = {
+  id: string;
+  leadBucketId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -141,6 +167,8 @@ export type PlatformRepository = {
   listInventoryRisks(companyId: string): Promise<InventoryRiskRecord[]>;
   listFinanceItems(companyId: string): Promise<FinanceLedgerItemRecord[]>;
   listFinanceRisks(companyId: string): Promise<FinanceRiskRecord[]>;
+  listCrmLeadBuckets(companyId: string): Promise<CrmLeadBucketRecord[]>;
+  listCrmRisks(companyId: string): Promise<CrmRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -624,6 +652,99 @@ function createSeedState() {
     }
   ];
 
+  const crmLeadBuckets: CrmLeadBucketRecord[] = [
+    {
+      id: "crm_nativa_demo",
+      companyId: "cmp_arcont_demo",
+      code: "CRM-NAT-01",
+      projectName: "Residencial Nativa",
+      segment: "Investor",
+      openOpportunities: 34,
+      conversionRate: 19,
+      reservations: 11,
+      forecastRevenue: 21800000,
+      health: "watch",
+      signal: "2 demos pending",
+      owner: "Mariana Comercial",
+      updatedAt: "2026-07-11T18:00:00.000Z"
+    },
+    {
+      id: "crm_distrito_demo",
+      companyId: "cmp_arcont_demo",
+      code: "CRM-DIS-02",
+      projectName: "Distrito Norte",
+      segment: "Primary home",
+      openOpportunities: 28,
+      conversionRate: 24,
+      reservations: 13,
+      forecastRevenue: 26700000,
+      health: "healthy",
+      signal: "Bank pre-approval signal",
+      owner: "Mariana Comercial",
+      updatedAt: "2026-07-11T17:20:00.000Z"
+    },
+    {
+      id: "crm_cobalto_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "CRM-COB-07",
+      projectName: "Puerto Cobalto",
+      segment: "Government housing",
+      openOpportunities: 17,
+      conversionRate: 13,
+      reservations: 6,
+      forecastRevenue: 12800000,
+      health: "watch",
+      signal: "Tender validation ongoing",
+      owner: "Daniel Obra",
+      updatedAt: "2026-07-11T16:30:00.000Z"
+    },
+    {
+      id: "crm_bienestar_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "CRM-BIE-09",
+      projectName: "Paquete Bienestar Sur",
+      segment: "Government housing",
+      openOpportunities: 22,
+      conversionRate: 15,
+      reservations: 8,
+      forecastRevenue: 17300000,
+      health: "critical",
+      signal: "Land release still delays closing certainty",
+      owner: "Regional PMO",
+      updatedAt: "2026-07-11T15:40:00.000Z"
+    }
+  ];
+
+  const crmRisks: CrmRiskRecord[] = [
+    {
+      id: "crk_nativa_docs",
+      leadBucketId: "crm_nativa_demo",
+      title: "Reservation backlog tied to missing document kits",
+      category: "Closing",
+      severity: "warning",
+      owner: "Sales ops",
+      status: "Checklist reinforcement in progress"
+    },
+    {
+      id: "crk_bienestar_land",
+      leadBucketId: "crm_bienestar_gov",
+      title: "Land release uncertainty weakens forecast confidence",
+      category: "Government control",
+      severity: "critical",
+      owner: "Regional PMO",
+      status: "Waiting for final release confirmation"
+    },
+    {
+      id: "crk_cobalto_tender",
+      leadBucketId: "crm_cobalto_gov",
+      title: "Tender validation extends cycle beyond target",
+      category: "Cycle time",
+      severity: "warning",
+      owner: "Commercial coordinator",
+      status: "Documents under review"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -659,6 +780,8 @@ function createSeedState() {
       inventoryRisks,
       financeItems,
       financeRisks,
+      crmLeadBuckets,
+      crmRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -713,6 +836,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.financeItems.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.financeRisks.filter((risk) => itemIds.has(risk.ledgerId));
+    },
+    async listCrmLeadBuckets(companyId: string) {
+      return state.crmLeadBuckets.filter((bucket) => bucket.companyId === companyId);
+    },
+    async listCrmRisks(companyId: string) {
+      const bucketIds = new Set(
+        state.crmLeadBuckets.filter((bucket) => bucket.companyId === companyId).map((bucket) => bucket.id)
+      );
+      return state.crmRisks.filter((risk) => bucketIds.has(risk.leadBucketId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -1170,6 +1302,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listFinanceRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listCrmLeadBuckets(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listCrmRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;
