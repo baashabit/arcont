@@ -80,6 +80,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["projects:*"]
   },
   {
+    href: "/operations",
+    label: "Operations",
+    description: "Cross-domain blackboard",
+    domain: "projects",
+    moduleKeys: ["projects.control"],
+    requiredPermissions: ["projects:*"]
+  },
+  {
     href: "/procurement",
     label: "Procurement",
     description: "Requests and sourcing",
