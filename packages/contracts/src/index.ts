@@ -97,6 +97,19 @@ export const AuthLogoutResponseSchema = z.object({
   revokedTokens: z.number().int().nonnegative()
 });
 
+export const AuthSessionActivitySchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  revokedAt: z.string().nullable(),
+  current: z.boolean()
+});
+
+export const AuthSessionActivitiesSchema = z.object({
+  items: z.array(AuthSessionActivitySchema)
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -236,6 +249,8 @@ export type AuthLogoutRequestContract = z.infer<typeof AuthLogoutRequestSchema>;
 export type AuthSessionContract = z.infer<typeof AuthSessionSchema>;
 export type AuthCurrentSessionContract = z.infer<typeof AuthCurrentSessionSchema>;
 export type AuthLogoutResponseContract = z.infer<typeof AuthLogoutResponseSchema>;
+export type AuthSessionActivityContract = z.infer<typeof AuthSessionActivitySchema>;
+export type AuthSessionActivitiesContract = z.infer<typeof AuthSessionActivitiesSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

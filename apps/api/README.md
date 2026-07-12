@@ -24,6 +24,8 @@ This API currently exposes the first platform capabilities that the web app can 
 - `POST /auth/refresh`
 - `GET /auth/me`
 - `POST /auth/logout`
+- `GET /auth/sessions`
+- `DELETE /auth/sessions/:sessionId`
 - `GET /platform/companies`
 - `GET /platform/modules`
 - `GET /platform/roles`
@@ -74,7 +76,13 @@ ARCONT_DATA_DRIVER=postgres npm run dev:api
 - refresh tokens are rotated on `POST /auth/refresh`
 - `GET /auth/me` resolves the active session from the bearer token
 - `POST /auth/logout` revokes active refresh tokens for the session user
+- `GET /auth/sessions` lists refresh-session activity for the current user and company
+- `DELETE /auth/sessions/:sessionId` revokes a specific refresh-session record for the current user
 - login failures are written to audit events with failure reason
+
+Current note:
+
+- login still revokes previous refresh tokens for the same user and company, so session history can include revoked entries very quickly by design
 
 ## Data Model Seed
 

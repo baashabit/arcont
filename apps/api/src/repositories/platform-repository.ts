@@ -30,6 +30,7 @@ export type PlatformRepository = {
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
   getRefreshTokenByHash(tokenHash: string): Promise<RefreshTokenRecord | undefined>;
+  listRefreshTokensByUser(userId: string, companyId: string): Promise<RefreshTokenRecord[]>;
   companyTaxIdExists(taxId: string): Promise<boolean>;
   userEmailExists(email: string): Promise<boolean>;
   getSettings(companyId: string): Promise<SettingsRecord | undefined>;
@@ -41,6 +42,7 @@ export type PlatformRepository = {
   }>;
   saveRefreshToken(input: Omit<RefreshTokenRecord, "id" | "createdAt">): Promise<RefreshTokenRecord>;
   revokeRefreshToken(tokenHash: string): Promise<boolean>;
+  revokeRefreshTokenById(tokenId: string, userId: string, companyId: string): Promise<boolean>;
   revokeRefreshTokens(userId: string, companyId: string): Promise<number>;
   recordAuthFailure(email: string, reason: AuthFailureReason, companyId?: string): Promise<void>;
   addAuditEvent(event: AuditEventInput): Promise<void>;
@@ -179,6 +181,12 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
     async getRefreshTokenByHash(tokenHash: string) {
       return state.refreshTokens.find((token) => token.tokenHash === tokenHash);
     },
+    async listRefreshTokensByUser(userId: string, companyId: string) {
+      return state.refreshTokens
+        .filter((token) => token.userId === userId && token.companyId === companyId)
+        .slice()
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    },
     async companyTaxIdExists(taxId: string) {
       return state.companies.some((company) => company.taxId.toLowerCase() === taxId.toLowerCase());
     },
@@ -254,6 +262,22 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
     },
     async revokeRefreshToken(tokenHash: string) {
       const token = state.refreshTokens.find((item) => item.tokenHash === tokenHash && !item.revokedAt);
+      if (!token) {
+        return false;
+      }
+
+      token.revokedAt = new Date().toISOString();
+      return true;
+    },
+    async revokeRefreshTokenById(tokenId: string, userId: string, companyId: string) {
+      const token = state.refreshTokens.find(
+        (item) =>
+          item.id === tokenId &&
+          item.userId === userId &&
+          item.companyId === companyId &&
+          !item.revokedAt
+      );
+
       if (!token) {
         return false;
       }
@@ -585,6 +609,27 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
         revokedAt: row.revoked_at ? String(row.revoked_at) : undefined
       };
     },
+    async listRefreshTokensByUser(userId: string, companyId: string) {
+      const result = await pool.query(
+        `
+          select id, user_id, company_id, token_hash, expires_at, created_at, revoked_at
+          from auth_refresh_tokens
+          where user_id = $1 and company_id = $2
+          order by created_at desc
+        `,
+        [userId, companyId]
+      );
+
+      return result.rows.map((row) => ({
+        id: String(row.id),
+        userId: String(row.user_id),
+        companyId: String(row.company_id),
+        tokenHash: String(row.token_hash),
+        expiresAt: String(row.expires_at),
+        createdAt: String(row.created_at),
+        revokedAt: row.revoked_at ? String(row.revoked_at) : undefined
+      }));
+    },
     async companyTaxIdExists(taxId: string) {
       const result = await pool.query(
         `
@@ -785,6 +830,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
           where token_hash = $1 and revoked_at is null
         `,
         [tokenHash]
+      );
+
+      return (result.rowCount ?? 0) > 0;
+    },
+    async revokeRefreshTokenById(tokenId: string, userId: string, companyId: string) {
+      const result = await pool.query(
+        `
+          update auth_refresh_tokens
+          set revoked_at = now()
+          where id = $1 and user_id = $2 and company_id = $3 and revoked_at is null
+        `,
+        [tokenId, userId, companyId]
       );
 
       return (result.rowCount ?? 0) > 0;

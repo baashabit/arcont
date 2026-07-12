@@ -45,10 +45,32 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return app.container.authService.getCurrentSession(accessToken);
   });
 
+  app.get("/auth/sessions", async (request) => {
+    const accessToken = getBearerToken(request.headers.authorization);
+    if (!accessToken) {
+      throw authError("AUTH_HEADER_MISSING", "Authorization header is required");
+    }
+
+    const refreshTokenHeader = request.headers["x-refresh-token"];
+    const currentRefreshToken =
+      typeof refreshTokenHeader === "string" ? refreshTokenHeader : undefined;
+
+    return app.container.authService.listSessions(accessToken, currentRefreshToken);
+  });
+
   app.post("/auth/logout", async (request) => {
     const input = AuthLogoutRequestSchema.parse(request.body ?? {});
     const accessToken = getBearerToken(request.headers.authorization);
 
     return app.container.authService.logout(accessToken, input.refreshToken);
+  });
+
+  app.delete<{ Params: { sessionId: string } }>("/auth/sessions/:sessionId", async (request) => {
+    const accessToken = getBearerToken(request.headers.authorization);
+    if (!accessToken) {
+      throw authError("AUTH_HEADER_MISSING", "Authorization header is required");
+    }
+
+    return app.container.authService.revokeSession(accessToken, request.params.sessionId);
   });
 }

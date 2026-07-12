@@ -318,6 +318,45 @@ export function createAuthService(repository: PlatformRepository) {
       return {
         revokedTokens: revoked ? 1 : 0
       };
+    },
+    async listSessions(accessToken: string, currentRefreshToken?: string) {
+      const session = await this.getCurrentSession(accessToken);
+      const currentRefreshHash = currentRefreshToken ? hashPassword(currentRefreshToken) : null;
+      const items = await repository.listRefreshTokensByUser(session.user.id, session.company.id);
+
+      return {
+        items: items.map((item) => ({
+          id: item.id,
+          companyId: item.companyId,
+          createdAt: item.createdAt,
+          expiresAt: item.expiresAt,
+          revokedAt: item.revokedAt ?? null,
+          current: currentRefreshHash ? item.tokenHash === currentRefreshHash : false
+        }))
+      };
+    },
+    async revokeSession(accessToken: string, sessionId: string) {
+      const session = await this.getCurrentSession(accessToken);
+      const revoked = await repository.revokeRefreshTokenById(
+        sessionId,
+        session.user.id,
+        session.company.id
+      );
+
+      await repository.addAuditEvent({
+        companyId: session.company.id,
+        actorUserId: session.user.id,
+        aggregateType: "session",
+        aggregateId: sessionId,
+        action: "auth.session.revoked",
+        metadata: {
+          revoked
+        }
+      });
+
+      return {
+        revokedTokens: revoked ? 1 : 0
+      };
     }
   };
 }
