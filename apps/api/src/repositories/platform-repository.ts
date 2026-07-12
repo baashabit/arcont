@@ -5,10 +5,14 @@ import {
 } from "../../../../packages/contracts/dist/index.js";
 import type {
   AuditEventInput,
+  AuditEventRecord,
+  AuthFailureReason,
   CompanyRecord,
   ProvisionCompanyInput,
   RefreshTokenRecord,
   SettingsRecord,
+  UpdateCompanyModulesInput,
+  UpdatePlatformSettingsInput,
   UserRecord
 } from "../domain/platform/entities.js";
 import { createPrefixedId } from "../lib/ids.js";
@@ -21,6 +25,8 @@ export type PlatformRepository = {
   listUsers(companyId?: string): Promise<UserRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
+  companyTaxIdExists(taxId: string): Promise<boolean>;
+  userEmailExists(email: string): Promise<boolean>;
   getSettings(companyId: string): Promise<SettingsRecord | undefined>;
   saveProvisionedCompany(input: ProvisionCompanyInput): Promise<{
     company: CompanyRecord;
@@ -29,7 +35,12 @@ export type PlatformRepository = {
     temporaryPassword: string;
   }>;
   saveRefreshToken(input: Omit<RefreshTokenRecord, "id" | "createdAt">): Promise<RefreshTokenRecord>;
+  revokeRefreshTokens(userId: string, companyId: string): Promise<number>;
+  recordAuthFailure(email: string, reason: AuthFailureReason, companyId?: string): Promise<void>;
   addAuditEvent(event: AuditEventInput): Promise<void>;
+  updateSettings(input: UpdatePlatformSettingsInput): Promise<SettingsRecord>;
+  replaceCompanyModules(input: UpdateCompanyModulesInput): Promise<CompanyRecord>;
+  listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
 };
 
 function createSeedState() {
@@ -113,7 +124,7 @@ function createSeedState() {
   ];
 
   const refreshTokens: RefreshTokenRecord[] = [];
-  const auditEvents: Array<AuditEventInput & { id: string }> = [];
+  const auditEvents: AuditEventRecord[] = [];
 
   return {
     companies,
@@ -149,6 +160,12 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
     },
     async getUserByEmail(email: string) {
       return state.users.find((user) => user.email === email);
+    },
+    async companyTaxIdExists(taxId: string) {
+      return state.companies.some((company) => company.taxId.toLowerCase() === taxId.toLowerCase());
+    },
+    async userEmailExists(email: string) {
+      return state.users.some((user) => user.email.toLowerCase() === email.toLowerCase());
     },
     async getSettings(companyId: string) {
       return state.settings.find((item) => item.companyId === companyId);
@@ -217,11 +234,72 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       state.refreshTokens.push(record);
       return record;
     },
+    async revokeRefreshTokens(userId: string, companyId: string) {
+      let revoked = 0;
+
+      for (const token of state.refreshTokens) {
+        if (token.userId === userId && token.companyId === companyId && !token.revokedAt) {
+          token.revokedAt = new Date().toISOString();
+          revoked += 1;
+        }
+      }
+
+      return revoked;
+    },
+    async recordAuthFailure(email: string, reason: AuthFailureReason, companyId?: string) {
+      await this.addAuditEvent({
+        companyId,
+        aggregateType: "session",
+        aggregateId: email,
+        action: "auth.login.failed",
+        metadata: {
+          email,
+          reason
+        }
+      });
+    },
     async addAuditEvent(event) {
       state.auditEvents.push({
         id: createPrefixedId("aud"),
-        ...event
+        companyId: event.companyId ?? null,
+        actorUserId: event.actorUserId ?? null,
+        aggregateType: event.aggregateType,
+        aggregateId: event.aggregateId,
+        action: event.action,
+        metadata: event.metadata,
+        createdAt: new Date().toISOString()
       });
+    },
+    async updateSettings(input) {
+      const current = state.settings.find((item) => item.companyId === input.companyId);
+      if (!current) {
+        throw new Error("Settings not found in repository");
+      }
+
+      current.timezone = input.timezone;
+      current.locale = input.locale;
+      current.currency = input.currency;
+      current.fiscalCountry = input.fiscalCountry;
+      current.satEnabled = input.satEnabled;
+      current.fiscalRegime = input.fiscalRegime;
+
+      return current;
+    },
+    async replaceCompanyModules(input) {
+      const company = state.companies.find((item) => item.id === input.companyId);
+      if (!company) {
+        throw new Error("Company not found in repository");
+      }
+
+      company.enabledModules = Array.from(new Set(input.enabledModules));
+      return company;
+    },
+    async listAuditEvents(companyId?: string, limit = 50) {
+      const items = companyId
+        ? state.auditEvents.filter((event) => event.companyId === companyId)
+        : state.auditEvents;
+
+      return items.slice().reverse().slice(0, limit);
     }
   };
 }
@@ -259,6 +337,19 @@ function mapSettingsRow(row: Record<string, string | boolean>) {
     fiscalCountry: String(row.fiscal_country),
     satEnabled: Boolean(row.sat_enabled),
     fiscalRegime: String(row.fiscal_regime)
+  };
+}
+
+function mapAuditEventRow(row: Record<string, unknown>): AuditEventRecord {
+  return {
+    id: String(row.id),
+    companyId: row.company_id ? String(row.company_id) : null,
+    actorUserId: row.actor_user_id ? String(row.actor_user_id) : null,
+    aggregateType: String(row.aggregate_type),
+    aggregateId: String(row.aggregate_id),
+    action: String(row.action),
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
+    createdAt: String(row.created_at)
   };
 }
 
@@ -390,6 +481,32 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       );
 
       return result.rows[0] ? mapUserRow(result.rows[0]) : undefined;
+    },
+    async companyTaxIdExists(taxId: string) {
+      const result = await pool.query(
+        `
+          select 1
+          from platform_companies
+          where lower(tax_id) = lower($1) and deleted_at is null
+          limit 1
+        `,
+        [taxId]
+      );
+
+      return Boolean(result.rowCount);
+    },
+    async userEmailExists(email: string) {
+      const result = await pool.query(
+        `
+          select 1
+          from platform_users
+          where lower(email) = lower($1) and deleted_at is null
+          limit 1
+        `,
+        [email]
+      );
+
+      return Boolean(result.rowCount);
     },
     async getSettings(companyId: string) {
       const result = await pool.query(
@@ -557,6 +674,30 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
 
       return record;
     },
+    async revokeRefreshTokens(userId: string, companyId: string) {
+      const result = await pool.query(
+        `
+          update auth_refresh_tokens
+          set revoked_at = now()
+          where user_id = $1 and company_id = $2 and revoked_at is null
+        `,
+        [userId, companyId]
+      );
+
+      return result.rowCount ?? 0;
+    },
+    async recordAuthFailure(email: string, reason: AuthFailureReason, companyId?: string) {
+      await this.addAuditEvent({
+        companyId,
+        aggregateType: "session",
+        aggregateId: email,
+        action: "auth.login.failed",
+        metadata: {
+          email,
+          reason
+        }
+      });
+    },
     async addAuditEvent(event) {
       await pool.query(
         `
@@ -574,6 +715,99 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
           JSON.stringify(event.metadata)
         ]
       );
+    },
+    async updateSettings(input) {
+      const result = await pool.query(
+        `
+          update platform_company_settings
+          set timezone = $2,
+              locale = $3,
+              currency = $4,
+              fiscal_country = $5,
+              sat_enabled = $6,
+              fiscal_regime = $7,
+              updated_at = now()
+          where company_id = $1
+          returning company_id, timezone, locale, currency, fiscal_country, sat_enabled, fiscal_regime
+        `,
+        [
+          input.companyId,
+          input.timezone,
+          input.locale,
+          input.currency,
+          input.fiscalCountry,
+          input.satEnabled,
+          input.fiscalRegime
+        ]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Settings not found in repository");
+      }
+
+      return mapSettingsRow(result.rows[0]);
+    },
+    async replaceCompanyModules(input) {
+      const client = await pool.connect();
+
+      try {
+        await client.query("begin");
+        await seedCatalogs(client);
+
+        const company = await this.getCompanyById(input.companyId);
+        if (!company) {
+          throw new Error("Company not found in repository");
+        }
+
+        await client.query("delete from platform_company_modules where company_id = $1", [input.companyId]);
+
+        for (const moduleKey of input.enabledModules) {
+          await client.query(
+            `
+              insert into platform_company_modules
+                (company_id, module_key, enabled, activated_by)
+              values ($1, $2, true, $3)
+            `,
+            [input.companyId, moduleKey, input.actorUserId ?? null]
+          );
+        }
+
+        await client.query("commit");
+
+        return {
+          ...company,
+          enabledModules: Array.from(new Set(input.enabledModules))
+        };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    async listAuditEvents(companyId?: string, limit = 50) {
+      const result = companyId
+        ? await pool.query(
+            `
+              select id, company_id, actor_user_id, aggregate_type, aggregate_id, action, metadata, created_at
+              from audit_events
+              where company_id = $1
+              order by created_at desc
+              limit $2
+            `,
+            [companyId, limit]
+          )
+        : await pool.query(
+            `
+              select id, company_id, actor_user_id, aggregate_type, aggregate_id, action, metadata, created_at
+              from audit_events
+              order by created_at desc
+              limit $1
+            `,
+            [limit]
+          );
+
+      return result.rows.map(mapAuditEventRow);
     }
   };
 }

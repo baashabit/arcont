@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { authError } from "../lib/domain-error.js";
 import { signJwt } from "../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../lib/passwords.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
@@ -8,15 +9,25 @@ export function createAuthService(repository: PlatformRepository) {
     async login(email: string, password: string, companyId?: string) {
       const user = await repository.getUserByEmail(email);
       if (!user || !verifyPassword(password, user.passwordHash)) {
-        return undefined;
+        await repository.recordAuthFailure(email, "invalid_credentials", companyId);
+        throw authError("AUTH_INVALID_CREDENTIALS", "Invalid credentials");
       }
 
-      const company =
-        (companyId ? await repository.getCompanyById(companyId) : undefined) ??
-        (await repository.getCompanyById(user.companyId));
+      if (user.status !== "active") {
+        await repository.recordAuthFailure(email, "user_disabled", companyId ?? user.companyId);
+        throw authError("AUTH_USER_DISABLED", "User is not active");
+      }
+
+      if (companyId && companyId !== user.companyId) {
+        await repository.recordAuthFailure(email, "company_user_mismatch", companyId);
+        throw authError("AUTH_COMPANY_USER_MISMATCH", "User does not belong to the requested company");
+      }
+
+      const company = await repository.getCompanyById(companyId ?? user.companyId);
 
       if (!company) {
-        return undefined;
+        await repository.recordAuthFailure(email, "company_not_found", companyId ?? user.companyId);
+        throw authError("AUTH_COMPANY_NOT_FOUND", "Company not found for user");
       }
 
       const role = (await repository.listRoles()).find((item) => item.key === user.roleKey);
@@ -24,6 +35,7 @@ export function createAuthService(repository: PlatformRepository) {
       const expiresInSeconds = env.ARCONT_AUTH_ACCESS_TTL_SECONDS;
       const refreshToken = `refresh-${user.id}-${Date.now()}`;
 
+      await repository.revokeRefreshTokens(user.id, company.id);
       await repository.saveRefreshToken({
         userId: user.id,
         companyId: company.id,

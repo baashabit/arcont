@@ -49,6 +49,8 @@ ARCONT_DATA_DRIVER=postgres npm run dev:api
 - signed JWT access token via `ARCONT_AUTH_JWT_SECRET`
 - tenant-aware login through `companyId`
 - refresh tokens are now persisted through the repository layer
+- previous refresh tokens for the same user and company are revoked on new login
+- login failures are written to audit events with failure reason
 
 ## Data Model Seed
 
@@ -71,6 +73,33 @@ That schema separates:
 - platform companies, users, roles, permissions, settings, and module activation
 - auth refresh tokens and audit events
 - future operations workspaces that will own business modules like CRM, projects, procurement, finance, and HR
+
+## Validation Rules
+
+- provisioning rejects duplicated `taxId`
+- provisioning rejects duplicated `adminEmail`
+- provisioning rejects unknown module keys
+- provisioning always enforces `platform.companies` and `platform.identity`
+- Mexico-first provisioning currently requires:
+  - `currency = MXN`
+  - `locale` starting with `es-MX`
+  - `fiscalRegime` as a 3-digit SAT code
+  - `countryCode` and `fiscalCountry` to match
+- login rejects user/company mismatches explicitly
+
+## Error Shape
+
+Business and validation errors return:
+
+```json
+{
+  "error": {
+    "code": "SOME_ERROR_CODE",
+    "message": "Human readable message",
+    "details": {}
+  }
+}
+```
 
 ## Example Provisioning Payload
 

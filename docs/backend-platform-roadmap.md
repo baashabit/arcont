@@ -9,6 +9,7 @@
 - JWT-based auth baseline
 - provisioning endpoint for new companies
 - migration script and PostgreSQL foundation
+- domain validation and normalized error responses
 
 ## What PC 1 Owns
 
@@ -27,11 +28,12 @@
 - `/platform/users`
 - `/platform/settings/:companyId`
 - `/platform/provision-company`
+- normalized error payloads with `error.code`, `error.message`, and `error.details`
 
 ## Next Backend Priorities
 
 1. Execute and verify PostgreSQL driver end-to-end once the Docker daemon is available.
-2. Persist refresh tokens with revocation and rotation policies.
+2. Persist refresh tokens with stronger rotation and revocation lifecycle endpoints.
 3. Add audit event writes for more actions and change history queries.
 4. Add company provisioning approvals and module activation workflows.
 5. Add SAT and accounting catalog seeds for Mexico.

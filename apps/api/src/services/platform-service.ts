@@ -1,4 +1,81 @@
 import type { PlatformRepository } from "../repositories/platform-repository.js";
+import { conflictError, notFound, validationError } from "../lib/domain-error.js";
+
+const REQUIRED_PLATFORM_MODULES = ["platform.companies", "platform.identity"];
+
+function normalizeModuleList(enabledModules: string[]) {
+  return Array.from(new Set([...REQUIRED_PLATFORM_MODULES, ...enabledModules]));
+}
+
+function validateFiscalInput(input: {
+  countryCode: string;
+  locale: string;
+  currency: string;
+  fiscalCountry: string;
+  fiscalRegime: string;
+}) {
+  if (input.fiscalCountry === "MX") {
+    if (input.currency !== "MXN") {
+      throw validationError("PROVISION_INVALID_CURRENCY", "Mexican companies must use MXN", {
+        expectedCurrency: "MXN"
+      });
+    }
+
+    if (!input.locale.startsWith("es-MX")) {
+      throw validationError("PROVISION_INVALID_LOCALE", "Mexican companies must use es-MX locale", {
+        expectedLocale: "es-MX"
+      });
+    }
+
+    if (!/^\d{3}$/.test(input.fiscalRegime)) {
+      throw validationError("PROVISION_INVALID_FISCAL_REGIME", "Fiscal regime must be a SAT 3-digit code", {
+        fiscalCountry: input.fiscalCountry
+      });
+    }
+  }
+
+  if (input.countryCode !== input.fiscalCountry) {
+    throw validationError("PROVISION_COUNTRY_MISMATCH", "Country and fiscal country must match in this phase", {
+      countryCode: input.countryCode,
+      fiscalCountry: input.fiscalCountry
+    });
+  }
+}
+
+function validateSettingsInput(input: {
+  timezone: string;
+  locale: string;
+  currency: string;
+  fiscalCountry: string;
+  satEnabled: boolean;
+  fiscalRegime: string;
+}) {
+  if (!input.timezone.includes("/")) {
+    throw validationError("SETTINGS_INVALID_TIMEZONE", "Timezone must be an IANA timezone", {
+      timezone: input.timezone
+    });
+  }
+
+  if (input.fiscalCountry === "MX") {
+    if (input.currency !== "MXN") {
+      throw validationError("SETTINGS_INVALID_CURRENCY", "Mexican companies must use MXN", {
+        expectedCurrency: "MXN"
+      });
+    }
+
+    if (!input.locale.startsWith("es-MX")) {
+      throw validationError("SETTINGS_INVALID_LOCALE", "Mexican companies must use es-MX locale", {
+        expectedLocale: "es-MX"
+      });
+    }
+
+    if (input.satEnabled && !/^\d{3}$/.test(input.fiscalRegime)) {
+      throw validationError("SETTINGS_INVALID_FISCAL_REGIME", "Fiscal regime must be a SAT 3-digit code", {
+        fiscalCountry: input.fiscalCountry
+      });
+    }
+  }
+}
 
 export function createPlatformService(repository: PlatformRepository) {
   return {
@@ -15,12 +92,21 @@ export function createPlatformService(repository: PlatformRepository) {
       return (await repository.listUsers(companyId)).map(({ passwordHash: _passwordHash, ...user }) => user);
     },
     async getSettings(companyId: string) {
-      return repository.getSettings(companyId);
+      const settings = await repository.getSettings(companyId);
+      if (!settings) {
+        throw notFound("PLATFORM_SETTINGS_NOT_FOUND", "Settings not found", {
+          companyId
+        });
+      }
+
+      return settings;
     },
     async listCompanyModules(companyId: string) {
       const company = await repository.getCompanyById(companyId);
       if (!company) {
-        return [];
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId
+        });
       }
 
       return (await repository.listModules()).map((module) => ({
@@ -35,7 +121,9 @@ export function createPlatformService(repository: PlatformRepository) {
       const companyUsers = await this.listUsers(companyId);
 
       if (!company || !settings || companyUsers.length === 0) {
-        return undefined;
+        throw notFound("PLATFORM_BOOTSTRAP_NOT_FOUND", "Platform bootstrap not found", {
+          companyId
+        });
       }
 
       const user =
@@ -57,6 +145,33 @@ export function createPlatformService(repository: PlatformRepository) {
         permissions
       };
     },
+    async getCompanyDetail(companyId: string) {
+      const company = await repository.getCompanyById(companyId);
+      const settings = await repository.getSettings(companyId);
+      const users = await this.listUsers(companyId);
+
+      if (!company || !settings) {
+        throw notFound("PLATFORM_COMPANY_DETAIL_NOT_FOUND", "Company detail not found", {
+          companyId
+        });
+      }
+
+      const companyModules = await this.listCompanyModules(companyId);
+      const enabledModuleCount = companyModules.filter((item) => item.enabled).length;
+
+      return {
+        company,
+        settings,
+        companyModules,
+        users,
+        stats: {
+          totalUsers: users.length,
+          activeUsers: users.filter((user) => user.status === "active").length,
+          enabledModuleCount,
+          disabledModuleCount: companyModules.length - enabledModuleCount
+        }
+      };
+    },
     async provisionCompany(input: {
       legalName: string;
       tradeName: string;
@@ -71,7 +186,35 @@ export function createPlatformService(repository: PlatformRepository) {
       adminEmail: string;
       enabledModules: string[];
     }) {
-      const result = await repository.saveProvisionedCompany(input);
+      validateFiscalInput(input);
+
+      if (await repository.companyTaxIdExists(input.taxId)) {
+        throw conflictError("PROVISION_DUPLICATE_TAX_ID", "A company with this tax ID already exists", {
+          taxId: input.taxId
+        });
+      }
+
+      if (await repository.userEmailExists(input.adminEmail)) {
+        throw conflictError("PROVISION_DUPLICATE_ADMIN_EMAIL", "A user with this admin email already exists", {
+          adminEmail: input.adminEmail
+        });
+      }
+
+      const availableModules = await repository.listModules();
+      const allowedModuleKeys = new Set(availableModules.map((module) => module.key));
+      const normalizedModules = normalizeModuleList(input.enabledModules);
+      const unknownModules = normalizedModules.filter((moduleKey) => !allowedModuleKeys.has(moduleKey));
+
+      if (unknownModules.length > 0) {
+        throw validationError("PROVISION_UNKNOWN_MODULES", "One or more requested modules are not recognized", {
+          unknownModules
+        });
+      }
+
+      const result = await repository.saveProvisionedCompany({
+        ...input,
+        enabledModules: normalizedModules
+      });
 
       return {
         company: result.company,
@@ -86,6 +229,138 @@ export function createPlatformService(repository: PlatformRepository) {
         settings: result.settings,
         companyModules: await this.listCompanyModules(result.company.id),
         temporaryPassword: result.temporaryPassword
+      };
+    },
+    async updateSettings(input: {
+      companyId: string;
+      timezone: string;
+      locale: string;
+      currency: string;
+      fiscalCountry: string;
+      satEnabled: boolean;
+      fiscalRegime: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      validateSettingsInput(input);
+
+      const settings = await repository.updateSettings(input);
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        aggregateType: "settings",
+        aggregateId: input.companyId,
+        action: "platform.settings.updated",
+        metadata: {
+          locale: settings.locale,
+          currency: settings.currency,
+          fiscalCountry: settings.fiscalCountry
+        }
+      });
+
+      return settings;
+    },
+    async replaceCompanyModules(input: {
+      companyId: string;
+      enabledModules: string[];
+      actorUserId?: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const availableModules = await repository.listModules();
+      const allowedModuleKeys = new Set(availableModules.map((module) => module.key));
+      const normalizedModules = normalizeModuleList(input.enabledModules);
+      const unknownModules = normalizedModules.filter((moduleKey) => !allowedModuleKeys.has(moduleKey));
+
+      if (unknownModules.length > 0) {
+        throw validationError("COMPANY_MODULES_UNKNOWN", "One or more requested modules are not recognized", {
+          unknownModules
+        });
+      }
+
+      const updatedCompany = await repository.replaceCompanyModules({
+        ...input,
+        enabledModules: normalizedModules
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: input.actorUserId,
+        aggregateType: "company_modules",
+        aggregateId: input.companyId,
+        action: "platform.company_modules.updated",
+        metadata: {
+          enabledModules: updatedCompany.enabledModules
+        }
+      });
+
+      return this.listCompanyModules(updatedCompany.id);
+    },
+    async listAuditEvents(companyId?: string, limit = 50) {
+      return repository.listAuditEvents(companyId, limit);
+    },
+    async getDashboardSummary(companyId?: string) {
+      const focusCompany = companyId ? await repository.getCompanyById(companyId) : null;
+      if (companyId && !focusCompany) {
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId
+        });
+      }
+
+      const scopedCompanies = focusCompany ? [focusCompany] : await repository.listCompanies();
+      const allUsers = (
+        await Promise.all(scopedCompanies.map((company) => repository.listUsers(company.id)))
+      ).flat();
+      const latestAuditEvents = await repository.listAuditEvents(companyId, 10);
+      const allModules = await repository.listModules();
+
+      const byArea = allModules
+        .filter((module) => module.scope === "operations")
+        .reduce<Array<{ area: (typeof allModules)[number]["area"]; enabledCompanies: number }>>((acc, module) => {
+          const current = acc.find((item) => item.area === module.area);
+          const enabledCompanies = scopedCompanies.filter((company) =>
+            company.enabledModules.includes(module.key)
+          ).length;
+
+          if (current) {
+            current.enabledCompanies += enabledCompanies;
+          } else {
+            acc.push({
+              area: module.area,
+              enabledCompanies
+            });
+          }
+
+          return acc;
+        }, []);
+
+      const enabledModules = scopedCompanies.reduce(
+        (total, company) => total + company.enabledModules.length,
+        0
+      );
+
+      return {
+        totals: {
+          companies: scopedCompanies.length,
+          activeCompanies: scopedCompanies.filter((company) => company.status === "active").length,
+          users: allUsers.length,
+          activeUsers: allUsers.filter((user) => user.status === "active").length,
+          enabledModules,
+          auditEvents: latestAuditEvents.length
+        },
+        byArea,
+        latestAuditEvents,
+        focusCompany
       };
     }
   };

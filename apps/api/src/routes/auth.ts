@@ -10,12 +10,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       credentials.companyId
     );
 
-    if (!session) {
-      return reply.status(401).send({
-        message: "Invalid credentials"
-      });
-    }
-
     return session;
   });
 }

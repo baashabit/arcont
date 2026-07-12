@@ -28,6 +28,17 @@ export type RefreshTokenRecord = {
   revokedAt?: string;
 };
 
+export type AuditEventRecord = {
+  id: string;
+  companyId: string | null;
+  actorUserId: string | null;
+  aggregateType: string;
+  aggregateId: string;
+  action: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type SettingsRecord = {
   companyId: string;
   timezone: string;
@@ -61,3 +72,25 @@ export type AuditEventInput = {
   action: string;
   metadata: Record<string, unknown>;
 };
+
+export type UpdatePlatformSettingsInput = {
+  companyId: string;
+  timezone: string;
+  locale: string;
+  currency: string;
+  fiscalCountry: string;
+  satEnabled: boolean;
+  fiscalRegime: string;
+};
+
+export type UpdateCompanyModulesInput = {
+  companyId: string;
+  enabledModules: string[];
+  actorUserId?: string;
+};
+
+export type AuthFailureReason =
+  | "invalid_credentials"
+  | "company_not_found"
+  | "company_user_mismatch"
+  | "user_disabled";

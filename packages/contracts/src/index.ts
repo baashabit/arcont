@@ -121,6 +121,62 @@ export const ProvisionCompanyResponseSchema = z.object({
   temporaryPassword: z.string()
 });
 
+export const UpdatePlatformSettingsRequestSchema = z.object({
+  timezone: z.string(),
+  locale: z.string(),
+  currency: z.string().length(3),
+  fiscalCountry: z.string().length(2),
+  satEnabled: z.boolean(),
+  fiscalRegime: z.string()
+});
+
+export const UpdateCompanyModulesRequestSchema = z.object({
+  enabledModules: z.array(z.string()).min(1)
+});
+
+export const AuditEventSchema = z.object({
+  id: z.string(),
+  companyId: z.string().nullable(),
+  actorUserId: z.string().nullable(),
+  aggregateType: z.string(),
+  aggregateId: z.string(),
+  action: z.string(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string()
+});
+
+export const CompanyDetailSchema = z.object({
+  company: CompanySchema,
+  settings: PlatformSettingsSchema,
+  companyModules: z.array(CompanyModuleStateSchema),
+  users: z.array(UserSchema),
+  stats: z.object({
+    totalUsers: z.number().int().nonnegative(),
+    activeUsers: z.number().int().nonnegative(),
+    enabledModuleCount: z.number().int().nonnegative(),
+    disabledModuleCount: z.number().int().nonnegative()
+  })
+});
+
+export const PlatformDashboardSummarySchema = z.object({
+  totals: z.object({
+    companies: z.number().int().nonnegative(),
+    activeCompanies: z.number().int().nonnegative(),
+    users: z.number().int().nonnegative(),
+    activeUsers: z.number().int().nonnegative(),
+    enabledModules: z.number().int().nonnegative(),
+    auditEvents: z.number().int().nonnegative()
+  }),
+  byArea: z.array(
+    z.object({
+      area: z.enum(moduleAreas),
+      enabledCompanies: z.number().int().nonnegative()
+    })
+  ),
+  latestAuditEvents: z.array(AuditEventSchema),
+  focusCompany: CompanySchema.nullable()
+});
+
 export type ModuleContract = z.infer<typeof ModuleSchema>;
 export type CompanyContract = z.infer<typeof CompanySchema>;
 export type RoleContract = z.infer<typeof RoleSchema>;
@@ -132,6 +188,11 @@ export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;
 export type ProvisionCompanyResponseContract = z.infer<typeof ProvisionCompanyResponseSchema>;
+export type UpdatePlatformSettingsRequestContract = z.infer<typeof UpdatePlatformSettingsRequestSchema>;
+export type UpdateCompanyModulesRequestContract = z.infer<typeof UpdateCompanyModulesRequestSchema>;
+export type AuditEventContract = z.infer<typeof AuditEventSchema>;
+export type CompanyDetailContract = z.infer<typeof CompanyDetailSchema>;
+export type PlatformDashboardSummaryContract = z.infer<typeof PlatformDashboardSummarySchema>;
 
 export const moduleCatalog: ModuleContract[] = [
   {
