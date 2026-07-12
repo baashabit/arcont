@@ -341,6 +341,61 @@ export const UpdateFinanceLedgerItemRequestSchema = z.object({
   note: z.string().min(8)
 });
 
+export const EstimationCollectionExceptionSchema = z.object({
+  id: z.string(),
+  lineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const EstimationCollectionLineSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  projectId: z.string(),
+  financeLedgerId: z.string(),
+  code: z.string(),
+  projectName: z.string(),
+  client: z.string(),
+  segment: z.string(),
+  projectStatus: z.enum(projectStatuses),
+  collectionHealth: z.enum(["controlled", "watch", "critical"]),
+  estimatedAmount: z.number().nonnegative(),
+  executedAmount: z.number().nonnegative(),
+  submittedAmount: z.number().nonnegative(),
+  collectedAmount: z.number().nonnegative(),
+  pendingToBill: z.number().nonnegative(),
+  pendingCollection: z.number().nonnegative(),
+  evidenceProgress: z.number().min(0).max(100),
+  projectProgress: z.number().min(0).max(100),
+  progressGap: z.number(),
+  scheduleVarianceDays: z.number(),
+  closeReadiness: z.number().min(0).max(100),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const EstimationCollectionOverviewSchema = z.object({
+  summary: z.object({
+    trackedProjects: z.number().int().nonnegative(),
+    estimatedPortfolio: z.number().nonnegative(),
+    submittedPortfolio: z.number().nonnegative(),
+    collectedPortfolio: z.number().nonnegative(),
+    pendingCollection: z.number().nonnegative(),
+    criticalCollections: z.number().int().nonnegative()
+  }),
+  lines: z.array(EstimationCollectionLineSchema),
+  exceptions: z.array(EstimationCollectionExceptionSchema),
+  focusLine: EstimationCollectionLineSchema.nullable()
+});
+
+export const UpdateEstimationCollectionLineRequestSchema = z.object({
+  collectionHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const CrmRiskSchema = z.object({
   id: z.string(),
   leadBucketId: z.string(),
@@ -763,6 +818,10 @@ export type FinanceRiskContract = z.infer<typeof FinanceRiskSchema>;
 export type FinanceLedgerItemContract = z.infer<typeof FinanceLedgerItemSchema>;
 export type FinanceOverviewContract = z.infer<typeof FinanceOverviewSchema>;
 export type UpdateFinanceLedgerItemRequestContract = z.infer<typeof UpdateFinanceLedgerItemRequestSchema>;
+export type EstimationCollectionExceptionContract = z.infer<typeof EstimationCollectionExceptionSchema>;
+export type EstimationCollectionLineContract = z.infer<typeof EstimationCollectionLineSchema>;
+export type EstimationCollectionOverviewContract = z.infer<typeof EstimationCollectionOverviewSchema>;
+export type UpdateEstimationCollectionLineRequestContract = z.infer<typeof UpdateEstimationCollectionLineRequestSchema>;
 export type CrmRiskContract = z.infer<typeof CrmRiskSchema>;
 export type CrmLeadBucketContract = z.infer<typeof CrmLeadBucketSchema>;
 export type CrmOverviewContract = z.infer<typeof CrmOverviewSchema>;

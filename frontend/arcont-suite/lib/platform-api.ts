@@ -14,6 +14,8 @@ import {
   CreatePlatformUserResponseSchema,
   DocumentControlItemSchema,
   DocumentControlOverviewSchema,
+  EstimationCollectionLineSchema,
+  EstimationCollectionOverviewSchema,
   FinanceOverviewSchema,
   FinanceLedgerItemSchema,
   HrWorkforceItemSchema,
@@ -41,6 +43,7 @@ import {
   UpdateCostControlLineRequestSchema,
   UpdateCrmLeadBucketRequestSchema,
   UpdateDocumentControlItemRequestSchema,
+  UpdateEstimationCollectionLineRequestSchema,
   UpdateFinanceLedgerItemRequestSchema,
   UpdateHrWorkforceItemRequestSchema,
   UpdateIntegrationStreamRequestSchema,
@@ -69,6 +72,8 @@ import {
   type CreatePlatformUserResponseContract,
   type DocumentControlItemContract,
   type DocumentControlOverviewContract,
+  type EstimationCollectionLineContract,
+  type EstimationCollectionOverviewContract,
   type FinanceLedgerItemContract,
   type FinanceOverviewContract,
   type HrWorkforceItemContract,
@@ -96,6 +101,7 @@ import {
   type UpdateCostControlLineRequestContract,
   type UpdateCrmLeadBucketRequestContract,
   type UpdateDocumentControlItemRequestContract,
+  type UpdateEstimationCollectionLineRequestContract,
   type UpdateFinanceLedgerItemRequestContract,
   type UpdateHrWorkforceItemRequestContract,
   type UpdateIntegrationStreamRequestContract,
@@ -549,6 +555,44 @@ export async function updateFinanceLedgerItem(
 
   return {
     data: FinanceLedgerItemSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchEstimationCollectionOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<EstimationCollectionOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/estimations/overview${query}`, options);
+  return response ? EstimationCollectionOverviewSchema.parse(response) : null;
+}
+
+export async function updateEstimationCollectionLine(
+  lineId: string,
+  companyId: string | undefined,
+  input: UpdateEstimationCollectionLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<EstimationCollectionLineContract>> {
+  const payload = UpdateEstimationCollectionLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/estimations/lines/${lineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: EstimationCollectionLineSchema.parse(response.data),
     error: null
   };
 }

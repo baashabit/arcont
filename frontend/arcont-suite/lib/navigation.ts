@@ -144,6 +144,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["finance:*", "finance:read"]
   },
   {
+    href: "/estimations",
+    label: "Estimations",
+    description: "Executed work and collections",
+    domain: "finance",
+    moduleKeys: ["finance.accounting"],
+    requiredPermissions: ["finance:*", "finance:read"]
+  },
+  {
     href: "/hr",
     label: "HR",
     description: "Workforce and safety",

@@ -9,6 +9,7 @@ import { registerComplianceRoutes } from "./routes/compliance.js";
 import { registerCostControlRoutes } from "./routes/cost-control.js";
 import { registerCrmRoutes } from "./routes/crm.js";
 import { registerDocumentControlRoutes } from "./routes/document-control.js";
+import { registerEstimationsRoutes } from "./routes/estimations.js";
 import { registerFinanceRoutes } from "./routes/finance.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerHrRoutes } from "./routes/hr.js";
@@ -71,6 +72,7 @@ export async function buildApp() {
   await registerCostControlRoutes(app);
   await registerInventoryRoutes(app);
   await registerFinanceRoutes(app);
+  await registerEstimationsRoutes(app);
   await registerCrmRoutes(app);
   await registerComplianceRoutes(app);
   await registerDocumentControlRoutes(app);

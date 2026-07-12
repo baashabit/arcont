@@ -9,6 +9,7 @@ import { createCrmService } from "./services/crm-service.js";
 import { createCostControlService } from "./services/cost-control-service.js";
 import { createComplianceService } from "./services/compliance-service.js";
 import { createDocumentControlService } from "./services/document-control-service.js";
+import { createEstimationCollectionService } from "./services/estimation-collection-service.js";
 import { createFinanceService } from "./services/finance-service.js";
 import { createHrService } from "./services/hr-service.js";
 import { createIntegrationService } from "./services/integration-service.js";
@@ -29,6 +30,7 @@ export function createContainer() {
   const procurementService = createProcurementService(platformRepository);
   const inventoryService = createInventoryService(platformRepository);
   const financeService = createFinanceService(platformRepository);
+  const estimationCollectionService = createEstimationCollectionService(platformRepository);
   const costControlService = createCostControlService(platformRepository, procurementService);
   const crmService = createCrmService(platformRepository);
   const complianceService = createComplianceService(platformRepository);
@@ -45,6 +47,7 @@ export function createContainer() {
     procurementService,
     inventoryService,
     financeService,
+    estimationCollectionService,
     costControlService,
     crmService,
     complianceService,
