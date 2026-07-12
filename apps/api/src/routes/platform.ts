@@ -1,5 +1,13 @@
 import type { FastifyInstance } from "fastify";
-import { getSettings, listCompanies, listModules, listRoles, listUsers } from "../platform/store.js";
+import {
+  getPlatformBootstrap,
+  getSettings,
+  listCompanies,
+  listCompanyModules,
+  listModules,
+  listRoles,
+  listUsers
+} from "../platform/store.js";
 
 export async function registerPlatformRoutes(app: FastifyInstance) {
   app.get("/platform/companies", async () => {
@@ -11,6 +19,12 @@ export async function registerPlatformRoutes(app: FastifyInstance) {
   app.get("/platform/modules", async () => {
     return {
       items: listModules()
+    };
+  });
+
+  app.get<{ Params: { companyId: string } }>("/platform/companies/:companyId/modules", async (request) => {
+    return {
+      items: listCompanyModules(request.params.companyId)
     };
   });
 
@@ -37,4 +51,19 @@ export async function registerPlatformRoutes(app: FastifyInstance) {
 
     return settings;
   });
+
+  app.get<{ Params: { companyId: string }; Querystring: { userEmail?: string } }>(
+    "/platform/bootstrap/:companyId",
+    async (request, reply) => {
+      const bootstrap = getPlatformBootstrap(request.params.companyId, request.query.userEmail);
+
+      if (!bootstrap) {
+        return reply.status(404).send({
+          message: "Platform bootstrap not found"
+        });
+      }
+
+      return bootstrap;
+    }
+  );
 }

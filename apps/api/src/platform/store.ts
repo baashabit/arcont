@@ -1,13 +1,9 @@
 import {
   defaultRoles,
-  moduleCatalog,
-  type AuthSessionContract,
-  type CompanyContract,
-  type PlatformSettingsContract,
-  type UserContract
+  moduleCatalog
 } from "../../../../packages/contracts/dist/index.js";
 
-const companies: CompanyContract[] = [
+const companies = [
   {
     id: "cmp_arcont_demo",
     legalName: "ARCONT Demo Constructora, S.A. de C.V.",
@@ -44,7 +40,7 @@ const companies: CompanyContract[] = [
   }
 ];
 
-const users: UserContract[] = [
+const users = [
   {
     id: "usr_platform_owner",
     companyId: "cmp_arcont_demo",
@@ -63,7 +59,7 @@ const users: UserContract[] = [
   }
 ];
 
-const settings: PlatformSettingsContract[] = [
+const settings = [
   {
     companyId: "cmp_arcont_demo",
     timezone: "America/Merida",
@@ -84,7 +80,7 @@ const settings: PlatformSettingsContract[] = [
   }
 ];
 
-export function listCompanies(): CompanyContract[] {
+export function listCompanies() {
   return companies;
 }
 
@@ -92,7 +88,7 @@ export function listModules() {
   return moduleCatalog;
 }
 
-export function listUsers(companyId?: string): UserContract[] {
+export function listUsers(companyId?: string) {
   if (!companyId) {
     return users;
   }
@@ -104,11 +100,56 @@ export function listRoles() {
   return defaultRoles;
 }
 
-export function getSettings(companyId: string): PlatformSettingsContract | undefined {
+export function listCompanyModules(companyId: string) {
+  const company = companies.find((item) => item.id === companyId);
+
+  if (!company) {
+    return [];
+  }
+
+  return moduleCatalog.map((module) => ({
+    companyId,
+    module,
+    enabled: company.enabledModules.includes(module.key)
+  }));
+}
+
+export function getSettings(companyId: string) {
   return settings.find((item) => item.companyId === companyId);
 }
 
-export function createSession(email: string, companyId?: string): AuthSessionContract | undefined {
+export function getPlatformBootstrap(
+  companyId: string,
+  userEmail?: string
+) {
+  const company = companies.find((item) => item.id === companyId);
+  const companySettings = getSettings(companyId);
+  const companyUsers = listUsers(companyId);
+
+  if (!company || !companySettings || companyUsers.length === 0) {
+    return undefined;
+  }
+
+  const user =
+    companyUsers.find((item) => item.email === userEmail) ??
+    companyUsers.find((item) => item.roleKey === "platform-owner") ??
+    companyUsers[0];
+
+  const permissions = defaultRoles.find((item) => item.key === user.roleKey)?.permissions ?? [];
+
+  return {
+    company,
+    settings: companySettings,
+    user,
+    roles: defaultRoles,
+    companyUsers,
+    availableModules: moduleCatalog,
+    companyModules: listCompanyModules(companyId),
+    permissions
+  };
+}
+
+export function createSession(email: string, companyId?: string) {
   const user = users.find((item) => item.email === email);
   if (!user) {
     return undefined;

@@ -76,6 +76,23 @@ export const AuthSessionSchema = z.object({
   permissions: z.array(z.string())
 });
 
+export const CompanyModuleStateSchema = z.object({
+  companyId: z.string(),
+  module: ModuleSchema,
+  enabled: z.boolean()
+});
+
+export const PlatformBootstrapSchema = z.object({
+  company: CompanySchema,
+  settings: PlatformSettingsSchema,
+  user: UserSchema,
+  roles: z.array(RoleSchema),
+  companyUsers: z.array(UserSchema),
+  availableModules: z.array(ModuleSchema),
+  companyModules: z.array(CompanyModuleStateSchema),
+  permissions: z.array(z.string())
+});
+
 export type ModuleContract = z.infer<typeof ModuleSchema>;
 export type CompanyContract = z.infer<typeof CompanySchema>;
 export type RoleContract = z.infer<typeof RoleSchema>;
@@ -83,6 +100,8 @@ export type UserContract = z.infer<typeof UserSchema>;
 export type PlatformSettingsContract = z.infer<typeof PlatformSettingsSchema>;
 export type AuthLoginRequestContract = z.infer<typeof AuthLoginRequestSchema>;
 export type AuthSessionContract = z.infer<typeof AuthSessionSchema>;
+export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
+export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 
 export const moduleCatalog: ModuleContract[] = [
   {
