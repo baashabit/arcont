@@ -1,4 +1,4 @@
-import { notFound } from "../lib/domain-error.js";
+import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
 
 export function createCrmService(repository: PlatformRepository) {
@@ -46,6 +46,73 @@ export function createCrmService(repository: PlatformRepository) {
         risks,
         focusBucket
       };
+    },
+    async updateLeadBucket(input: {
+      companyId: string;
+      leadBucketId: string;
+      health: "healthy" | "watch" | "critical";
+      signal: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("CRM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const leadBuckets = await repository.listCrmLeadBuckets(input.companyId);
+      const bucket = leadBuckets.find((candidate) => candidate.id === input.leadBucketId);
+      if (!bucket) {
+        throw notFound("CRM_LEAD_BUCKET_NOT_FOUND", "CRM lead bucket not found", {
+          companyId: input.companyId,
+          leadBucketId: input.leadBucketId
+        });
+      }
+
+      if (bucket.health === input.health && bucket.signal === input.signal) {
+        return bucket;
+      }
+
+      if (input.health === "healthy" && bucket.conversionRate < 20) {
+        throw validationError("CRM_CONVERSION_TOO_LOW", "Lead bucket cannot be marked healthy with low conversion rate", {
+          leadBucketId: bucket.id,
+          conversionRate: bucket.conversionRate
+        });
+      }
+
+      if (input.health === "healthy" && bucket.reservations < 10) {
+        throw validationError("CRM_RESERVATIONS_TOO_LOW", "Lead bucket needs stronger reservation traction before healthy status", {
+          leadBucketId: bucket.id,
+          reservations: bucket.reservations
+        });
+      }
+
+      if (input.health === "watch" && bucket.conversionRate < 15) {
+        throw validationError("CRM_SHOULD_STAY_CRITICAL", "Very low conversion should remain critical instead of watch", {
+          leadBucketId: bucket.id,
+          conversionRate: bucket.conversionRate
+        });
+      }
+
+      const updatedBucket = await repository.updateCrmLeadBucket({
+        leadBucketId: input.leadBucketId,
+        health: input.health,
+        signal: input.signal
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "crm_lead_bucket",
+        aggregateId: updatedBucket.id,
+        action: "crm.lead_bucket.updated",
+        metadata: {
+          health: updatedBucket.health,
+          signal: updatedBucket.signal
+        }
+      });
+
+      return updatedBucket;
     }
   };
 }

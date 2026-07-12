@@ -320,6 +320,11 @@ export const CrmOverviewSchema = z.object({
   focusBucket: CrmLeadBucketSchema.nullable()
 });
 
+export const UpdateCrmLeadBucketRequestSchema = z.object({
+  health: z.enum(["healthy", "watch", "critical"]),
+  signal: z.string().min(8)
+});
+
 export const HrRiskSchema = z.object({
   id: z.string(),
   workforceId: z.string(),
@@ -692,6 +697,7 @@ export type UpdateFinanceLedgerItemRequestContract = z.infer<typeof UpdateFinanc
 export type CrmRiskContract = z.infer<typeof CrmRiskSchema>;
 export type CrmLeadBucketContract = z.infer<typeof CrmLeadBucketSchema>;
 export type CrmOverviewContract = z.infer<typeof CrmOverviewSchema>;
+export type UpdateCrmLeadBucketRequestContract = z.infer<typeof UpdateCrmLeadBucketRequestSchema>;
 export type HrRiskContract = z.infer<typeof HrRiskSchema>;
 export type HrWorkforceItemContract = z.infer<typeof HrWorkforceItemSchema>;
 export type HrOverviewContract = z.infer<typeof HrOverviewSchema>;

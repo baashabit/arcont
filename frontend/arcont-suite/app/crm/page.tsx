@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { CrmLeadBucketContract, CrmOverviewContract } from "@/lib/contracts";
-import { fetchCrmOverview } from "@/lib/platform-api";
+import { fetchCrmOverview, updateCrmLeadBucket } from "@/lib/platform-api";
 
 function healthTone(health: CrmLeadBucketContract["health"]) {
   switch (health) {
@@ -24,12 +24,52 @@ function healthTone(health: CrmLeadBucketContract["health"]) {
   }
 }
 
+function crmActionOptions(bucket: CrmLeadBucketContract) {
+  switch (bucket.health) {
+    case "critical":
+      return [
+        {
+          label: "Move to watch",
+          health: "watch" as const,
+          signal: "Risk reduced, but the pipeline still needs active monitoring."
+        }
+      ];
+    case "watch":
+      return [
+        {
+          label: "Escalate to critical",
+          health: "critical" as const,
+          signal: "Escalate because conversion or closing certainty remains weak."
+        },
+        {
+          label: "Mark healthy",
+          health: "healthy" as const,
+          signal: "Pipeline traction and reservation signal are back within target."
+        }
+      ];
+    case "healthy":
+      return [
+        {
+          label: "Move to watch",
+          health: "watch" as const,
+          signal: "Open a watch signal due to early friction in visits or closing."
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function CrmPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<CrmOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null);
+  const [signalDraft, setSignalDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +118,81 @@ export default function CrmPage() {
     () => overview?.risks.filter((risk) => risk.leadBucketId === selectedBucket?.id) ?? [],
     [overview, selectedBucket]
   );
+
+  const actionOptions = useMemo(() => (selectedBucket ? crmActionOptions(selectedBucket) : []), [selectedBucket]);
+
+  useEffect(() => {
+    setSignalDraft(selectedBucket?.signal ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedBucketId, selectedBucket?.id, selectedBucket?.signal]);
+
+  async function handleBucketAction(
+    health: CrmLeadBucketContract["health"],
+    suggestedSignal: string
+  ) {
+    if (!selectedBucket || !session.accessToken) {
+      return;
+    }
+
+    const signal = signalDraft.trim() || suggestedSignal;
+    if (signal.length < 8) {
+      setActionError("Commercial signal must be more specific before updating the bucket.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateCrmLeadBucket(
+      selectedBucket.id,
+      activeCompany.id,
+      {
+        health,
+        signal
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "CRM update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const leadBuckets = current.leadBuckets.map((bucket) => (bucket.id === response.data?.id ? response.data : bucket));
+      const qualifiedLeads = leadBuckets.reduce((sum, bucket) => sum + bucket.openOpportunities, 0);
+      const reservations = leadBuckets.reduce((sum, bucket) => sum + bucket.reservations, 0);
+      const forecastRevenue = leadBuckets.reduce((sum, bucket) => sum + bucket.forecastRevenue, 0);
+      const visitConversion =
+        leadBuckets.length > 0 ? Number((leadBuckets.reduce((sum, bucket) => sum + bucket.conversionRate, 0) / leadBuckets.length).toFixed(1)) : 0;
+
+      return {
+        ...current,
+        summary: {
+          qualifiedLeads,
+          visitConversion,
+          reservations,
+          forecastRevenue
+        },
+        leadBuckets,
+        focusBucket: current.focusBucket?.id === response.data?.id ? response.data : current.focusBucket
+      };
+    });
+
+    setSignalDraft(response.data.signal);
+    setActionMessage(`CRM bucket moved to ${response.data.health}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -193,11 +308,45 @@ export default function CrmPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Commercial signal</div>
-                      <div>{selectedBucket.signal}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={signalDraft}
+                          onChange={(event) => setSignalDraft(event.target.value)}
+                          placeholder="Describe the active commercial signal or blocker"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedBucket.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Healthy requires conversion of at least 20%.</span>
+                        <span className="tableCellMuted">Healthy also requires at least 10 reservations in the bucket.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.health === "critical" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleBucketAction(option.health, option.signal)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

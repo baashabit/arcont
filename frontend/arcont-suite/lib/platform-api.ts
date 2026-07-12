@@ -3,6 +3,7 @@ import {
   AuthSessionSchema,
   ComplianceCaseSchema,
   ComplianceOverviewSchema,
+  CrmLeadBucketSchema,
   CrmOverviewSchema,
   CompanyDetailSchema,
   CompanyModuleStateSchema,
@@ -31,6 +32,7 @@ import {
   PlatformUserDetailSchema,
   RoleSchema,
   UpdateComplianceCaseRequestSchema,
+  UpdateCrmLeadBucketRequestSchema,
   UpdateDocumentControlItemRequestSchema,
   UpdateFinanceLedgerItemRequestSchema,
   UpdateHrWorkforceItemRequestSchema,
@@ -47,6 +49,7 @@ import {
   type AuthSessionContract,
   type ComplianceCaseContract,
   type ComplianceOverviewContract,
+  type CrmLeadBucketContract,
   type CrmOverviewContract,
   type CompanyDetailContract,
   type CompanyModuleStateContract,
@@ -75,6 +78,7 @@ import {
   type PlatformUserDetailContract,
   type RoleContract,
   type UpdateComplianceCaseRequestContract,
+  type UpdateCrmLeadBucketRequestContract,
   type UpdateDocumentControlItemRequestContract,
   type UpdateFinanceLedgerItemRequestContract,
   type UpdateHrWorkforceItemRequestContract,
@@ -445,6 +449,35 @@ export async function fetchCrmOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/crm/overview${query}`, options);
   return response ? CrmOverviewSchema.parse(response) : null;
+}
+
+export async function updateCrmLeadBucket(
+  leadBucketId: string,
+  companyId: string | undefined,
+  input: UpdateCrmLeadBucketRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CrmLeadBucketContract>> {
+  const payload = UpdateCrmLeadBucketRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/crm/lead-buckets/${leadBucketId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CrmLeadBucketSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchComplianceOverview(

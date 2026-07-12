@@ -172,6 +172,12 @@ type CrmRiskRecord = {
   status: string;
 };
 
+type UpdateCrmLeadBucketInput = {
+  leadBucketId: string;
+  health: "healthy" | "watch" | "critical";
+  signal: string;
+};
+
 type HrWorkforceItemRecord = {
   id: string;
   companyId: string;
@@ -382,6 +388,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  updateCrmLeadBucket(input: UpdateCrmLeadBucketInput): Promise<CrmLeadBucketRecord>;
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
   updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
@@ -1818,6 +1825,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       user.status = input.status;
       return user;
     },
+    async updateCrmLeadBucket(input) {
+      const item = state.crmLeadBuckets.find((candidate) => candidate.id === input.leadBucketId);
+      if (!item) {
+        throw new Error("CRM lead bucket not found in repository");
+      }
+
+      item.health = input.health;
+      item.signal = input.signal;
+      item.updatedAt = new Date().toISOString();
+      return item;
+    },
     async updateFinanceLedgerItem(input) {
       const item = state.financeItems.find((candidate) => candidate.id === input.ledgerId);
       if (!item) {
@@ -2720,6 +2738,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }
 
       return mapUserRow(result.rows[0]);
+    },
+    async updateCrmLeadBucket(input) {
+      void input;
+      throw new Error("CRM lead bucket updates are not implemented for the postgres repository yet");
     },
     async updateFinanceLedgerItem(input) {
       void input;
