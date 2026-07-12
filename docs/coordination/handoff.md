@@ -4,7 +4,7 @@ Update this file from PC 1 before Antonio starts the next task.
 
 ## Branch
 
-`feat/web-live-platform-integration`
+`feat/web-session-shell-hardening`
 
 ## Objective
 
