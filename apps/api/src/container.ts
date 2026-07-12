@@ -6,6 +6,7 @@ import {
 } from "./repositories/platform-repository.js";
 import { createAuthService } from "./services/auth-service.js";
 import { createCrmService } from "./services/crm-service.js";
+import { createCostControlService } from "./services/cost-control-service.js";
 import { createComplianceService } from "./services/compliance-service.js";
 import { createDocumentControlService } from "./services/document-control-service.js";
 import { createFinanceService } from "./services/finance-service.js";
@@ -28,6 +29,7 @@ export function createContainer() {
   const procurementService = createProcurementService(platformRepository);
   const inventoryService = createInventoryService(platformRepository);
   const financeService = createFinanceService(platformRepository);
+  const costControlService = createCostControlService(platformRepository, procurementService);
   const crmService = createCrmService(platformRepository);
   const complianceService = createComplianceService(platformRepository);
   const documentControlService = createDocumentControlService(platformRepository);
@@ -43,6 +45,7 @@ export function createContainer() {
     procurementService,
     inventoryService,
     financeService,
+    costControlService,
     crmService,
     complianceService,
     documentControlService,

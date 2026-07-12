@@ -120,6 +120,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["procurement:*"]
   },
   {
+    href: "/cost-control",
+    label: "Cost Control",
+    description: "Budget, forecast and drift",
+    domain: "finance",
+    moduleKeys: ["procurement.purchasing"],
+    requiredPermissions: ["procurement:*"]
+  },
+  {
     href: "/inventory",
     label: "Inventory",
     description: "Warehouse and stock",

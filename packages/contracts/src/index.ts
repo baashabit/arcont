@@ -202,6 +202,60 @@ export const UpdateProcurementPackageRequestSchema = z.object({
   nextAction: z.string().min(8)
 });
 
+export const CostControlExceptionSchema = z.object({
+  id: z.string(),
+  lineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const CostControlLineSchema = z.object({
+  id: z.string(),
+  packageId: z.string(),
+  companyId: z.string(),
+  projectId: z.string().nullable(),
+  code: z.string(),
+  packageName: z.string(),
+  projectName: z.string(),
+  buyer: z.string(),
+  procurementStatus: z.enum(["draft", "sourcing", "awaiting_approval", "awarded", "blocked"]),
+  controlHealth: z.enum(["on_track", "watch", "critical"]),
+  budgetAmount: z.number().nonnegative(),
+  committedCost: z.number().nonnegative(),
+  spentToDate: z.number().nonnegative(),
+  forecastAtCompletion: z.number().nonnegative(),
+  varianceAmount: z.number(),
+  variancePercent: z.number(),
+  projectProgress: z.number().min(0).max(100),
+  scheduleVarianceDays: z.number(),
+  cashExposure: z.number().nonnegative(),
+  riskDrivers: z.array(z.string()),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const CostControlOverviewSchema = z.object({
+  summary: z.object({
+    trackedLines: z.number().int().nonnegative(),
+    totalBudget: z.number().nonnegative(),
+    committedCost: z.number().nonnegative(),
+    forecastAtCompletion: z.number().nonnegative(),
+    forecastVariance: z.number(),
+    criticalLines: z.number().int().nonnegative()
+  }),
+  lines: z.array(CostControlLineSchema),
+  exceptions: z.array(CostControlExceptionSchema),
+  focusLine: CostControlLineSchema.nullable()
+});
+
+export const UpdateCostControlLineRequestSchema = z.object({
+  procurementStatus: z.enum(["draft", "sourcing", "awaiting_approval", "awarded", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
 export const InventoryRiskSchema = z.object({
   id: z.string(),
   locationId: z.string(),
@@ -697,6 +751,10 @@ export type ProcurementRiskContract = z.infer<typeof ProcurementRiskSchema>;
 export type ProcurementPackageContract = z.infer<typeof ProcurementPackageSchema>;
 export type ProcurementOverviewContract = z.infer<typeof ProcurementOverviewSchema>;
 export type UpdateProcurementPackageRequestContract = z.infer<typeof UpdateProcurementPackageRequestSchema>;
+export type CostControlExceptionContract = z.infer<typeof CostControlExceptionSchema>;
+export type CostControlLineContract = z.infer<typeof CostControlLineSchema>;
+export type CostControlOverviewContract = z.infer<typeof CostControlOverviewSchema>;
+export type UpdateCostControlLineRequestContract = z.infer<typeof UpdateCostControlLineRequestSchema>;
 export type InventoryRiskContract = z.infer<typeof InventoryRiskSchema>;
 export type InventoryLocationContract = z.infer<typeof InventoryLocationSchema>;
 export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;

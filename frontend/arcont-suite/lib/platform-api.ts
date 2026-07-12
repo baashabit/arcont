@@ -3,6 +3,8 @@ import {
   AuthSessionSchema,
   ComplianceCaseSchema,
   ComplianceOverviewSchema,
+  CostControlLineSchema,
+  CostControlOverviewSchema,
   CrmLeadBucketSchema,
   CrmOverviewSchema,
   CompanyDetailSchema,
@@ -36,6 +38,7 @@ import {
   PlatformUserDetailSchema,
   RoleSchema,
   UpdateComplianceCaseRequestSchema,
+  UpdateCostControlLineRequestSchema,
   UpdateCrmLeadBucketRequestSchema,
   UpdateDocumentControlItemRequestSchema,
   UpdateFinanceLedgerItemRequestSchema,
@@ -55,6 +58,8 @@ import {
   type AuthSessionContract,
   type ComplianceCaseContract,
   type ComplianceOverviewContract,
+  type CostControlLineContract,
+  type CostControlOverviewContract,
   type CrmLeadBucketContract,
   type CrmOverviewContract,
   type CompanyDetailContract,
@@ -88,6 +93,7 @@ import {
   type PlatformUserDetailContract,
   type RoleContract,
   type UpdateComplianceCaseRequestContract,
+  type UpdateCostControlLineRequestContract,
   type UpdateCrmLeadBucketRequestContract,
   type UpdateDocumentControlItemRequestContract,
   type UpdateFinanceLedgerItemRequestContract,
@@ -429,6 +435,44 @@ export async function updateProcurementPackage(
 
   return {
     data: ProcurementPackageSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchCostControlOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<CostControlOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/cost-control/overview${query}`, options);
+  return response ? CostControlOverviewSchema.parse(response) : null;
+}
+
+export async function updateCostControlLine(
+  lineId: string,
+  companyId: string | undefined,
+  input: UpdateCostControlLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CostControlLineContract>> {
+  const payload = UpdateCostControlLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/cost-control/lines/${lineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CostControlLineSchema.parse(response.data),
     error: null
   };
 }
