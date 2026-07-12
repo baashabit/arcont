@@ -192,6 +192,11 @@ export const ProcurementOverviewSchema = z.object({
   focusPackage: ProcurementPackageSchema.nullable()
 });
 
+export const UpdateProcurementPackageRequestSchema = z.object({
+  status: z.enum(["draft", "sourcing", "awaiting_approval", "awarded", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
 export const InventoryRiskSchema = z.object({
   id: z.string(),
   locationId: z.string(),
@@ -650,6 +655,7 @@ export type ProjectPortfolioOverviewContract = z.infer<typeof ProjectPortfolioOv
 export type ProcurementRiskContract = z.infer<typeof ProcurementRiskSchema>;
 export type ProcurementPackageContract = z.infer<typeof ProcurementPackageSchema>;
 export type ProcurementOverviewContract = z.infer<typeof ProcurementOverviewSchema>;
+export type UpdateProcurementPackageRequestContract = z.infer<typeof UpdateProcurementPackageRequestSchema>;
 export type InventoryRiskContract = z.infer<typeof InventoryRiskSchema>;
 export type InventoryLocationContract = z.infer<typeof InventoryLocationSchema>;
 export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;

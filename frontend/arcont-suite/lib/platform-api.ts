@@ -19,11 +19,13 @@ import {
   PlatformDashboardSummarySchema,
   PlatformSettingsSchema,
   ProcurementOverviewSchema,
+  ProcurementPackageSchema,
   ProjectPortfolioOverviewSchema,
   QualityInspectionSchema,
   QualityOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
+  UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
   UpdateQualityInspectionRequestSchema,
@@ -51,11 +53,13 @@ import {
   type PlatformDashboardSummaryContract,
   type PlatformSettingsContract,
   type ProcurementOverviewContract,
+  type ProcurementPackageContract,
   type ProjectPortfolioOverviewContract,
   type QualityInspectionContract,
   type QualityOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
+  type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
   type UpdateQualityInspectionRequestContract,
@@ -307,6 +311,35 @@ export async function fetchProcurementOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/procurement/overview${query}`, options);
   return response ? ProcurementOverviewSchema.parse(response) : null;
+}
+
+export async function updateProcurementPackage(
+  packageId: string,
+  companyId: string | undefined,
+  input: UpdateProcurementPackageRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProcurementPackageContract>> {
+  const payload = UpdateProcurementPackageRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/procurement/packages/${packageId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProcurementPackageSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchInventoryOverview(

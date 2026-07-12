@@ -77,6 +77,12 @@ type ProcurementRiskRecord = {
   status: string;
 };
 
+type UpdateProcurementPackageInput = {
+  packageId: string;
+  status: "draft" | "sourcing" | "awaiting_approval" | "awarded" | "blocked";
+  nextAction: string;
+};
+
 type InventoryLocationRecord = {
   id: string;
   companyId: string;
@@ -346,6 +352,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
   updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
   listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
 };
@@ -1776,6 +1783,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       user.status = input.status;
       return user;
     },
+    async updateProcurementPackage(input) {
+      const procurementPackage = state.procurementPackages.find((item) => item.id === input.packageId);
+      if (!procurementPackage) {
+        throw new Error("Procurement package not found in repository");
+      }
+
+      procurementPackage.status = input.status;
+      procurementPackage.nextAction = input.nextAction;
+      procurementPackage.updatedAt = new Date().toISOString();
+      return procurementPackage;
+    },
     async updateQualityInspection(input) {
       const inspection = state.qualityInspections.find((item) => item.id === input.inspectionId);
       if (!inspection) {
@@ -2612,6 +2630,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }
 
       return mapUserRow(result.rows[0]);
+    },
+    async updateProcurementPackage(input) {
+      void input;
+      throw new Error("Procurement package updates are not implemented for the postgres repository yet");
     },
     async updateQualityInspection(input) {
       void input;

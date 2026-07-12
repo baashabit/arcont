@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { ProcurementOverviewContract, ProcurementPackageContract } from "@/lib/contracts";
-import { fetchProcurementOverview } from "@/lib/platform-api";
+import { fetchProcurementOverview, updateProcurementPackage } from "@/lib/platform-api";
 
 function statusTone(status: ProcurementPackageContract["status"]) {
   switch (status) {
@@ -28,12 +28,70 @@ function statusTone(status: ProcurementPackageContract["status"]) {
   }
 }
 
+function procurementActionOptions(procurementPackage: ProcurementPackageContract) {
+  switch (procurementPackage.status) {
+    case "blocked":
+      return [
+        {
+          label: "Resume sourcing",
+          status: "sourcing" as const,
+          nextAction: "Resume supplier engagement and close the pending technical gap"
+        }
+      ];
+    case "draft":
+      return [
+        {
+          label: "Start sourcing",
+          status: "sourcing" as const,
+          nextAction: "Launch RFQ and open supplier outreach for this package"
+        }
+      ];
+    case "sourcing":
+      return [
+        {
+          label: "Send to approval",
+          status: "awaiting_approval" as const,
+          nextAction: "Freeze comparison sheet and route approval package to decision makers"
+        },
+        {
+          label: "Block package",
+          status: "blocked" as const,
+          nextAction: "Pause package and escalate the supplier or technical blocker"
+        }
+      ];
+    case "awaiting_approval":
+      return [
+        {
+          label: "Return to sourcing",
+          status: "sourcing" as const,
+          nextAction: "Reopen supplier comparison and refresh pricing coverage"
+        },
+        {
+          label: "Award package",
+          status: "awarded" as const,
+          nextAction: "Issue award notice and align the first execution milestone"
+        },
+        {
+          label: "Block approval",
+          status: "blocked" as const,
+          nextAction: "Stop approval route and document the blocker for resolution"
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function ProcurementPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<ProcurementOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+  const [nextActionDraft, setNextActionDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -82,6 +140,83 @@ export default function ProcurementPage() {
     () => overview?.risks.filter((risk) => risk.packageId === selectedPackage?.id) ?? [],
     [overview, selectedPackage]
   );
+
+  const actionOptions = useMemo(
+    () => (selectedPackage ? procurementActionOptions(selectedPackage) : []),
+    [selectedPackage]
+  );
+
+  useEffect(() => {
+    setNextActionDraft(selectedPackage?.nextAction ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedPackageId, selectedPackage?.id, selectedPackage?.nextAction]);
+
+  async function handlePackageAction(status: ProcurementPackageContract["status"], suggestedNextAction: string) {
+    if (!selectedPackage || !session.accessToken) {
+      return;
+    }
+
+    const nextAction = nextActionDraft.trim() || suggestedNextAction;
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before updating the package.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateProcurementPackage(
+      selectedPackage.id,
+      activeCompany.id,
+      {
+        status,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Package update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const packages = current.packages.map((item) => (item.id === response.data?.id ? response.data : item));
+      const openPackages = packages.filter((item) => item.status !== "awarded");
+      const averageApprovalHours =
+        openPackages.length > 0
+          ? Number((openPackages.reduce((sum, item) => sum + item.approvalHours, 0) / openPackages.length).toFixed(1))
+          : 0;
+      const averageBidCount =
+        packages.length > 0 ? Number((packages.reduce((sum, item) => sum + item.bidCount, 0) / packages.length).toFixed(1)) : 0;
+
+      return {
+        ...current,
+        summary: {
+          openRequisitions: openPackages.length,
+          averageApprovalHours,
+          strategicPackages: packages.filter((item) => item.strategic).length,
+          averageBidCount
+        },
+        packages,
+        focusPackage: current.focusPackage?.id === response.data?.id ? response.data : current.focusPackage
+      };
+    });
+
+    setNextActionDraft(response.data.nextAction);
+    setActionMessage(`Package moved to ${response.data.status}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -195,8 +330,46 @@ export default function ProcurementPage() {
                       <div>{selectedPackage.strategic ? "Yes" : "No"}</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Next action</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextActionDraft}
+                          onChange={(event) => setNextActionDraft(event.target.value)}
+                          placeholder="Describe the next procurement move or blocker resolution"
+                        />
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedPackage.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Approval requires at least 2 bids on the package.</span>
+                        <span className="tableCellMuted">Award blocks strategic packages with stale approvals over 48 hours.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.status === "blocked" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handlePackageAction(option.status, option.nextAction)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (
