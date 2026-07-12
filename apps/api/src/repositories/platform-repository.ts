@@ -207,6 +207,32 @@ type ComplianceRiskRecord = {
   status: string;
 };
 
+type IntegrationStreamRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  streamName: string;
+  provider: string;
+  domain: string;
+  health: "healthy" | "watch" | "critical";
+  freshnessMinutes: number;
+  openAlerts: number;
+  linkedAssets: number;
+  automationCoverage: number;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type IntegrationRiskRecord = {
+  id: string;
+  streamId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -226,6 +252,8 @@ export type PlatformRepository = {
   listHrRisks(companyId: string): Promise<HrRiskRecord[]>;
   listComplianceCases(companyId: string): Promise<ComplianceCaseRecord[]>;
   listComplianceRisks(companyId: string): Promise<ComplianceRiskRecord[]>;
+  listIntegrationStreams(companyId: string): Promise<IntegrationStreamRecord[]>;
+  listIntegrationRisks(companyId: string): Promise<IntegrationRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -275,7 +303,8 @@ function createSeedState() {
         "inventory.warehouse",
         "finance.accounting",
         "hr.workforce",
-        "compliance.postsale"
+        "compliance.postsale",
+        "integrations.field-data"
       ]
     },
     {
@@ -1019,6 +1048,99 @@ function createSeedState() {
     }
   ];
 
+  const integrationStreams: IntegrationStreamRecord[] = [
+    {
+      id: "int_revit_demo",
+      companyId: "cmp_arcont_demo",
+      code: "INT-501",
+      streamName: "BIM sync",
+      provider: "Autodesk Revit",
+      domain: "Digital twin",
+      health: "healthy",
+      freshnessMinutes: 12,
+      openAlerts: 0,
+      linkedAssets: 2184,
+      automationCoverage: 86,
+      nextAction: "Extend asset metadata mapping to handover packages",
+      updatedAt: "2026-07-11T12:20:00.000Z"
+    },
+    {
+      id: "int_iot_demo",
+      companyId: "cmp_arcont_demo",
+      code: "INT-518",
+      streamName: "Site sensors",
+      provider: "IoT gateways",
+      domain: "Telemetry",
+      health: "watch",
+      freshnessMinutes: 7,
+      openAlerts: 2,
+      linkedAssets: 426,
+      automationCoverage: 78,
+      nextAction: "Recover two offline gateways and normalize alert routing",
+      updatedAt: "2026-07-11T12:24:00.000Z"
+    },
+    {
+      id: "int_rtk_demo",
+      companyId: "cmp_arcont_demo",
+      code: "INT-532",
+      streamName: "Drone RTK supervision",
+      provider: "Field drone mesh",
+      domain: "Progress capture",
+      health: "watch",
+      freshnessMinutes: 95,
+      openAlerts: 1,
+      linkedAssets: 164,
+      automationCoverage: 67,
+      nextAction: "Close weather-delayed flight gap and regenerate weekly orthomosaic",
+      updatedAt: "2026-07-11T10:55:00.000Z"
+    },
+    {
+      id: "int_starlink_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "INT-610",
+      streamName: "Remote site backbone",
+      provider: "Starlink",
+      domain: "Connectivity",
+      health: "critical",
+      freshnessMinutes: 45,
+      openAlerts: 3,
+      linkedAssets: 89,
+      automationCoverage: 59,
+      nextAction: "Stabilize remote link before next field data synchronization window",
+      updatedAt: "2026-07-11T11:05:00.000Z"
+    }
+  ];
+
+  const integrationRisks: IntegrationRiskRecord[] = [
+    {
+      id: "intr_gateway_alert",
+      streamId: "int_iot_demo",
+      title: "Two gateways remain offline and are degrading sensor continuity",
+      category: "telemetry",
+      severity: "warning",
+      owner: "Connected operations",
+      status: "Remote restart attempted and field visit pending"
+    },
+    {
+      id: "intr_drone_backlog",
+      streamId: "int_rtk_demo",
+      title: "Weekly drone capture backlog is delaying progress reconciliation",
+      category: "drone supervision",
+      severity: "warning",
+      owner: "VDC team",
+      status: "Waiting for next safe weather window and RTK validation"
+    },
+    {
+      id: "intr_starlink_outage",
+      streamId: "int_starlink_gov",
+      title: "Remote backbone instability threatens field synchronization",
+      category: "connectivity",
+      severity: "critical",
+      owner: "Field infrastructure",
+      status: "Escalated to connectivity provider and local redundancy under review"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -1060,6 +1182,8 @@ function createSeedState() {
       hrRisks,
       complianceCases,
       complianceRisks,
+      integrationStreams,
+      integrationRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -1141,6 +1265,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.complianceCases.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.complianceRisks.filter((risk) => caseIds.has(risk.caseId));
+    },
+    async listIntegrationStreams(companyId: string) {
+      return state.integrationStreams.filter((item) => item.companyId === companyId);
+    },
+    async listIntegrationRisks(companyId: string) {
+      const streamIds = new Set(
+        state.integrationStreams.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.integrationRisks.filter((risk) => streamIds.has(risk.streamId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -1634,6 +1767,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listComplianceRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listIntegrationStreams(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listIntegrationRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;

@@ -10,6 +10,7 @@ import {
   CreatePlatformUserResponseSchema,
   FinanceOverviewSchema,
   HrOverviewSchema,
+  IntegrationOverviewSchema,
   InventoryOverviewSchema,
   ModuleSchema,
   PlatformApiErrorSchema,
@@ -37,6 +38,7 @@ import {
   type CreatePlatformUserResponseContract,
   type FinanceOverviewContract,
   type HrOverviewContract,
+  type IntegrationOverviewContract,
   type InventoryOverviewContract,
   type ModuleContract,
   type PlatformApiErrorContract,
@@ -333,6 +335,15 @@ export async function fetchComplianceOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/compliance/overview${query}`, options);
   return response ? ComplianceOverviewSchema.parse(response) : null;
+}
+
+export async function fetchIntegrationOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<IntegrationOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/integrations/overview${query}`, options);
+  return response ? IntegrationOverviewSchema.parse(response) : null;
 }
 
 export async function fetchHrOverview(
