@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { DocumentControlItemContract, DocumentControlOverviewContract } from "@/lib/contracts";
-import { fetchDocumentControlOverview } from "@/lib/platform-api";
+import { fetchDocumentControlOverview, updateDocumentControlItem } from "@/lib/platform-api";
 
 function healthTone(health: DocumentControlItemContract["health"]) {
   switch (health) {
@@ -24,12 +24,75 @@ function healthTone(health: DocumentControlItemContract["health"]) {
   }
 }
 
+function documentActionOptions(item: DocumentControlItemContract) {
+  switch (item.status) {
+    case "blocked":
+      return [
+        {
+          label: "Resume review",
+          status: "in_review" as const,
+          nextAction: "Resume technical review and align the pending coordination response"
+        }
+      ];
+    case "issued":
+      return [
+        {
+          label: "Start review",
+          status: "in_review" as const,
+          nextAction: "Route issue to reviewers and capture the first consolidated comments"
+        }
+      ];
+    case "in_review":
+      return [
+        {
+          label: "Request response",
+          status: "awaiting_response" as const,
+          nextAction: "Send review comments and wait for formal answer or reissue"
+        },
+        {
+          label: "Approve item",
+          status: "approved" as const,
+          nextAction: "Close review loop and keep approval evidence attached to the package"
+        },
+        {
+          label: "Block item",
+          status: "blocked" as const,
+          nextAction: "Pause workflow and escalate the coordination blocker"
+        }
+      ];
+    case "awaiting_response":
+      return [
+        {
+          label: "Return to review",
+          status: "in_review" as const,
+          nextAction: "Resume review after receiving the updated response package"
+        },
+        {
+          label: "Approve response",
+          status: "approved" as const,
+          nextAction: "Accept response and archive final approval evidence"
+        },
+        {
+          label: "Block response",
+          status: "blocked" as const,
+          nextAction: "Stop the response loop and escalate the unresolved blocker"
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function DocumentControlPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<DocumentControlOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [nextActionDraft, setNextActionDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +141,78 @@ export default function DocumentControlPage() {
     () => overview?.risks.filter((risk) => risk.itemId === selectedItem?.id) ?? [],
     [overview, selectedItem]
   );
+
+  const actionOptions = useMemo(() => (selectedItem ? documentActionOptions(selectedItem) : []), [selectedItem]);
+
+  useEffect(() => {
+    setNextActionDraft(selectedItem?.nextAction ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedItemId, selectedItem?.id, selectedItem?.nextAction]);
+
+  async function handleItemAction(status: DocumentControlItemContract["status"], suggestedNextAction: string) {
+    if (!selectedItem || !session.accessToken) {
+      return;
+    }
+
+    const nextAction = nextActionDraft.trim() || suggestedNextAction;
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before updating the item.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateDocumentControlItem(
+      selectedItem.id,
+      activeCompany.id,
+      {
+        status,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Document item update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const items = current.items.map((item) => (item.id === response.data?.id ? response.data : item));
+      const openRfis = items.filter((item) => item.documentType === "RFI" && item.status !== "approved").length;
+      const activeSubmittals = items.filter((item) => item.documentType === "Submittal" && item.status !== "approved").length;
+      const controlledVersions = items.reduce((sum, item) => sum + item.revisionCount, 0);
+      const averageTurnaroundDays =
+        items.length > 0 ? Number((items.reduce((sum, item) => sum + item.turnaroundDays, 0) / items.length).toFixed(1)) : 0;
+
+      return {
+        ...current,
+        summary: {
+          openRfis,
+          activeSubmittals,
+          controlledVersions,
+          averageTurnaroundDays
+        },
+        items,
+        focusItem: current.focusItem?.id === response.data?.id ? response.data : current.focusItem
+      };
+    });
+
+    setNextActionDraft(response.data.nextAction);
+    setActionMessage(`Item moved to ${response.data.status}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -193,11 +328,45 @@ export default function DocumentControlPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>
-                      <div>{selectedItem.nextAction}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextActionDraft}
+                          onChange={(event) => setNextActionDraft(event.target.value)}
+                          placeholder="Describe the next coordination or response action"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedItem.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Approval requires zero open comments.</span>
+                        <span className="tableCellMuted">Approval is blocked if turnaround exceeds 10 days without revalidation.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.status === "blocked" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleItemAction(option.status, option.nextAction)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

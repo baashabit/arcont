@@ -464,6 +464,11 @@ export const DocumentControlOverviewSchema = z.object({
   focusItem: DocumentControlItemSchema.nullable()
 });
 
+export const UpdateDocumentControlItemRequestSchema = z.object({
+  status: z.enum(["issued", "in_review", "awaiting_response", "approved", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
 export const QualityRiskSchema = z.object({
   id: z.string(),
   inspectionId: z.string(),
@@ -677,6 +682,7 @@ export type IntegrationOverviewContract = z.infer<typeof IntegrationOverviewSche
 export type DocumentControlRiskContract = z.infer<typeof DocumentControlRiskSchema>;
 export type DocumentControlItemContract = z.infer<typeof DocumentControlItemSchema>;
 export type DocumentControlOverviewContract = z.infer<typeof DocumentControlOverviewSchema>;
+export type UpdateDocumentControlItemRequestContract = z.infer<typeof UpdateDocumentControlItemRequestSchema>;
 export type QualityRiskContract = z.infer<typeof QualityRiskSchema>;
 export type QualityInspectionContract = z.infer<typeof QualityInspectionSchema>;
 export type QualityOverviewContract = z.infer<typeof QualityOverviewSchema>;

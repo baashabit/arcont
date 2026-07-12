@@ -266,6 +266,12 @@ type DocumentControlRiskRecord = {
   status: string;
 };
 
+type UpdateDocumentControlItemInput = {
+  itemId: string;
+  status: "issued" | "in_review" | "awaiting_response" | "approved" | "blocked";
+  nextAction: string;
+};
+
 type QualityInspectionRecord = {
   id: string;
   companyId: string;
@@ -352,6 +358,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
   updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
   listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
@@ -1783,6 +1790,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       user.status = input.status;
       return user;
     },
+    async updateDocumentControlItem(input) {
+      const item = state.documentControlItems.find((candidate) => candidate.id === input.itemId);
+      if (!item) {
+        throw new Error("Document control item not found in repository");
+      }
+
+      item.status = input.status;
+      item.nextAction = input.nextAction;
+      item.updatedAt = new Date().toISOString();
+      return item;
+    },
     async updateProcurementPackage(input) {
       const procurementPackage = state.procurementPackages.find((item) => item.id === input.packageId);
       if (!procurementPackage) {
@@ -2630,6 +2648,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }
 
       return mapUserRow(result.rows[0]);
+    },
+    async updateDocumentControlItem(input) {
+      void input;
+      throw new Error("Document control item updates are not implemented for the postgres repository yet");
     },
     async updateProcurementPackage(input) {
       void input;

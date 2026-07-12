@@ -8,6 +8,7 @@ import {
   CompanySchema,
   CreatePlatformUserRequestSchema,
   CreatePlatformUserResponseSchema,
+  DocumentControlItemSchema,
   DocumentControlOverviewSchema,
   FinanceOverviewSchema,
   HrOverviewSchema,
@@ -25,6 +26,7 @@ import {
   QualityOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
+  UpdateDocumentControlItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
@@ -42,6 +44,7 @@ import {
   type CompanyContract,
   type CreatePlatformUserRequestContract,
   type CreatePlatformUserResponseContract,
+  type DocumentControlItemContract,
   type DocumentControlOverviewContract,
   type FinanceOverviewContract,
   type HrOverviewContract,
@@ -59,6 +62,7 @@ import {
   type QualityOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
+  type UpdateDocumentControlItemRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
@@ -394,6 +398,35 @@ export async function fetchDocumentControlOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/document-control/overview${query}`, options);
   return response ? DocumentControlOverviewSchema.parse(response) : null;
+}
+
+export async function updateDocumentControlItem(
+  itemId: string,
+  companyId: string | undefined,
+  input: UpdateDocumentControlItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<DocumentControlItemContract>> {
+  const payload = UpdateDocumentControlItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/document-control/items/${itemId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: DocumentControlItemSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchQualityOverview(
