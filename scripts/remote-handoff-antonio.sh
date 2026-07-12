@@ -2,7 +2,7 @@
 set -euo pipefail
 
 : "${ARCONT_REMOTE_HOST:?Set ARCONT_REMOTE_HOST, for example antonio@100.x.y.z}"
-: "${ARCONT_REMOTE_REPO:=~/arcont}"
+: "${ARCONT_REMOTE_REPO:=\$HOME/projects/arcont}"
 
 local_file="docs/coordination/handoff.md"
 

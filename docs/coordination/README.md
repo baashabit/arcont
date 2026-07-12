@@ -44,7 +44,7 @@ Required environment variables on PC 1:
 
 ```bash
 export ARCONT_REMOTE_HOST=antonio@100.x.y.z
-export ARCONT_REMOTE_REPO=~/arcont
+export ARCONT_REMOTE_REPO='$HOME/projects/arcont'
 export ARCONT_REMOTE_TMUX_SESSION=arcont
 ```
 
