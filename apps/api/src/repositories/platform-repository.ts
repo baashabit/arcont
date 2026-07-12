@@ -29,6 +29,7 @@ export type PlatformRepository = {
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
+  getRefreshTokenByHash(tokenHash: string): Promise<RefreshTokenRecord | undefined>;
   companyTaxIdExists(taxId: string): Promise<boolean>;
   userEmailExists(email: string): Promise<boolean>;
   getSettings(companyId: string): Promise<SettingsRecord | undefined>;
@@ -39,6 +40,7 @@ export type PlatformRepository = {
     temporaryPassword: string;
   }>;
   saveRefreshToken(input: Omit<RefreshTokenRecord, "id" | "createdAt">): Promise<RefreshTokenRecord>;
+  revokeRefreshToken(tokenHash: string): Promise<boolean>;
   revokeRefreshTokens(userId: string, companyId: string): Promise<number>;
   recordAuthFailure(email: string, reason: AuthFailureReason, companyId?: string): Promise<void>;
   addAuditEvent(event: AuditEventInput): Promise<void>;
@@ -174,6 +176,9 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
     async getUserById(userId: string) {
       return state.users.find((user) => user.id === userId);
     },
+    async getRefreshTokenByHash(tokenHash: string) {
+      return state.refreshTokens.find((token) => token.tokenHash === tokenHash);
+    },
     async companyTaxIdExists(taxId: string) {
       return state.companies.some((company) => company.taxId.toLowerCase() === taxId.toLowerCase());
     },
@@ -246,6 +251,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
 
       state.refreshTokens.push(record);
       return record;
+    },
+    async revokeRefreshToken(tokenHash: string) {
+      const token = state.refreshTokens.find((item) => item.tokenHash === tokenHash && !item.revokedAt);
+      if (!token) {
+        return false;
+      }
+
+      token.revokedAt = new Date().toISOString();
+      return true;
     },
     async revokeRefreshTokens(userId: string, companyId: string) {
       let revoked = 0;
@@ -545,6 +559,32 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
 
       return result.rows[0] ? mapUserRow(result.rows[0]) : undefined;
     },
+    async getRefreshTokenByHash(tokenHash: string) {
+      const result = await pool.query(
+        `
+          select id, user_id, company_id, token_hash, expires_at, created_at, revoked_at
+          from auth_refresh_tokens
+          where token_hash = $1
+          limit 1
+        `,
+        [tokenHash]
+      );
+
+      const row = result.rows[0];
+      if (!row) {
+        return undefined;
+      }
+
+      return {
+        id: String(row.id),
+        userId: String(row.user_id),
+        companyId: String(row.company_id),
+        tokenHash: String(row.token_hash),
+        expiresAt: String(row.expires_at),
+        createdAt: String(row.created_at),
+        revokedAt: row.revoked_at ? String(row.revoked_at) : undefined
+      };
+    },
     async companyTaxIdExists(taxId: string) {
       const result = await pool.query(
         `
@@ -736,6 +776,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       );
 
       return record;
+    },
+    async revokeRefreshToken(tokenHash: string) {
+      const result = await pool.query(
+        `
+          update auth_refresh_tokens
+          set revoked_at = now()
+          where token_hash = $1 and revoked_at is null
+        `,
+        [tokenHash]
+      );
+
+      return (result.rowCount ?? 0) > 0;
     },
     async revokeRefreshTokens(userId: string, companyId: string) {
       const result = await pool.query(

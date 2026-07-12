@@ -68,6 +68,14 @@ export const AuthLoginRequestSchema = z.object({
   companyId: z.string().optional()
 });
 
+export const AuthRefreshRequestSchema = z.object({
+  refreshToken: z.string().min(16)
+});
+
+export const AuthLogoutRequestSchema = z.object({
+  refreshToken: z.string().min(16).optional()
+});
+
 export const AuthSessionSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
@@ -76,6 +84,17 @@ export const AuthSessionSchema = z.object({
   company: CompanySchema,
   user: UserSchema,
   permissions: z.array(z.string())
+});
+
+export const AuthCurrentSessionSchema = z.object({
+  company: CompanySchema,
+  user: UserSchema,
+  role: RoleSchema,
+  permissions: z.array(z.string())
+});
+
+export const AuthLogoutResponseSchema = z.object({
+  revokedTokens: z.number().int().nonnegative()
 });
 
 export const CompanyModuleStateSchema = z.object({
@@ -212,7 +231,11 @@ export type RoleContract = z.infer<typeof RoleSchema>;
 export type UserContract = z.infer<typeof UserSchema>;
 export type PlatformSettingsContract = z.infer<typeof PlatformSettingsSchema>;
 export type AuthLoginRequestContract = z.infer<typeof AuthLoginRequestSchema>;
+export type AuthRefreshRequestContract = z.infer<typeof AuthRefreshRequestSchema>;
+export type AuthLogoutRequestContract = z.infer<typeof AuthLogoutRequestSchema>;
 export type AuthSessionContract = z.infer<typeof AuthSessionSchema>;
+export type AuthCurrentSessionContract = z.infer<typeof AuthCurrentSessionSchema>;
+export type AuthLogoutResponseContract = z.infer<typeof AuthLogoutResponseSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

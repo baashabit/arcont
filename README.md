@@ -85,6 +85,29 @@ npm run build
 - `apps/api` provides the first platform API baseline
 - `packages/contracts` defines shared contracts and module catalog
 
+## Multi-PC Coordination
+
+This repo now includes a simple remote coordination workflow in `docs/coordination`.
+
+- `docs/coordination/handoff.md`
+  - the current task for PC 2
+- `scripts/remote-status-antonio.sh`
+  - fetch and inspect Antonio's remote repo state
+- `scripts/remote-sync-antonio.sh`
+  - pull latest repo on Antonio's machine
+- `scripts/remote-handoff-antonio.sh`
+  - copy the latest handoff file to Antonio's repo
+- `scripts/remote-tmux-antonio.sh`
+  - attach to a persistent remote `tmux` session
+
+Expected environment variables on PC 1:
+
+```bash
+export ARCONT_REMOTE_HOST=antonio@100.x.y.z
+export ARCONT_REMOTE_REPO=~/arcont
+export ARCONT_REMOTE_TMUX_SESSION=arcont
+```
+
 ## Next Recommended Step
 
 Use this baseline as the integration point for a second workstation focused on frontend shell, navigation, and enterprise UI over stable platform contracts.

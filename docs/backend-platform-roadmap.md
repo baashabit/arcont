@@ -7,6 +7,7 @@
 - shared contracts in `packages/contracts`
 - repository and service layers with selectable `memory` / `postgres` driver
 - JWT-based auth baseline
+- current session lifecycle with login, refresh, me, and logout
 - provisioning endpoint for new companies
 - migration script and PostgreSQL foundation
 - domain validation and normalized error responses
@@ -48,7 +49,7 @@
 ## Next Backend Priorities
 
 1. Execute and verify PostgreSQL driver end-to-end once the Docker daemon is available.
-2. Persist refresh tokens with stronger rotation and revocation lifecycle endpoints.
+2. Add route-level authorization guards and permission enforcement on platform endpoints.
 3. Add audit event writes for more actions and change history queries.
 4. Add company provisioning approvals and module activation workflows.
 5. Add SAT and accounting catalog seeds for Mexico.
