@@ -6,6 +6,7 @@ import { env } from "./config/env.js";
 import { DomainError } from "./lib/domain-error.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { registerInventoryRoutes } from "./routes/inventory.js";
 import { registerPlatformRoutes } from "./routes/platform.js";
 import { registerProcurementRoutes } from "./routes/procurement.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
@@ -59,6 +60,7 @@ export async function buildApp() {
   await registerPlatformRoutes(app);
   await registerProjectsRoutes(app);
   await registerProcurementRoutes(app);
+  await registerInventoryRoutes(app);
 
   return app;
 }

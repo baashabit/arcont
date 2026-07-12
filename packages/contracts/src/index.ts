@@ -192,6 +192,44 @@ export const ProcurementOverviewSchema = z.object({
   focusPackage: ProcurementPackageSchema.nullable()
 });
 
+export const InventoryRiskSchema = z.object({
+  id: z.string(),
+  locationId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const InventoryLocationSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  locationName: z.string(),
+  locationType: z.string(),
+  trackedSkus: z.number().int().nonnegative(),
+  accuracy: z.number().min(0).max(100),
+  openVariances: z.number().int().nonnegative(),
+  urgentReplenishments: z.number().int().nonnegative(),
+  blockedReservations: z.number().int().nonnegative(),
+  stockHealth: z.enum(["healthy", "watch", "critical"]),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const InventoryOverviewSchema = z.object({
+  summary: z.object({
+    trackedSkus: z.number().int().nonnegative(),
+    accuracy: z.number().min(0).max(100),
+    openVariances: z.number().int().nonnegative(),
+    urgentReplenishments: z.number().int().nonnegative()
+  }),
+  locations: z.array(InventoryLocationSchema),
+  risks: z.array(InventoryRiskSchema),
+  focusLocation: InventoryLocationSchema.nullable()
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -339,6 +377,9 @@ export type ProjectPortfolioOverviewContract = z.infer<typeof ProjectPortfolioOv
 export type ProcurementRiskContract = z.infer<typeof ProcurementRiskSchema>;
 export type ProcurementPackageContract = z.infer<typeof ProcurementPackageSchema>;
 export type ProcurementOverviewContract = z.infer<typeof ProcurementOverviewSchema>;
+export type InventoryRiskContract = z.infer<typeof InventoryRiskSchema>;
+export type InventoryLocationContract = z.infer<typeof InventoryLocationSchema>;
+export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

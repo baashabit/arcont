@@ -77,6 +77,32 @@ type ProcurementRiskRecord = {
   status: string;
 };
 
+type InventoryLocationRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  locationName: string;
+  locationType: string;
+  trackedSkus: number;
+  accuracy: number;
+  openVariances: number;
+  urgentReplenishments: number;
+  blockedReservations: number;
+  stockHealth: "healthy" | "watch" | "critical";
+  nextAction: string;
+  updatedAt: string;
+};
+
+type InventoryRiskRecord = {
+  id: string;
+  locationId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -86,6 +112,8 @@ export type PlatformRepository = {
   listProjectRisks(companyId: string): Promise<ProjectRiskRecord[]>;
   listProcurementPackages(companyId: string): Promise<ProcurementPackageRecord[]>;
   listProcurementRisks(companyId: string): Promise<ProcurementRiskRecord[]>;
+  listInventoryLocations(companyId: string): Promise<InventoryLocationRecord[]>;
+  listInventoryRisks(companyId: string): Promise<InventoryRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -387,6 +415,99 @@ function createSeedState() {
     }
   ];
 
+  const inventoryLocations: InventoryLocationRecord[] = [
+    {
+      id: "inv_central_demo",
+      companyId: "cmp_arcont_demo",
+      code: "WH-CEN-01",
+      locationName: "Central warehouse",
+      locationType: "Warehouse",
+      trackedSkus: 4280,
+      accuracy: 97.9,
+      openVariances: 2,
+      urgentReplenishments: 0,
+      blockedReservations: 1,
+      stockHealth: "healthy",
+      nextAction: "Cycle count on finishing materials aisle",
+      updatedAt: "2026-07-11T18:00:00.000Z"
+    },
+    {
+      id: "inv_jobsite_demo",
+      companyId: "cmp_arcont_demo",
+      code: "SITE-TB-02",
+      locationName: "Jobsite B",
+      locationType: "Jobsite",
+      trackedSkus: 1140,
+      accuracy: 95.4,
+      openVariances: 3,
+      urgentReplenishments: 2,
+      blockedReservations: 4,
+      stockHealth: "watch",
+      nextAction: "Replenish conduit and anchors before Friday",
+      updatedAt: "2026-07-11T17:35:00.000Z"
+    },
+    {
+      id: "inv_yard_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "YARD-BN-03",
+      locationName: "Prefabrication yard",
+      locationType: "Yard",
+      trackedSkus: 620,
+      accuracy: 98.6,
+      openVariances: 1,
+      urgentReplenishments: 1,
+      blockedReservations: 0,
+      stockHealth: "healthy",
+      nextAction: "Confirm next steel mesh transfer",
+      updatedAt: "2026-07-11T16:20:00.000Z"
+    },
+    {
+      id: "inv_field_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "SITE-BN-04",
+      locationName: "Frontline staging area",
+      locationType: "Field staging",
+      trackedSkus: 780,
+      accuracy: 93.2,
+      openVariances: 4,
+      urgentReplenishments: 3,
+      blockedReservations: 2,
+      stockHealth: "critical",
+      nextAction: "Resolve missing plumbing kit receipts",
+      updatedAt: "2026-07-11T15:40:00.000Z"
+    }
+  ];
+
+  const inventoryRisks: InventoryRiskRecord[] = [
+    {
+      id: "ivr_jobsite_gap",
+      locationId: "inv_jobsite_demo",
+      title: "Anchors below safety stock for slab sequence",
+      category: "Replenishment",
+      severity: "warning",
+      owner: "Warehouse lead",
+      status: "Transfer requested from central warehouse"
+    },
+    {
+      id: "ivr_field_receipts",
+      locationId: "inv_field_gov",
+      title: "Unposted field receipts distort available stock",
+      category: "Traceability",
+      severity: "critical",
+      owner: "Field storekeeper",
+      status: "Backlog under reconciliation"
+    },
+    {
+      id: "ivr_central_cycle",
+      locationId: "inv_central_demo",
+      title: "Cycle count variance in finishing materials",
+      category: "Variance",
+      severity: "info",
+      owner: "Inventory analyst",
+      status: "Scheduled for next count window"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -418,6 +539,8 @@ function createSeedState() {
       projectRisks,
       procurementPackages,
       procurementRisks,
+      inventoryLocations,
+      inventoryRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -454,6 +577,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.procurementPackages.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.procurementRisks.filter((risk) => packageIds.has(risk.packageId));
+    },
+    async listInventoryLocations(companyId: string) {
+      return state.inventoryLocations.filter((location) => location.companyId === companyId);
+    },
+    async listInventoryRisks(companyId: string) {
+      const locationIds = new Set(
+        state.inventoryLocations.filter((location) => location.companyId === companyId).map((location) => location.id)
+      );
+      return state.inventoryRisks.filter((risk) => locationIds.has(risk.locationId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -889,6 +1021,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     },
     async listProcurementRisks(companyId: string) {
       const items = await this.listCompanies();
+      void items;
+      return [];
+    },
+    async listInventoryLocations(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listInventoryRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
       void items;
       return [];
     },
