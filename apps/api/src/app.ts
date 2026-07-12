@@ -19,6 +19,7 @@ import { registerPlatformRoutes } from "./routes/platform.js";
 import { registerProcurementRoutes } from "./routes/procurement.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerQualityRoutes } from "./routes/quality.js";
+import { registerSubcontractsRoutes } from "./routes/subcontracts.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -77,6 +78,7 @@ export async function buildApp() {
   await registerComplianceRoutes(app);
   await registerDocumentControlRoutes(app);
   await registerHrRoutes(app);
+  await registerSubcontractsRoutes(app);
   await registerIntegrationRoutes(app);
   await registerQualityRoutes(app);
 

@@ -39,6 +39,9 @@ import {
   QualityOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
+  SubcontractLineSchema,
+  SubcontractOverviewSchema,
+  UpdateSubcontractLineRequestSchema,
   UpdateComplianceCaseRequestSchema,
   UpdateCostControlLineRequestSchema,
   UpdateCrmLeadBucketRequestSchema,
@@ -97,6 +100,8 @@ import {
   type QualityOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
+  type SubcontractLineContract,
+  type SubcontractOverviewContract,
   type UpdateComplianceCaseRequestContract,
   type UpdateCostControlLineRequestContract,
   type UpdateCrmLeadBucketRequestContract,
@@ -113,6 +118,7 @@ import {
   type UpdateQualityInspectionRequestContract,
   type UpdateCompanyModulesRequestContract,
   type UpdatePlatformSettingsRequestContract,
+  type UpdateSubcontractLineRequestContract,
   type UserContract
 } from "@/lib/contracts";
 
@@ -821,6 +827,44 @@ export async function updateHrWorkforceItem(
 
   return {
     data: HrWorkforceItemSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchSubcontractOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<SubcontractOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/subcontracts/overview${query}`, options);
+  return response ? SubcontractOverviewSchema.parse(response) : null;
+}
+
+export async function updateSubcontractLine(
+  lineId: string,
+  companyId: string | undefined,
+  input: UpdateSubcontractLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<SubcontractLineContract>> {
+  const payload = UpdateSubcontractLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/subcontracts/lines/${lineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: SubcontractLineSchema.parse(response.data),
     error: null
   };
 }

@@ -482,6 +482,63 @@ export const UpdateHrWorkforceItemRequestSchema = z.object({
   nextAction: z.string().min(8)
 });
 
+export const SubcontractRiskSchema = z.object({
+  id: z.string(),
+  lineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const SubcontractLineSchema = z.object({
+  id: z.string(),
+  workforceId: z.string(),
+  companyId: z.string(),
+  projectId: z.string().nullable(),
+  code: z.string(),
+  contractorName: z.string(),
+  frontName: z.string(),
+  projectName: z.string(),
+  projectStatus: z.enum(projectStatuses).nullable(),
+  subcontractHealth: z.enum(["controlled", "watch", "critical"]),
+  contractAmount: z.number().nonnegative(),
+  earnedAmount: z.number().nonnegative(),
+  invoicedAmount: z.number().nonnegative(),
+  paidAmount: z.number().nonnegative(),
+  retentionAmount: z.number().nonnegative(),
+  pendingDestajo: z.number().nonnegative(),
+  productivityRate: z.number().min(0).max(100),
+  attendanceRate: z.number().min(0).max(100),
+  complianceExpirations: z.number().int().nonnegative(),
+  incidentCount: z.number().int().nonnegative(),
+  activeHeadcount: z.number().int().nonnegative(),
+  progressPercent: z.number().min(0).max(100),
+  progressGap: z.number(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const SubcontractOverviewSchema = z.object({
+  summary: z.object({
+    activeSubcontracts: z.number().int().nonnegative(),
+    contractedAmount: z.number().nonnegative(),
+    earnedAmount: z.number().nonnegative(),
+    paidAmount: z.number().nonnegative(),
+    pendingDestajo: z.number().nonnegative(),
+    criticalSubcontracts: z.number().int().nonnegative()
+  }),
+  lines: z.array(SubcontractLineSchema),
+  risks: z.array(SubcontractRiskSchema),
+  focusLine: SubcontractLineSchema.nullable()
+});
+
+export const UpdateSubcontractLineRequestSchema = z.object({
+  subcontractHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const ComplianceRiskSchema = z.object({
   id: z.string(),
   caseId: z.string(),
@@ -830,6 +887,10 @@ export type HrRiskContract = z.infer<typeof HrRiskSchema>;
 export type HrWorkforceItemContract = z.infer<typeof HrWorkforceItemSchema>;
 export type HrOverviewContract = z.infer<typeof HrOverviewSchema>;
 export type UpdateHrWorkforceItemRequestContract = z.infer<typeof UpdateHrWorkforceItemRequestSchema>;
+export type SubcontractRiskContract = z.infer<typeof SubcontractRiskSchema>;
+export type SubcontractLineContract = z.infer<typeof SubcontractLineSchema>;
+export type SubcontractOverviewContract = z.infer<typeof SubcontractOverviewSchema>;
+export type UpdateSubcontractLineRequestContract = z.infer<typeof UpdateSubcontractLineRequestSchema>;
 export type ComplianceRiskContract = z.infer<typeof ComplianceRiskSchema>;
 export type ComplianceCaseContract = z.infer<typeof ComplianceCaseSchema>;
 export type ComplianceOverviewContract = z.infer<typeof ComplianceOverviewSchema>;

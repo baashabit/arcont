@@ -160,6 +160,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["hr:*"]
   },
   {
+    href: "/subcontracts",
+    label: "Subcontracts",
+    description: "Destajo and contractor advance",
+    domain: "hr",
+    moduleKeys: ["hr.workforce"],
+    requiredPermissions: ["hr:*"]
+  },
+  {
     href: "/compliance",
     label: "Compliance",
     description: "Post-sale and cases",

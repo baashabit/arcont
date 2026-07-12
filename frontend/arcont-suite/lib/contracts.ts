@@ -50,6 +50,9 @@ import {
   ProvisionCompanyRequestSchema,
   ProvisionCompanyResponseSchema,
   RoleSchema,
+  SubcontractLineSchema,
+  SubcontractOverviewSchema,
+  SubcontractRiskSchema,
   UpdateEstimationCollectionLineRequestSchema,
   UpdateCostControlLineRequestSchema,
   UpdateComplianceCaseRequestSchema,
@@ -123,6 +126,9 @@ export {
   ProvisionCompanyRequestSchema,
   ProvisionCompanyResponseSchema,
   RoleSchema,
+  SubcontractLineSchema,
+  SubcontractOverviewSchema,
+  SubcontractRiskSchema,
   UpdateEstimationCollectionLineRequestSchema,
   UpdateCostControlLineRequestSchema,
   UpdateComplianceCaseRequestSchema,
@@ -159,6 +165,11 @@ export const UpdatePlatformUserRoleRequestSchema = z.object({
 
 export const UpdatePlatformUserStatusRequestSchema = z.object({
   status: z.enum(userStatuses)
+});
+
+export const UpdateSubcontractLineRequestSchema = z.object({
+  subcontractHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
 });
 
 export const PlatformUserDetailSchema = z.object({
@@ -235,6 +246,9 @@ export type {
   ProvisionCompanyRequestContract,
   ProvisionCompanyResponseContract,
   RoleContract,
+  SubcontractLineContract,
+  SubcontractOverviewContract,
+  SubcontractRiskContract,
   UpdateEstimationCollectionLineRequestContract,
   UpdateCostControlLineRequestContract,
   UpdateComplianceCaseRequestContract,
@@ -258,3 +272,4 @@ export type UpdatePlatformUserStatusRequestContract = z.infer<typeof UpdatePlatf
 export type PlatformUserDetailContract = z.infer<typeof PlatformUserDetailSchema>;
 export type CreatePlatformUserResponseContract = z.infer<typeof CreatePlatformUserResponseSchema>;
 export type PlatformApiErrorContract = z.infer<typeof PlatformApiErrorSchema>;
+export type UpdateSubcontractLineRequestContract = z.infer<typeof UpdateSubcontractLineRequestSchema>;
