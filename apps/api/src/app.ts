@@ -7,6 +7,7 @@ import { DomainError } from "./lib/domain-error.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerComplianceRoutes } from "./routes/compliance.js";
 import { registerCrmRoutes } from "./routes/crm.js";
+import { registerDocumentControlRoutes } from "./routes/document-control.js";
 import { registerFinanceRoutes } from "./routes/finance.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerHrRoutes } from "./routes/hr.js";
@@ -69,6 +70,7 @@ export async function buildApp() {
   await registerFinanceRoutes(app);
   await registerCrmRoutes(app);
   await registerComplianceRoutes(app);
+  await registerDocumentControlRoutes(app);
   await registerHrRoutes(app);
   await registerIntegrationRoutes(app);
 

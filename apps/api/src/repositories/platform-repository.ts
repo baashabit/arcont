@@ -233,6 +233,33 @@ type IntegrationRiskRecord = {
   status: string;
 };
 
+type DocumentControlItemRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  documentType: string;
+  subject: string;
+  projectName: string;
+  owner: string;
+  status: "issued" | "in_review" | "awaiting_response" | "approved" | "blocked";
+  revisionCount: number;
+  turnaroundDays: number;
+  openComments: number;
+  health: "healthy" | "watch" | "critical";
+  nextAction: string;
+  updatedAt: string;
+};
+
+type DocumentControlRiskRecord = {
+  id: string;
+  itemId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -254,6 +281,8 @@ export type PlatformRepository = {
   listComplianceRisks(companyId: string): Promise<ComplianceRiskRecord[]>;
   listIntegrationStreams(companyId: string): Promise<IntegrationStreamRecord[]>;
   listIntegrationRisks(companyId: string): Promise<IntegrationRiskRecord[]>;
+  listDocumentControlItems(companyId: string): Promise<DocumentControlItemRecord[]>;
+  listDocumentControlRisks(companyId: string): Promise<DocumentControlRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -1141,6 +1170,103 @@ function createSeedState() {
     }
   ];
 
+  const documentControlItems: DocumentControlItemRecord[] = [
+    {
+      id: "doc_rfi_torrec_demo",
+      companyId: "cmp_arcont_demo",
+      code: "RFI-218",
+      documentType: "RFI",
+      subject: "Cruce MEP con acabados",
+      projectName: "Torre C",
+      owner: "Project coordination",
+      status: "awaiting_response",
+      revisionCount: 2,
+      turnaroundDays: 8.4,
+      openComments: 6,
+      health: "critical",
+      nextAction: "Escalate response to design coordination and close field clash path",
+      updatedAt: "2026-07-11T09:40:00.000Z"
+    },
+    {
+      id: "doc_submittal_canceleria_demo",
+      companyId: "cmp_arcont_demo",
+      code: "SUB-144",
+      documentType: "Submittal",
+      subject: "Canceleria premium revision package",
+      projectName: "Residencial Nativa",
+      owner: "Procurement technical office",
+      status: "in_review",
+      revisionCount: 3,
+      turnaroundDays: 4.1,
+      openComments: 4,
+      health: "watch",
+      nextAction: "Resolve architect comments and reissue supplier package",
+      updatedAt: "2026-07-11T10:25:00.000Z"
+    },
+    {
+      id: "doc_transmittal_ifc_demo",
+      companyId: "cmp_arcont_demo",
+      code: "TRM-077",
+      documentType: "Transmittal",
+      subject: "IFC nivel 12 issued set",
+      projectName: "Distrito Norte",
+      owner: "Document control",
+      status: "approved",
+      revisionCount: 1,
+      turnaroundDays: 1.2,
+      openComments: 0,
+      health: "healthy",
+      nextAction: "Keep receipt evidence tied to contractor package",
+      updatedAt: "2026-07-11T08:10:00.000Z"
+    },
+    {
+      id: "doc_gov_minuta_bienestar",
+      companyId: "cmp_bienestar_gov",
+      code: "MIN-302",
+      documentType: "Meeting note",
+      subject: "Minuta de observaciones federales",
+      projectName: "Paquete Bienestar Sur",
+      owner: "Regional PMO",
+      status: "blocked",
+      revisionCount: 1,
+      turnaroundDays: 6.7,
+      openComments: 5,
+      health: "critical",
+      nextAction: "Close government observations and reissue evidence pack",
+      updatedAt: "2026-07-11T11:30:00.000Z"
+    }
+  ];
+
+  const documentControlRisks: DocumentControlRiskRecord[] = [
+    {
+      id: "docrfi_clash",
+      itemId: "doc_rfi_torrec_demo",
+      title: "Field clash remains unresolved and is now beyond target response window",
+      category: "rfi",
+      severity: "critical",
+      owner: "Project coordination",
+      status: "Escalated to design review with site team waiting for answer"
+    },
+    {
+      id: "docsub_vendor_loop",
+      itemId: "doc_submittal_canceleria_demo",
+      title: "Supplier submittal is cycling through repeated technical comments",
+      category: "submittal",
+      severity: "warning",
+      owner: "Procurement technical office",
+      status: "Preparing consolidated response to avoid a fourth review loop"
+    },
+    {
+      id: "docgov_minute",
+      itemId: "doc_gov_minuta_bienestar",
+      title: "Federal observation minute is blocking downstream evidence approval",
+      category: "government control",
+      severity: "critical",
+      owner: "Regional PMO",
+      status: "Waiting for corrected attachments and formal reissue"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -1184,6 +1310,8 @@ function createSeedState() {
       complianceRisks,
       integrationStreams,
       integrationRisks,
+      documentControlItems,
+      documentControlRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -1274,6 +1402,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.integrationStreams.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.integrationRisks.filter((risk) => streamIds.has(risk.streamId));
+    },
+    async listDocumentControlItems(companyId: string) {
+      return state.documentControlItems.filter((item) => item.companyId === companyId);
+    },
+    async listDocumentControlRisks(companyId: string) {
+      const itemIds = new Set(
+        state.documentControlItems.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.documentControlRisks.filter((risk) => itemIds.has(risk.itemId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -1779,6 +1916,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listIntegrationRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listDocumentControlItems(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listDocumentControlRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;

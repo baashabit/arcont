@@ -420,6 +420,45 @@ export const IntegrationOverviewSchema = z.object({
   focusStream: IntegrationStreamSchema.nullable()
 });
 
+export const DocumentControlRiskSchema = z.object({
+  id: z.string(),
+  itemId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const DocumentControlItemSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  documentType: z.string(),
+  subject: z.string(),
+  projectName: z.string(),
+  owner: z.string(),
+  status: z.enum(["issued", "in_review", "awaiting_response", "approved", "blocked"]),
+  revisionCount: z.number().int().nonnegative(),
+  turnaroundDays: z.number().nonnegative(),
+  openComments: z.number().int().nonnegative(),
+  health: z.enum(["healthy", "watch", "critical"]),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const DocumentControlOverviewSchema = z.object({
+  summary: z.object({
+    openRfis: z.number().int().nonnegative(),
+    activeSubmittals: z.number().int().nonnegative(),
+    controlledVersions: z.number().int().nonnegative(),
+    averageTurnaroundDays: z.number().nonnegative()
+  }),
+  items: z.array(DocumentControlItemSchema),
+  risks: z.array(DocumentControlRiskSchema),
+  focusItem: DocumentControlItemSchema.nullable()
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -585,6 +624,9 @@ export type ComplianceOverviewContract = z.infer<typeof ComplianceOverviewSchema
 export type IntegrationRiskContract = z.infer<typeof IntegrationRiskSchema>;
 export type IntegrationStreamContract = z.infer<typeof IntegrationStreamSchema>;
 export type IntegrationOverviewContract = z.infer<typeof IntegrationOverviewSchema>;
+export type DocumentControlRiskContract = z.infer<typeof DocumentControlRiskSchema>;
+export type DocumentControlItemContract = z.infer<typeof DocumentControlItemSchema>;
+export type DocumentControlOverviewContract = z.infer<typeof DocumentControlOverviewSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

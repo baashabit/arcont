@@ -72,6 +72,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["projects:*"]
   },
   {
+    href: "/document-control",
+    label: "Document Control",
+    description: "RFI and revisions",
+    domain: "projects",
+    moduleKeys: ["projects.control"],
+    requiredPermissions: ["projects:*"]
+  },
+  {
     href: "/procurement",
     label: "Procurement",
     description: "Requests and sourcing",

@@ -8,6 +8,7 @@ import {
   CompanySchema,
   CreatePlatformUserRequestSchema,
   CreatePlatformUserResponseSchema,
+  DocumentControlOverviewSchema,
   FinanceOverviewSchema,
   HrOverviewSchema,
   IntegrationOverviewSchema,
@@ -36,6 +37,7 @@ import {
   type CompanyContract,
   type CreatePlatformUserRequestContract,
   type CreatePlatformUserResponseContract,
+  type DocumentControlOverviewContract,
   type FinanceOverviewContract,
   type HrOverviewContract,
   type IntegrationOverviewContract,
@@ -344,6 +346,15 @@ export async function fetchIntegrationOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/integrations/overview${query}`, options);
   return response ? IntegrationOverviewSchema.parse(response) : null;
+}
+
+export async function fetchDocumentControlOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<DocumentControlOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/document-control/overview${query}`, options);
+  return response ? DocumentControlOverviewSchema.parse(response) : null;
 }
 
 export async function fetchHrOverview(
