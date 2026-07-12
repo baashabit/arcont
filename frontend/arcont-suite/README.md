@@ -1,21 +1,32 @@
-# ARCONT Suite Frontend
+## ARCONT web foundation
 
-Base inicial en `Next.js` para empezar la nueva capa de frontend sobre la marca ARCONT.
+This frontend is the enterprise base for the ARCONT web suite inside `frontend/arcont-suite`.
 
-## Scripts
+### Structure
 
-```bash
-npm install
-npm run dev
-```
+- `app/`
+  - domain routes such as `dashboard`, `platform/*`, `crm`, `projects`, `procurement`, `inventory`, `finance`, `hr`, `compliance`, `integrations`
+- `components/providers`
+  - tenant-aware frontend state and module visibility
+- `components/shell`
+  - reusable app shell, sidebar and topbar
+- `components/ui`
+  - cards, KPI cards, tables, badges, filters and empty states
+- `lib/app-data.ts`
+  - API-first data loading with local fallback for development
+- `lib/navigation.ts`
+  - domain navigation model
+- `lib/contracts.ts`
+  - shared contracts re-exported from `packages/contracts/src/index.ts`
 
-## Rutas iniciales
+### Data model
 
-- `/`
-- `/dashboard`
-- `/crm`
-- `/customer-360`
+- Shared contracts are the source of truth for companies, modules, roles, users and settings.
+- The frontend tries to read from the platform API first.
+- If the API is not available locally, the app falls back to typed mocks aligned with those contracts.
 
-## Objetivo
+### Current behavior
 
-Servir como punto de arranque real para migrar gradualmente el sistema legado hacia una experiencia moderna y consistente.
+- Tenant switcher changes visible modules and route posture at the frontend level.
+- Platform routes show governance information with tenant-aware state.
+- Operational routes demonstrate useful domain views instead of empty placeholders.
