@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +9,103 @@ import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
+import type { PlatformApiErrorContract, UserContract } from "@/lib/contracts";
+
+function ErrorBanner({ error }: { error: PlatformApiErrorContract["error"] }) {
+  const tone = error.code === "PLATFORM_LAST_ACTIVE_USER" ? "danger" : "warning";
+
+  return (
+    <div className="emptyState" style={{ padding: 20 }}>
+      <div className="tagRow">
+        <Badge tone={tone}>{error.code}</Badge>
+        {error.code === "PLATFORM_LAST_ACTIVE_USER" ? (
+          <Badge tone="danger">Cannot disable last active user</Badge>
+        ) : null}
+      </div>
+      <p style={{ marginTop: 12 }}>{error.message}</p>
+    </div>
+  );
+}
 
 export default function PlatformUsersPage() {
-  const { activeCompany, activeUsers, roles, isRouteVisible, source, session } = useAppState();
+  const {
+    activeCompany,
+    activeUsers,
+    changeUserRole,
+    changeUserStatus,
+    companies,
+    createUser,
+    isRefreshingPlatform,
+    isRouteVisible,
+    isSavingUsers,
+    refreshUserDetail,
+    refreshUsers,
+    roles,
+    session,
+    source,
+    userDetails
+  } = useAppState();
   const [query, setQuery] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<PlatformApiErrorContract["error"] | null>(null);
+  const [lastCreatedPassword, setLastCreatedPassword] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    companyId: activeCompany.id,
+    fullName: "",
+    email: "",
+    roleKey: roles[0]?.key ?? "",
+    status: "invited" as UserContract["status"]
+  });
+  const [detailDraft, setDetailDraft] = useState({
+    roleKey: "",
+    status: "active" as UserContract["status"]
+  });
+
+  useEffect(() => {
+    setCreateForm((current) => ({
+      ...current,
+      companyId: activeCompany.id
+    }));
+    void refreshUsers(activeCompany.id);
+  }, [activeCompany.id, refreshUsers]);
+
+  useEffect(() => {
+    if (!selectedUserId && activeUsers[0]) {
+      setSelectedUserId(activeUsers[0].id);
+    }
+  }, [activeUsers, selectedUserId]);
+
+  useEffect(() => {
+    if (!selectedUserId) {
+      return;
+    }
+
+    void refreshUserDetail(selectedUserId);
+  }, [refreshUserDetail, selectedUserId]);
+
+  const selectedDetail = selectedUserId ? userDetails[selectedUserId] : null;
+
+  useEffect(() => {
+    if (!selectedDetail) {
+      return;
+    }
+
+    setDetailDraft({
+      roleKey: selectedDetail.user.roleKey,
+      status: selectedDetail.user.status
+    });
+  }, [selectedDetail]);
+
+  const visibleUsers = useMemo(
+    () =>
+      activeUsers.filter((user) =>
+        [user.fullName, user.email, user.roleKey, activeCompany.tradeName]
+          .join(" ")
+          .toLowerCase()
+          .includes(query.toLowerCase())
+      ),
+    [activeCompany.tradeName, activeUsers, query]
+  );
 
   if (!isRouteVisible({ moduleKeys: ["platform.identity"], requiredPermissions: ["users:*", "users:read"] })) {
     return (
@@ -31,60 +124,323 @@ export default function PlatformUsersPage() {
     );
   }
 
-  const visibleUsers = activeUsers.filter((user) =>
-    [user.fullName, user.email, user.roleKey].join(" ").toLowerCase().includes(query.toLowerCase())
-  );
-
   return (
     <AppShell
       title="Identity and users"
       eyebrow="Platform identity"
-      description="Company-aware users, roles and lifecycle states ready to connect with richer access-control flows."
+      description="Live user administration for the active tenant, backed by platform user endpoints and normalized backend errors."
     >
       <section className="grid cols4">
         <KpiCard label="Users in tenant" value={String(activeUsers.length)} footnote={`Identity view scoped to ${activeCompany.tradeName}.`} />
         <KpiCard label="Active users" value={String(activeUsers.filter((user) => user.status === "active").length)} footnote="Operationally available accounts." />
         <KpiCard label="Invitations" value={String(activeUsers.filter((user) => user.status === "invited").length)} footnote="Pending onboarding and access provisioning." />
-        <KpiCard label="Roles" value={String(roles.length)} footnote="Roles come from the shared contract package." />
+        <KpiCard label="Roles" value={String(roles.length)} footnote="Roles are read from the live platform catalog." />
       </section>
 
-      <Card title="Tenant user roster" description="Filtering and role lookup are already wired at the shell level.">
-        <FilterBar summary={`${visibleUsers.length} users match the current search`}>
-          <Badge tone={source === "api" && session.authenticated ? "success" : "warning"}>
-            {source === "api" && session.authenticated ? "bootstrap users" : "fallback users"}
-          </Badge>
-          <input className="field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, email or role" />
-        </FilterBar>
-        <DataTable
-          rows={visibleUsers}
-          columns={[
-            {
-              key: "user",
-              label: "User",
-              render: (user) => (
-                <div className="tableCellStack">
-                  <strong>{user.fullName}</strong>
-                  <span className="tableCellMuted">{user.email}</span>
+      {actionError ? <ErrorBanner error={actionError} /> : null}
+
+      {lastCreatedPassword ? (
+        <Card title="Temporary password issued" description="The backend returned a temporary credential for the newly created user.">
+          <div className="tagRow">
+            <Badge tone="success">user created</Badge>
+            <Badge tone="gold">{lastCreatedPassword}</Badge>
+          </div>
+        </Card>
+      ) : null}
+
+      <section className="grid cols2">
+        <Card title="Tenant user roster" description="This list now consumes GET /platform/users?companyId=... for the active tenant.">
+          <FilterBar summary={`${visibleUsers.length} users match the current search`}>
+            <Badge tone={source === "api" && session.authenticated ? "success" : "warning"}>
+              {source === "api" && session.authenticated ? "live users api" : "fallback users"}
+            </Badge>
+            <Badge tone={isRefreshingPlatform ? "info" : "neutral"}>
+              {isRefreshingPlatform ? "refreshing" : companies.find((company) => company.id === activeCompany.id)?.tradeName}
+            </Badge>
+            <input
+              className="field"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search by name, email or role"
+            />
+          </FilterBar>
+          <DataTable
+            rows={visibleUsers}
+            columns={[
+              {
+                key: "name",
+                label: "Name",
+                render: (user) => (
+                  <div className="tableCellStack">
+                    <strong>{user.fullName}</strong>
+                    <span className="tableCellMuted mono">{user.id}</span>
+                  </div>
+                )
+              },
+              {
+                key: "email",
+                label: "Email",
+                render: (user) => user.email
+              },
+              {
+                key: "company",
+                label: "Company",
+                render: () => activeCompany.tradeName
+              },
+              {
+                key: "role",
+                label: "Role",
+                render: (user) =>
+                  roles.find((role) => role.key === user.roleKey)?.name ?? user.roleKey
+              },
+              {
+                key: "status",
+                label: "Status",
+                render: (user) => (
+                  <Badge
+                    tone={
+                      user.status === "active"
+                        ? "success"
+                        : user.status === "invited"
+                          ? "warning"
+                          : "danger"
+                    }
+                  >
+                    {user.status}
+                  </Badge>
+                )
+              },
+              {
+                key: "actions",
+                label: "Actions",
+                render: (user) => (
+                  <button
+                    className="buttonGhost"
+                    type="button"
+                    onClick={() => {
+                      setSelectedUserId(user.id);
+                      setActionError(null);
+                    }}
+                  >
+                    View
+                  </button>
+                )
+              }
+            ]}
+          />
+        </Card>
+
+        <Card title="Create user" description="Creates a platform user through POST /platform/users.">
+          <div className="detailGrid">
+            <label className="detailRow">
+              <div className="detailLabel">Company</div>
+              <select
+                className="selectField"
+                value={createForm.companyId}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, companyId: event.target.value }))
+                }
+              >
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.tradeName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="detailRow">
+              <div className="detailLabel">Full name</div>
+              <input
+                className="field"
+                value={createForm.fullName}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, fullName: event.target.value }))
+                }
+              />
+            </label>
+            <label className="detailRow">
+              <div className="detailLabel">Email</div>
+              <input
+                className="field"
+                value={createForm.email}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, email: event.target.value }))
+                }
+              />
+            </label>
+            <label className="detailRow">
+              <div className="detailLabel">Role</div>
+              <select
+                className="selectField"
+                value={createForm.roleKey}
+                onChange={(event) =>
+                  setCreateForm((current) => ({ ...current, roleKey: event.target.value }))
+                }
+              >
+                {roles.map((role) => (
+                  <option key={role.key} value={role.key}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="detailRow">
+              <div className="detailLabel">Status</div>
+              <select
+                className="selectField"
+                value={createForm.status}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    status: event.target.value as UserContract["status"]
+                  }))
+                }
+              >
+                <option value="invited">invited</option>
+                <option value="active">active</option>
+                <option value="disabled">disabled</option>
+              </select>
+            </label>
+          </div>
+          <div className="emptyActions">
+            <button
+              className="button"
+              type="button"
+              disabled={isSavingUsers}
+              onClick={async () => {
+                setActionError(null);
+                setLastCreatedPassword(null);
+                const result = await createUser(createForm);
+
+                if (result.error) {
+                  setActionError(result.error);
+                  return;
+                }
+
+                if (result.data && "temporaryPassword" in result.data) {
+                  setLastCreatedPassword(result.data.temporaryPassword);
+                  setCreateForm((current) => ({
+                    ...current,
+                    fullName: "",
+                    email: ""
+                  }));
+                  setSelectedUserId(result.data.user.id);
+                }
+              }}
+            >
+              {isSavingUsers ? "Creating..." : "Create user"}
+            </button>
+          </div>
+        </Card>
+      </section>
+
+      <Card title="User detail" description="Detail, role change and status change are backed by live user endpoints.">
+        {selectedDetail ? (
+          <div className="grid cols2">
+            <div className="detailGrid">
+              <div className="detailRow">
+                <div className="detailLabel">Name</div>
+                <div>{selectedDetail.user.fullName}</div>
+              </div>
+              <div className="detailRow">
+                <div className="detailLabel">Email</div>
+                <div>{selectedDetail.user.email}</div>
+              </div>
+              <div className="detailRow">
+                <div className="detailLabel">Company</div>
+                <div>{selectedDetail.company.tradeName}</div>
+              </div>
+              <div className="detailRow">
+                <div className="detailLabel">Permissions</div>
+                <div className="tagRow">
+                  {selectedDetail.permissions.map((permission) => (
+                    <span className="tag" key={permission}>
+                      {permission}
+                    </span>
+                  ))}
                 </div>
-              )
-            },
-            {
-              key: "role",
-              label: "Role",
-              render: (user) => (
-                <div className="tableCellStack">
-                  <strong>{roles.find((role) => role.key === user.roleKey)?.name ?? user.roleKey}</strong>
-                  <span className="tableCellMuted mono">{user.roleKey}</span>
-                </div>
-              )
-            },
-            {
-              key: "status",
-              label: "Status",
-              render: (user) => <Badge tone={user.status === "active" ? "success" : user.status === "invited" ? "warning" : "danger"}>{user.status}</Badge>
-            }
-          ]}
-        />
+              </div>
+            </div>
+
+            <div className="detailGrid">
+              <label className="detailRow">
+                <div className="detailLabel">Role</div>
+                <select
+                  className="selectField"
+                  value={detailDraft.roleKey}
+                  onChange={(event) =>
+                    setDetailDraft((current) => ({ ...current, roleKey: event.target.value }))
+                  }
+                >
+                  {roles.map((role) => (
+                    <option key={role.key} value={role.key}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="detailRow">
+                <div className="detailLabel">Status</div>
+                <select
+                  className="selectField"
+                  value={detailDraft.status}
+                  onChange={(event) =>
+                    setDetailDraft((current) => ({
+                      ...current,
+                      status: event.target.value as UserContract["status"]
+                    }))
+                  }
+                >
+                  <option value="invited">invited</option>
+                  <option value="active">active</option>
+                  <option value="disabled">disabled</option>
+                </select>
+              </label>
+              <div className="emptyActions">
+                <button
+                  className="button"
+                  type="button"
+                  disabled={isSavingUsers || detailDraft.roleKey === selectedDetail.user.roleKey}
+                  onClick={async () => {
+                    setActionError(null);
+                    const result = await changeUserRole(selectedDetail.user.id, {
+                      roleKey: detailDraft.roleKey
+                    });
+
+                    if (result.error) {
+                      setActionError(result.error);
+                    }
+                  }}
+                >
+                  {isSavingUsers ? "Saving..." : "Change role"}
+                </button>
+                <button
+                  className="buttonGhost"
+                  type="button"
+                  disabled={isSavingUsers || detailDraft.status === selectedDetail.user.status}
+                  onClick={async () => {
+                    setActionError(null);
+                    const result = await changeUserStatus(selectedDetail.user.id, {
+                      status: detailDraft.status
+                    });
+
+                    if (result.error) {
+                      setActionError(result.error);
+                    }
+                  }}
+                >
+                  {isSavingUsers ? "Saving..." : "Change status"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <EmptyState
+            title="Select a user to inspect details"
+            description="The detail panel consumes GET /platform/users/:userId and lets you update role and status from the same workspace."
+            primaryAction={{ label: "Stay on users", href: "/platform/users" }}
+          />
+        )}
       </Card>
     </AppShell>
   );

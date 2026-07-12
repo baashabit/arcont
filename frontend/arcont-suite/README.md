@@ -61,3 +61,8 @@ This frontend is the enterprise base for the ARCONT web suite inside `frontend/a
 - `hr`
 - `compliance`
 - `integrations`
+
+### UX note
+
+- `/platform/users` keeps the current enterprise shell pattern by using one live table plus inline create/detail panels instead of modal-heavy flows.
+- Backend domain errors are surfaced using `error.code` and `error.message`, including a dedicated message for `PLATFORM_LAST_ACTIVE_USER`.
