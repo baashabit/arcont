@@ -104,6 +104,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["projects:*"]
   },
   {
+    href: "/copilot",
+    label: "AI Copilot",
+    description: "Context-aware assistant",
+    domain: "integrations",
+    moduleKeys: ["integrations.field-data"],
+    requiredPermissions: ["integrations:*"]
+  },
+  {
     href: "/procurement",
     label: "Procurement",
     description: "Requests and sourcing",
