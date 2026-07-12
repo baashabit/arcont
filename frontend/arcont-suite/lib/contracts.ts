@@ -1,13 +1,18 @@
 export {
+  AuditEventSchema,
   AuthSessionSchema,
+  CompanyDetailSchema,
   CompanySchema,
   CompanyModuleStateSchema,
   ModuleSchema,
   PlatformSettingsSchema,
   PlatformBootstrapSchema,
+  PlatformDashboardSummarySchema,
   ProvisionCompanyRequestSchema,
   ProvisionCompanyResponseSchema,
   RoleSchema,
+  UpdateCompanyModulesRequestSchema,
+  UpdatePlatformSettingsRequestSchema,
   UserSchema,
   defaultRoles,
   moduleAreas,
@@ -16,15 +21,20 @@ export {
 } from "@arcont/contracts";
 
 export type {
+  AuditEventContract,
   AuthLoginRequestContract,
   AuthSessionContract,
+  CompanyDetailContract,
   CompanyContract,
   CompanyModuleStateContract,
   ModuleContract,
   PlatformBootstrapContract,
+  PlatformDashboardSummaryContract,
   PlatformSettingsContract,
   ProvisionCompanyRequestContract,
   ProvisionCompanyResponseContract,
   RoleContract,
+  UpdateCompanyModulesRequestContract,
+  UpdatePlatformSettingsRequestContract,
   UserContract
 } from "@arcont/contracts";
