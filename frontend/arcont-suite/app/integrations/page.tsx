@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { IntegrationOverviewContract, IntegrationStreamContract } from "@/lib/contracts";
-import { fetchIntegrationOverview } from "@/lib/platform-api";
+import { fetchIntegrationOverview, updateIntegrationStream } from "@/lib/platform-api";
 
 function healthTone(health: IntegrationStreamContract["health"]) {
   switch (health) {
@@ -30,6 +30,10 @@ export default function IntegrationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
+  const [nextActionDraft, setNextActionDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +82,133 @@ export default function IntegrationsPage() {
     () => overview?.risks.filter((risk) => risk.streamId === selectedStream?.id) ?? [],
     [overview, selectedStream]
   );
+
+  const actionOptions = useMemo(() => {
+    if (!selectedStream) {
+      return [];
+    }
+
+    switch (selectedStream.health) {
+      case "healthy":
+        return [
+          {
+            label: "Move to watch",
+            health: "watch" as const,
+            nextAction: "Investigate the weak signal and coordinate corrective action across connected systems"
+          }
+        ];
+      case "watch":
+        return [
+          {
+            label: "Recover healthy",
+            health: "healthy" as const,
+            nextAction: "Confirm alerts are closed and freshness is stable before closing the stream"
+          },
+          {
+            label: "Escalate critical",
+            health: "critical" as const,
+            nextAction: "Escalate the degraded stream and protect downstream field execution immediately"
+          }
+        ];
+      default:
+        return [
+          {
+            label: "Stabilize to watch",
+            health: "watch" as const,
+            nextAction: "Stabilize the stream and keep remediation active until field sync is dependable"
+          }
+        ];
+    }
+  }, [selectedStream]);
+
+  useEffect(() => {
+    setNextActionDraft(selectedStream?.nextAction ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedStreamId, selectedStream?.id, selectedStream?.nextAction]);
+
+  async function handleStreamAction(
+    health: IntegrationStreamContract["health"],
+    suggestedNextAction: string,
+    successMessage?: string
+  ) {
+    if (!selectedStream || !session.accessToken) {
+      return;
+    }
+
+    const nextAction = nextActionDraft.trim() || suggestedNextAction;
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before updating the stream.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateIntegrationStream(
+      selectedStream.id,
+      activeCompany.id,
+      {
+        health,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Integration stream update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const streams = current.streams.map((item) => (item.id === response.data?.id ? response.data : item));
+      const focusStream =
+        streams
+          .slice()
+          .sort((left, right) => {
+            if (left.health === "critical" && right.health !== "critical") {
+              return -1;
+            }
+
+            if (left.health !== "critical" && right.health === "critical") {
+              return 1;
+            }
+
+            return right.openAlerts - left.openAlerts;
+          })[0] ?? null;
+      const averageCoverage =
+        streams.length > 0
+          ? Number((streams.reduce((sum, item) => sum + item.automationCoverage, 0) / streams.length).toFixed(1))
+          : 0;
+
+      return {
+        ...current,
+        summary: {
+          liveStreams: streams.length,
+          criticalAlerts: streams
+            .filter((item) => item.health === "critical")
+            .reduce((sum, item) => sum + item.openAlerts, 0),
+          averageCoverage,
+          linkedAssets: streams.reduce((sum, item) => sum + item.linkedAssets, 0)
+        },
+        streams,
+        focusStream
+      };
+    });
+
+    setNextActionDraft(response.data.nextAction);
+    setActionMessage(successMessage ?? `Stream moved to ${response.data.health}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -197,11 +328,60 @@ export default function IntegrationsPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>
-                      <div>{selectedStream.nextAction}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextActionDraft}
+                          onChange={(event) => setNextActionDraft(event.target.value)}
+                          placeholder="Describe the next integration recovery or stabilization action"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedStream.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Healthy is blocked while open alerts remain.</span>
+                        <span className="tableCellMuted">Healthy is blocked when freshness is above 30 minutes.</span>
+                        <span className="tableCellMuted">Health transitions move one step at a time.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          <button
+                            className="button"
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() =>
+                              void handleStreamAction(
+                                selectedStream.health,
+                                selectedStream.nextAction,
+                                "Next action updated."
+                              )
+                            }
+                          >
+                            {isSaving ? "Saving..." : "Save next action"}
+                          </button>
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.health === "critical" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleStreamAction(option.health, option.nextAction)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

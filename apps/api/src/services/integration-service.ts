@@ -1,5 +1,16 @@
-import { notFound } from "../lib/domain-error.js";
+import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
+
+const allowedIntegrationHealthTransitions: Record<
+  "healthy" | "watch" | "critical",
+  Array<"healthy" | "watch" | "critical">
+> = {
+  healthy: ["watch"],
+  watch: ["healthy", "critical"],
+  critical: ["watch"]
+};
+
+const maxHealthyFreshnessMinutes = 30;
 
 export function createIntegrationService(repository: PlatformRepository) {
   return {
@@ -47,6 +58,92 @@ export function createIntegrationService(repository: PlatformRepository) {
         risks,
         focusStream
       };
+    },
+    async updateStream(input: {
+      companyId: string;
+      streamId: string;
+      health: "healthy" | "watch" | "critical";
+      nextAction: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("INTEGRATION_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const streams = await repository.listIntegrationStreams(input.companyId);
+      const stream = streams.find((item) => item.id === input.streamId);
+      if (!stream) {
+        throw notFound("INTEGRATION_STREAM_NOT_FOUND", "Integration stream not found", {
+          companyId: input.companyId,
+          streamId: input.streamId
+        });
+      }
+
+      if (stream.health === input.health && stream.nextAction === input.nextAction) {
+        return stream;
+      }
+
+      if (stream.health !== input.health) {
+        const allowedTransitions = allowedIntegrationHealthTransitions[stream.health];
+        if (!allowedTransitions.includes(input.health)) {
+          throw validationError(
+            "INTEGRATION_INVALID_HEALTH_TRANSITION",
+            "Integration stream health transition is not allowed",
+            {
+              streamId: stream.id,
+              currentHealth: stream.health,
+              nextHealth: input.health
+            }
+          );
+        }
+      }
+
+      if (input.health === "healthy") {
+        if (stream.openAlerts > 0) {
+          throw validationError(
+            "INTEGRATION_OPEN_ALERTS",
+            "Integration stream cannot be marked healthy while alerts remain open",
+            {
+              streamId: stream.id,
+              openAlerts: stream.openAlerts
+            }
+          );
+        }
+
+        if (stream.freshnessMinutes > maxHealthyFreshnessMinutes) {
+          throw validationError(
+            "INTEGRATION_FRESHNESS_TOO_HIGH",
+            "Integration stream cannot be marked healthy while freshness is stale",
+            {
+              streamId: stream.id,
+              freshnessMinutes: stream.freshnessMinutes,
+              maxHealthyFreshnessMinutes
+            }
+          );
+        }
+      }
+
+      const updatedStream = await repository.updateIntegrationStream({
+        streamId: input.streamId,
+        health: input.health,
+        nextAction: input.nextAction
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "integration_stream",
+        aggregateId: updatedStream.id,
+        action: "integration.stream.updated",
+        metadata: {
+          health: updatedStream.health,
+          nextAction: updatedStream.nextAction
+        }
+      });
+
+      return updatedStream;
     }
   };
 }

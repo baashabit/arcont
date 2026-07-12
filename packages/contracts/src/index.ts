@@ -455,6 +455,11 @@ export const IntegrationOverviewSchema = z.object({
   focusStream: IntegrationStreamSchema.nullable()
 });
 
+export const UpdateIntegrationStreamRequestSchema = z.object({
+  health: z.enum(["healthy", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const DocumentControlRiskSchema = z.object({
   id: z.string(),
   itemId: z.string(),
@@ -715,6 +720,7 @@ export type UpdateComplianceCaseRequestContract = z.infer<typeof UpdateComplianc
 export type IntegrationRiskContract = z.infer<typeof IntegrationRiskSchema>;
 export type IntegrationStreamContract = z.infer<typeof IntegrationStreamSchema>;
 export type IntegrationOverviewContract = z.infer<typeof IntegrationOverviewSchema>;
+export type UpdateIntegrationStreamRequestContract = z.infer<typeof UpdateIntegrationStreamRequestSchema>;
 export type DocumentControlRiskContract = z.infer<typeof DocumentControlRiskSchema>;
 export type DocumentControlItemContract = z.infer<typeof DocumentControlItemSchema>;
 export type DocumentControlOverviewContract = z.infer<typeof DocumentControlOverviewSchema>;

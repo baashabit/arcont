@@ -275,6 +275,12 @@ type IntegrationRiskRecord = {
   status: string;
 };
 
+type UpdateIntegrationStreamInput = {
+  streamId: string;
+  health: "healthy" | "watch" | "critical";
+  nextAction: string;
+};
+
 type DocumentControlItemRecord = {
   id: string;
   companyId: string;
@@ -399,6 +405,7 @@ export type PlatformRepository = {
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
   updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
+  updateIntegrationStream(input: UpdateIntegrationStreamInput): Promise<IntegrationStreamRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   updateInventoryLocation(input: UpdateInventoryLocationInput): Promise<InventoryLocationRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
@@ -1887,6 +1894,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       complianceCase.updatedAt = new Date().toISOString();
       return complianceCase;
     },
+    async updateIntegrationStream(input) {
+      const stream = state.integrationStreams.find((item) => item.id === input.streamId);
+      if (!stream) {
+        throw new Error("Integration stream not found in repository");
+      }
+
+      stream.health = input.health;
+      stream.nextAction = input.nextAction;
+      stream.updatedAt = new Date().toISOString();
+      return stream;
+    },
     async updateInventoryLocation(input) {
       const location = state.inventoryLocations.find((item) => item.id === input.locationId);
       if (!location) {
@@ -2776,6 +2794,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     async updateComplianceCase(input) {
       void input;
       throw new Error("Compliance case updates are not implemented for the postgres repository yet");
+    },
+    async updateIntegrationStream(input) {
+      void input;
+      throw new Error("Integration stream updates are not implemented for the postgres repository yet");
     },
     async updateInventoryLocation(input) {
       void input;

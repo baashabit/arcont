@@ -17,6 +17,7 @@ import {
   HrWorkforceItemSchema,
   HrOverviewSchema,
   IntegrationOverviewSchema,
+  IntegrationStreamSchema,
   InventoryLocationSchema,
   InventoryOverviewSchema,
   ModuleSchema,
@@ -37,6 +38,7 @@ import {
   UpdateDocumentControlItemRequestSchema,
   UpdateFinanceLedgerItemRequestSchema,
   UpdateHrWorkforceItemRequestSchema,
+  UpdateIntegrationStreamRequestSchema,
   UpdateInventoryLocationRequestSchema,
   UpdateProjectPortfolioItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
@@ -65,6 +67,7 @@ import {
   type HrWorkforceItemContract,
   type HrOverviewContract,
   type IntegrationOverviewContract,
+  type IntegrationStreamContract,
   type InventoryLocationContract,
   type InventoryOverviewContract,
   type ModuleContract,
@@ -85,6 +88,7 @@ import {
   type UpdateDocumentControlItemRequestContract,
   type UpdateFinanceLedgerItemRequestContract,
   type UpdateHrWorkforceItemRequestContract,
+  type UpdateIntegrationStreamRequestContract,
   type UpdateInventoryLocationRequestContract,
   type UpdateProjectPortfolioItemRequestContract,
   type UpdateProcurementPackageRequestContract,
@@ -558,6 +562,35 @@ export async function fetchIntegrationOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/integrations/overview${query}`, options);
   return response ? IntegrationOverviewSchema.parse(response) : null;
+}
+
+export async function updateIntegrationStream(
+  streamId: string,
+  companyId: string | undefined,
+  input: UpdateIntegrationStreamRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<IntegrationStreamContract>> {
+  const payload = UpdateIntegrationStreamRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/integrations/streams/${streamId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: IntegrationStreamSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchDocumentControlOverview(
