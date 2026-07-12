@@ -5,8 +5,10 @@
 - npm workspace monorepo
 - Fastify API in `apps/api`
 - shared contracts in `packages/contracts`
-- in-memory platform data to accelerate frontend integration
-- SQL foundation draft in `apps/api/db/schema.sql`
+- repository and service layers with selectable `memory` / `postgres` driver
+- JWT-based auth baseline
+- provisioning endpoint for new companies
+- migration script and PostgreSQL foundation
 
 ## What PC 1 Owns
 
@@ -24,12 +26,13 @@
 - `/platform/modules`
 - `/platform/users`
 - `/platform/settings/:companyId`
+- `/platform/provision-company`
 
 ## Next Backend Priorities
 
-1. Replace in-memory platform store with PostgreSQL persistence.
-2. Add tenant-aware auth and JWT signing.
-3. Introduce repository and service layers per domain.
-4. Add audit event writes and change history.
-5. Add company provisioning flow and module activation APIs.
-6. Add SAT and accounting catalog seeds for Mexico.
+1. Execute and verify PostgreSQL driver end-to-end once the Docker daemon is available.
+2. Persist refresh tokens with revocation and rotation policies.
+3. Add audit event writes for more actions and change history queries.
+4. Add company provisioning approvals and module activation workflows.
+5. Add SAT and accounting catalog seeds for Mexico.
+6. Add domain repositories for CRM, projects, procurement, and finance.

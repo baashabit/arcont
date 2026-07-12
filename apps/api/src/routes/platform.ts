@@ -1,47 +1,39 @@
+import * as contracts from "../../../../packages/contracts/dist/index.js";
 import type { FastifyInstance } from "fastify";
-import {
-  getPlatformBootstrap,
-  getSettings,
-  listCompanies,
-  listCompanyModules,
-  listModules,
-  listRoles,
-  listUsers
-} from "../platform/store.js";
 
 export async function registerPlatformRoutes(app: FastifyInstance) {
   app.get("/platform/companies", async () => {
     return {
-      items: listCompanies()
+      items: await app.container.platformService.listCompanies()
     };
   });
 
   app.get("/platform/modules", async () => {
     return {
-      items: listModules()
+      items: await app.container.platformService.listModules()
     };
   });
 
   app.get<{ Params: { companyId: string } }>("/platform/companies/:companyId/modules", async (request) => {
     return {
-      items: listCompanyModules(request.params.companyId)
+      items: await app.container.platformService.listCompanyModules(request.params.companyId)
     };
   });
 
   app.get("/platform/roles", async () => {
     return {
-      items: listRoles()
+      items: await app.container.platformService.listRoles()
     };
   });
 
   app.get<{ Querystring: { companyId?: string } }>("/platform/users", async (request) => {
     return {
-      items: listUsers(request.query.companyId)
+      items: await app.container.platformService.listUsers(request.query.companyId)
     };
   });
 
   app.get<{ Params: { companyId: string } }>("/platform/settings/:companyId", async (request, reply) => {
-    const settings = getSettings(request.params.companyId);
+    const settings = await app.container.platformService.getSettings(request.params.companyId);
 
     if (!settings) {
       return reply.status(404).send({
@@ -55,7 +47,10 @@ export async function registerPlatformRoutes(app: FastifyInstance) {
   app.get<{ Params: { companyId: string }; Querystring: { userEmail?: string } }>(
     "/platform/bootstrap/:companyId",
     async (request, reply) => {
-      const bootstrap = getPlatformBootstrap(request.params.companyId, request.query.userEmail);
+      const bootstrap = await app.container.platformService.getPlatformBootstrap(
+        request.params.companyId,
+        request.query.userEmail
+      );
 
       if (!bootstrap) {
         return reply.status(404).send({
@@ -66,4 +61,11 @@ export async function registerPlatformRoutes(app: FastifyInstance) {
       return bootstrap;
     }
   );
+
+  app.post("/platform/provision-company", async (request, reply) => {
+    const input = contracts.ProvisionCompanyRequestSchema.parse(request.body);
+    const result = await app.container.platformService.provisionCompany(input);
+
+    return reply.status(201).send(result);
+  });
 }

@@ -45,6 +45,7 @@ Requirements:
 
 - Node.js 22+
 - npm 10+
+- Docker / Docker Compose for PostgreSQL when running the persistent backend
 
 Install all workspaces:
 
@@ -56,6 +57,13 @@ Run the API:
 
 ```bash
 npm run dev:api
+```
+
+Run PostgreSQL locally:
+
+```bash
+docker compose up -d postgres
+npm run db:migrate -w @arcont/api
 ```
 
 Run the web app:

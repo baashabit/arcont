@@ -1,6 +1,3 @@
--- ARCONT platform foundation schema
--- Consolidated PostgreSQL schema for multi-tenant platform and module activation.
-
 create extension if not exists pgcrypto;
 
 create table if not exists platform_companies (
@@ -24,15 +21,6 @@ create table if not exists platform_modules (
   description text not null,
   enabled_by_default boolean not null default false,
   created_at timestamptz not null default now()
-);
-
-create table if not exists platform_company_modules (
-  company_id text not null references platform_companies(id),
-  module_key text not null references platform_modules(module_key),
-  enabled boolean not null default true,
-  activated_at timestamptz not null default now(),
-  activated_by text,
-  primary key (company_id, module_key)
 );
 
 create table if not exists platform_roles (
@@ -73,6 +61,15 @@ create table if not exists platform_company_settings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists platform_company_modules (
+  company_id text not null references platform_companies(id),
+  module_key text not null references platform_modules(module_key),
+  enabled boolean not null default true,
+  activated_at timestamptz not null default now(),
+  activated_by text,
+  primary key (company_id, module_key)
+);
+
 create table if not exists auth_refresh_tokens (
   id text primary key,
   user_id text not null references platform_users(id) on delete cascade,
@@ -98,14 +95,3 @@ create index if not exists idx_platform_users_company on platform_users(company_
 create index if not exists idx_platform_company_modules_company on platform_company_modules(company_id);
 create index if not exists idx_auth_refresh_tokens_user on auth_refresh_tokens(user_id, created_at desc);
 create index if not exists idx_audit_events_company on audit_events(company_id, created_at desc);
-
--- Operations domain starts with company scoping and can later branch into
--- sales, projects, procurement, finance, HR, compliance, and integrations.
-create table if not exists operations_workspaces (
-  id text primary key,
-  company_id text not null references platform_companies(id),
-  workspace_key text not null,
-  name text not null,
-  created_at timestamptz not null default now(),
-  unique (company_id, workspace_key)
-);
