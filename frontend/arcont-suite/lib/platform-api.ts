@@ -11,6 +11,7 @@ import {
   PlatformBootstrapSchema,
   PlatformDashboardSummarySchema,
   PlatformSettingsSchema,
+  ProcurementOverviewSchema,
   ProjectPortfolioOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
@@ -32,6 +33,7 @@ import {
   type PlatformBootstrapContract,
   type PlatformDashboardSummaryContract,
   type PlatformSettingsContract,
+  type ProcurementOverviewContract,
   type ProjectPortfolioOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
@@ -276,6 +278,15 @@ export async function fetchProjectsOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/projects/overview${query}`, options);
   return response ? ProjectPortfolioOverviewSchema.parse(response) : null;
+}
+
+export async function fetchProcurementOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<ProcurementOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/procurement/overview${query}`, options);
+  return response ? ProcurementOverviewSchema.parse(response) : null;
 }
 
 export async function fetchUserDetail(

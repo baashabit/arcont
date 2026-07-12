@@ -50,6 +50,33 @@ type ProjectRiskRecord = {
   status: string;
 };
 
+type ProcurementPackageRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  packageName: string;
+  projectName: string;
+  buyer: string;
+  status: "draft" | "sourcing" | "awaiting_approval" | "awarded" | "blocked";
+  budgetAmount: number;
+  bidCount: number;
+  approvalHours: number;
+  strategic: boolean;
+  supplierContention: number;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type ProcurementRiskRecord = {
+  id: string;
+  packageId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -57,6 +84,8 @@ export type PlatformRepository = {
   listUsers(companyId?: string): Promise<UserRecord[]>;
   listProjects(companyId: string): Promise<ProjectPortfolioItemRecord[]>;
   listProjectRisks(companyId: string): Promise<ProjectRiskRecord[]>;
+  listProcurementPackages(companyId: string): Promise<ProcurementPackageRecord[]>;
+  listProcurementRisks(companyId: string): Promise<ProcurementRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -261,6 +290,103 @@ function createSeedState() {
     }
   ];
 
+  const procurementPackages: ProcurementPackageRecord[] = [
+    {
+      id: "pkg_steel_demo",
+      companyId: "cmp_arcont_demo",
+      code: "PO-STEEL-01",
+      packageName: "Steel package",
+      projectName: "Torre B Residencial",
+      buyer: "Monica Compras",
+      status: "awaiting_approval",
+      budgetAmount: 4800000,
+      bidCount: 3,
+      approvalHours: 38,
+      strategic: true,
+      supplierContention: 3,
+      nextAction: "Director approval before award",
+      updatedAt: "2026-07-11T18:05:00.000Z"
+    },
+    {
+      id: "pkg_mep_demo",
+      companyId: "cmp_arcont_demo",
+      code: "PO-MEP-04",
+      packageName: "MEP materials",
+      projectName: "Etapa 2 Urbanizacion",
+      buyer: "Luis Cadena",
+      status: "sourcing",
+      budgetAmount: 2100000,
+      bidCount: 2,
+      approvalHours: 24,
+      strategic: false,
+      supplierContention: 2,
+      nextAction: "Close third bid to compare totals",
+      updatedAt: "2026-07-11T17:15:00.000Z"
+    },
+    {
+      id: "pkg_concrete_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "PO-CONC-09",
+      packageName: "Concrete supply",
+      projectName: "Infraestructura Vial y Vivienda",
+      buyer: "Andrea Supply",
+      status: "awarded",
+      budgetAmount: 1600000,
+      bidCount: 4,
+      approvalHours: 16,
+      strategic: false,
+      supplierContention: 4,
+      nextAction: "Track first delivery window",
+      updatedAt: "2026-07-11T16:10:00.000Z"
+    },
+    {
+      id: "pkg_prefab_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "PO-PREF-12",
+      packageName: "Prefabricated bathroom modules",
+      projectName: "Paquete Bienestar Norte",
+      buyer: "Andrea Supply",
+      status: "blocked",
+      budgetAmount: 5900000,
+      bidCount: 1,
+      approvalHours: 52,
+      strategic: true,
+      supplierContention: 1,
+      nextAction: "Resolve supplier technical deviation",
+      updatedAt: "2026-07-11T15:05:00.000Z"
+    }
+  ];
+
+  const procurementRisks: ProcurementRiskRecord[] = [
+    {
+      id: "prk_steel_approval",
+      packageId: "pkg_steel_demo",
+      title: "Approval aging beyond target SLA",
+      category: "Approvals",
+      severity: "warning",
+      owner: "Commercial director",
+      status: "Waiting for final sign-off"
+    },
+    {
+      id: "prk_prefab_supplier",
+      packageId: "pkg_prefab_gov",
+      title: "Single supplier package with technical deviation",
+      category: "Supplier risk",
+      severity: "critical",
+      owner: "Procurement manager",
+      status: "Engineering review open"
+    },
+    {
+      id: "prk_mep_contention",
+      packageId: "pkg_mep_demo",
+      title: "Low bid contention for MEP package",
+      category: "Competition",
+      severity: "warning",
+      owner: "Buyer lead",
+      status: "Searching alternate vendors"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -290,6 +416,8 @@ function createSeedState() {
       users,
       projects,
       projectRisks,
+      procurementPackages,
+      procurementRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -317,6 +445,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.projects.filter((project) => project.companyId === companyId).map((project) => project.id)
       );
       return state.projectRisks.filter((risk) => projectIds.has(risk.projectId));
+    },
+    async listProcurementPackages(companyId: string) {
+      return state.procurementPackages.filter((item) => item.companyId === companyId);
+    },
+    async listProcurementRisks(companyId: string) {
+      const packageIds = new Set(
+        state.procurementPackages.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.procurementRisks.filter((risk) => packageIds.has(risk.packageId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -744,6 +881,16 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
         owner: String(row.owner_name),
         status: String(row.status)
       }));
+    },
+    async listProcurementPackages(companyId: string) {
+      const items = await this.listCompanies();
+      void items;
+      return [];
+    },
+    async listProcurementRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void items;
+      return [];
     },
     async listUsers(companyId?: string) {
       const result = companyId

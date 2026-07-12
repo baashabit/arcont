@@ -4,15 +4,15 @@ Update this file from PC 1 before Antonio starts the next task.
 
 ## Branch
 
-`feat/web-projects-live-portfolio`
+`feat/web-procurement-live-portfolio`
 
 ## Objective
 
-Refine and elevate the live `Projects` portfolio in `frontend/arcont-suite` on top of the backend portfolio endpoint that PC 1 already left working.
+Refine and elevate the live `Procurement` portfolio in `frontend/arcont-suite` on top of the backend procurement endpoint that PC 1 already left working.
 
 ## Available Backend Endpoints
 
-- `GET /projects/overview?companyId=...`
+- `GET /procurement/overview?companyId=...`
 - bearer token is still required
 
 ## Important Backend Behavior
@@ -23,16 +23,16 @@ Refine and elevate the live `Projects` portfolio in `frontend/arcont-suite` on t
 
 ## Scope
 
-- take the existing live `/projects` portfolio baseline and improve the interface quality
+- take the existing live `/procurement` baseline and improve the interface quality
 - keep consuming backend data instead of `route-mocks`
 - show:
   - portfolio KPIs
-  - project table
+  - package / sourcing table
   - risk / blocker panel
-  - selected project detail or highlights
+  - selected package detail or highlights
 - preserve current visual language of the shell
-- improve scanability, hierarchy and action clarity for directors / PMO / supervision
-- avoid giant refactors outside the projects route and the minimum shared helpers it needs
+- improve scanability, hierarchy and action clarity for directors / procurement / operations
+- avoid giant refactors outside the procurement route and the minimum shared helpers it needs
 
 ## Out Of Scope
 

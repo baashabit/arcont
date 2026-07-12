@@ -7,6 +7,7 @@ import { DomainError } from "./lib/domain-error.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerPlatformRoutes } from "./routes/platform.js";
+import { registerProcurementRoutes } from "./routes/procurement.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 
 export async function buildApp() {
@@ -57,6 +58,7 @@ export async function buildApp() {
   await registerAuthRoutes(app);
   await registerPlatformRoutes(app);
   await registerProjectsRoutes(app);
+  await registerProcurementRoutes(app);
 
   return app;
 }
