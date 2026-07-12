@@ -176,7 +176,6 @@ export const PlatformDashboardSummarySchema = z.object({
   latestAuditEvents: z.array(AuditEventSchema),
   focusCompany: CompanySchema.nullable()
 });
-
 export type ModuleContract = z.infer<typeof ModuleSchema>;
 export type CompanyContract = z.infer<typeof CompanySchema>;
 export type RoleContract = z.infer<typeof RoleSchema>;

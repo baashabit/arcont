@@ -1,3 +1,3 @@
 export function LogoMark() {
-  return <div className="brandMark">A</div>;
+  return <div className="logoMark">AR</div>;
 }
