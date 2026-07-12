@@ -154,6 +154,32 @@ type CrmRiskRecord = {
   status: string;
 };
 
+type HrWorkforceItemRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  contractorName: string;
+  frontName: string;
+  activeHeadcount: number;
+  attendanceRate: number;
+  productivityRate: number;
+  complianceExpirations: number;
+  incidentCount: number;
+  safetyStatus: "controlled" | "watch" | "critical";
+  nextAction: string;
+  updatedAt: string;
+};
+
+type HrRiskRecord = {
+  id: string;
+  workforceId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -169,6 +195,8 @@ export type PlatformRepository = {
   listFinanceRisks(companyId: string): Promise<FinanceRiskRecord[]>;
   listCrmLeadBuckets(companyId: string): Promise<CrmLeadBucketRecord[]>;
   listCrmRisks(companyId: string): Promise<CrmRiskRecord[]>;
+  listHrWorkforces(companyId: string): Promise<HrWorkforceItemRecord[]>;
+  listHrRisks(companyId: string): Promise<HrRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -745,6 +773,99 @@ function createSeedState() {
     }
   ];
 
+  const hrWorkforces: HrWorkforceItemRecord[] = [
+    {
+      id: "wrk_torre_b_demo",
+      companyId: "cmp_arcont_demo",
+      code: "WF-101",
+      contractorName: "Acabados del Sureste",
+      frontName: "Torre B",
+      activeHeadcount: 86,
+      attendanceRate: 94,
+      productivityRate: 91,
+      complianceExpirations: 1,
+      incidentCount: 0,
+      safetyStatus: "controlled",
+      nextAction: "Keep crew mix stable for interior finishing push",
+      updatedAt: "2026-07-10T14:10:00.000Z"
+    },
+    {
+      id: "wrk_torre_c_demo",
+      companyId: "cmp_arcont_demo",
+      code: "WF-114",
+      contractorName: "Electro Norte",
+      frontName: "Torre C",
+      activeHeadcount: 42,
+      attendanceRate: 88,
+      productivityRate: 79,
+      complianceExpirations: 2,
+      incidentCount: 1,
+      safetyStatus: "watch",
+      nextAction: "Reinforce material coordination and attendance tracking",
+      updatedAt: "2026-07-10T16:45:00.000Z"
+    },
+    {
+      id: "wrk_urbanizacion_demo",
+      companyId: "cmp_arcont_demo",
+      code: "WF-123",
+      contractorName: "Urbaniza MX",
+      frontName: "Urbanizacion",
+      activeHeadcount: 61,
+      attendanceRate: 81,
+      productivityRate: 72,
+      complianceExpirations: 4,
+      incidentCount: 2,
+      safetyStatus: "critical",
+      nextAction: "Assign replacement crews and close expiring contractor files",
+      updatedAt: "2026-07-10T17:20:00.000Z"
+    },
+    {
+      id: "wrk_bienestar_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "WF-201",
+      contractorName: "Cuadrillas Bienestar Oriente",
+      frontName: "Poligono 3",
+      activeHeadcount: 118,
+      attendanceRate: 93,
+      productivityRate: 84,
+      complianceExpirations: 3,
+      incidentCount: 1,
+      safetyStatus: "watch",
+      nextAction: "Close RTK attendance gaps before federal supervision visit",
+      updatedAt: "2026-07-10T13:35:00.000Z"
+    }
+  ];
+
+  const hrRisks: HrRiskRecord[] = [
+    {
+      id: "hrk_urbanizacion_capacity",
+      workforceId: "wrk_urbanizacion_demo",
+      title: "Urbanizacion front below required crew capacity",
+      category: "capacity",
+      severity: "critical",
+      owner: "Site operations",
+      status: "Assigning replacement subcontractor and redistributing crews"
+    },
+    {
+      id: "hrk_torre_c_docs",
+      workforceId: "wrk_torre_c_demo",
+      title: "Electrical contractor policies expiring this week",
+      category: "compliance",
+      severity: "warning",
+      owner: "Contract admin",
+      status: "Collecting renewed insurance and safety evidence"
+    },
+    {
+      id: "hrk_bienestar_attendance",
+      workforceId: "wrk_bienestar_gov",
+      title: "Attendance logs need reconciliation with field devices",
+      category: "attendance",
+      severity: "info",
+      owner: "Field HR",
+      status: "Reconciling checker export with site attendance roster"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -782,6 +903,8 @@ function createSeedState() {
       financeRisks,
       crmLeadBuckets,
       crmRisks,
+      hrWorkforces,
+      hrRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -845,6 +968,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.crmLeadBuckets.filter((bucket) => bucket.companyId === companyId).map((bucket) => bucket.id)
       );
       return state.crmRisks.filter((risk) => bucketIds.has(risk.leadBucketId));
+    },
+    async listHrWorkforces(companyId: string) {
+      return state.hrWorkforces.filter((item) => item.companyId === companyId);
+    },
+    async listHrRisks(companyId: string) {
+      const workforceIds = new Set(
+        state.hrWorkforces.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.hrRisks.filter((risk) => workforceIds.has(risk.workforceId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -1314,6 +1446,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listCrmRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listHrWorkforces(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listHrRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;

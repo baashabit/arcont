@@ -8,6 +8,7 @@ import {
   CreatePlatformUserRequestSchema,
   CreatePlatformUserResponseSchema,
   FinanceOverviewSchema,
+  HrOverviewSchema,
   InventoryOverviewSchema,
   ModuleSchema,
   PlatformApiErrorSchema,
@@ -33,6 +34,7 @@ import {
   type CreatePlatformUserRequestContract,
   type CreatePlatformUserResponseContract,
   type FinanceOverviewContract,
+  type HrOverviewContract,
   type InventoryOverviewContract,
   type ModuleContract,
   type PlatformApiErrorContract,
@@ -320,6 +322,15 @@ export async function fetchCrmOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/crm/overview${query}`, options);
   return response ? CrmOverviewSchema.parse(response) : null;
+}
+
+export async function fetchHrOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<HrOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/hr/overview${query}`, options);
+  return response ? HrOverviewSchema.parse(response) : null;
 }
 
 export async function fetchUserDetail(
