@@ -24,11 +24,26 @@
 - `packages/contracts/src/index.ts` for shared shapes
 - `/platform/bootstrap/:companyId` for initial app context
 - `/platform/companies`
+- `/platform/companies/:companyId`
 - `/platform/modules`
 - `/platform/users`
+- `/platform/users/:userId`
+- `POST /platform/users`
+- `PATCH /platform/users/:userId/role`
+- `PATCH /platform/users/:userId/status`
 - `/platform/settings/:companyId`
+- `/platform/companies/:companyId/modules`
+- `/platform/dashboard/summary`
+- `/platform/audit-events`
 - `/platform/provision-company`
 - normalized error payloads with `error.code`, `error.message`, and `error.details`
+
+## New Backend Rules Added On PC 1
+
+- company user creation now returns temporary password plus resolved role permissions
+- role updates are audited and validated against the shared role catalog
+- status updates are audited and cannot disable the last active user in a company
+- platform-scoped roles are blocked for non-platform tenants in this phase
 
 ## Next Backend Priorities
 

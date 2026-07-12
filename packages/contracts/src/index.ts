@@ -134,6 +134,22 @@ export const UpdateCompanyModulesRequestSchema = z.object({
   enabledModules: z.array(z.string()).min(1)
 });
 
+export const CreatePlatformUserRequestSchema = z.object({
+  companyId: z.string(),
+  fullName: z.string().min(3),
+  email: z.string().email(),
+  roleKey: z.string(),
+  status: z.enum(userStatuses).default("invited")
+});
+
+export const UpdatePlatformUserRoleRequestSchema = z.object({
+  roleKey: z.string()
+});
+
+export const UpdatePlatformUserStatusRequestSchema = z.object({
+  status: z.enum(userStatuses)
+});
+
 export const AuditEventSchema = z.object({
   id: z.string(),
   companyId: z.string().nullable(),
@@ -176,6 +192,20 @@ export const PlatformDashboardSummarySchema = z.object({
   latestAuditEvents: z.array(AuditEventSchema),
   focusCompany: CompanySchema.nullable()
 });
+
+export const PlatformUserDetailSchema = z.object({
+  user: UserSchema,
+  company: CompanySchema,
+  role: RoleSchema,
+  permissions: z.array(z.string())
+});
+
+export const CreatePlatformUserResponseSchema = z.object({
+  user: UserSchema,
+  temporaryPassword: z.string(),
+  role: RoleSchema,
+  permissions: z.array(z.string())
+});
 export type ModuleContract = z.infer<typeof ModuleSchema>;
 export type CompanyContract = z.infer<typeof CompanySchema>;
 export type RoleContract = z.infer<typeof RoleSchema>;
@@ -189,9 +219,14 @@ export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyReq
 export type ProvisionCompanyResponseContract = z.infer<typeof ProvisionCompanyResponseSchema>;
 export type UpdatePlatformSettingsRequestContract = z.infer<typeof UpdatePlatformSettingsRequestSchema>;
 export type UpdateCompanyModulesRequestContract = z.infer<typeof UpdateCompanyModulesRequestSchema>;
+export type CreatePlatformUserRequestContract = z.infer<typeof CreatePlatformUserRequestSchema>;
+export type UpdatePlatformUserRoleRequestContract = z.infer<typeof UpdatePlatformUserRoleRequestSchema>;
+export type UpdatePlatformUserStatusRequestContract = z.infer<typeof UpdatePlatformUserStatusRequestSchema>;
 export type AuditEventContract = z.infer<typeof AuditEventSchema>;
 export type CompanyDetailContract = z.infer<typeof CompanyDetailSchema>;
 export type PlatformDashboardSummaryContract = z.infer<typeof PlatformDashboardSummarySchema>;
+export type PlatformUserDetailContract = z.infer<typeof PlatformUserDetailSchema>;
+export type CreatePlatformUserResponseContract = z.infer<typeof CreatePlatformUserResponseSchema>;
 
 export const moduleCatalog: ModuleContract[] = [
   {

@@ -1,7 +1,10 @@
 import {
+  CreatePlatformUserRequestSchema,
   ProvisionCompanyRequestSchema,
   UpdateCompanyModulesRequestSchema,
-  UpdatePlatformSettingsRequestSchema
+  UpdatePlatformSettingsRequestSchema,
+  UpdatePlatformUserRoleRequestSchema,
+  UpdatePlatformUserStatusRequestSchema
 } from "../../../../packages/contracts/dist/index.js";
 import type { FastifyInstance } from "fastify";
 
@@ -53,6 +56,35 @@ export async function registerPlatformRoutes(app: FastifyInstance) {
     return {
       items: await app.container.platformService.listUsers(request.query.companyId)
     };
+  });
+
+  app.get<{ Params: { userId: string } }>("/platform/users/:userId", async (request) => {
+    return app.container.platformService.getUserDetail(request.params.userId);
+  });
+
+  app.post("/platform/users", async (request, reply) => {
+    const input = CreatePlatformUserRequestSchema.parse(request.body);
+    const result = await app.container.platformService.createUser(input);
+
+    return reply.status(201).send(result);
+  });
+
+  app.patch<{ Params: { userId: string } }>("/platform/users/:userId/role", async (request) => {
+    const input = UpdatePlatformUserRoleRequestSchema.parse(request.body);
+
+    return app.container.platformService.updateUserRole({
+      userId: request.params.userId,
+      roleKey: input.roleKey
+    });
+  });
+
+  app.patch<{ Params: { userId: string } }>("/platform/users/:userId/status", async (request) => {
+    const input = UpdatePlatformUserStatusRequestSchema.parse(request.body);
+
+    return app.container.platformService.updateUserStatus({
+      userId: request.params.userId,
+      status: input.status
+    });
   });
 
   app.get<{ Params: { companyId: string } }>("/platform/settings/:companyId", async (request, reply) => {

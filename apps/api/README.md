@@ -25,7 +25,17 @@ This API currently exposes the first platform capabilities that the web app can 
 - `GET /platform/modules`
 - `GET /platform/roles`
 - `GET /platform/users`
+- `GET /platform/users/:userId`
+- `POST /platform/users`
+- `PATCH /platform/users/:userId/role`
+- `PATCH /platform/users/:userId/status`
 - `GET /platform/settings/:companyId`
+- `PUT /platform/settings/:companyId`
+- `GET /platform/companies/:companyId`
+- `GET /platform/companies/:companyId/modules`
+- `PUT /platform/companies/:companyId/modules`
+- `GET /platform/dashboard/summary?companyId=...`
+- `GET /platform/audit-events?companyId=...&limit=...`
 - `GET /platform/bootstrap/:companyId?userEmail=...`
 - `POST /platform/provision-company`
 
@@ -86,6 +96,10 @@ That schema separates:
   - `fiscalRegime` as a 3-digit SAT code
   - `countryCode` and `fiscalCountry` to match
 - login rejects user/company mismatches explicitly
+- user creation rejects duplicated email addresses
+- user role assignment rejects unknown role keys
+- platform roles are reserved for the platform tenant in this phase
+- disabling the last active user in a company is rejected
 
 ## Error Shape
 

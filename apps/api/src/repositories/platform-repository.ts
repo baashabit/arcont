@@ -8,11 +8,14 @@ import type {
   AuditEventRecord,
   AuthFailureReason,
   CompanyRecord,
+  CreatePlatformUserInput,
   ProvisionCompanyInput,
   RefreshTokenRecord,
   SettingsRecord,
   UpdateCompanyModulesInput,
   UpdatePlatformSettingsInput,
+  UpdatePlatformUserRoleInput,
+  UpdatePlatformUserStatusInput,
   UserRecord
 } from "../domain/platform/entities.js";
 import { createPrefixedId } from "../lib/ids.js";
@@ -24,6 +27,7 @@ export type PlatformRepository = {
   listRoles(): Promise<typeof defaultRoles>;
   listUsers(companyId?: string): Promise<UserRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
+  getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
   companyTaxIdExists(taxId: string): Promise<boolean>;
   userEmailExists(email: string): Promise<boolean>;
@@ -40,6 +44,12 @@ export type PlatformRepository = {
   addAuditEvent(event: AuditEventInput): Promise<void>;
   updateSettings(input: UpdatePlatformSettingsInput): Promise<SettingsRecord>;
   replaceCompanyModules(input: UpdateCompanyModulesInput): Promise<CompanyRecord>;
+  createUser(input: CreatePlatformUserInput): Promise<{
+    user: UserRecord;
+    temporaryPassword: string;
+  }>;
+  updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
+  updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
   listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
 };
 
@@ -160,6 +170,9 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
     },
     async getUserByEmail(email: string) {
       return state.users.find((user) => user.email === email);
+    },
+    async getUserById(userId: string) {
+      return state.users.find((user) => user.id === userId);
     },
     async companyTaxIdExists(taxId: string) {
       return state.companies.some((company) => company.taxId.toLowerCase() === taxId.toLowerCase());
@@ -293,6 +306,43 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
 
       company.enabledModules = Array.from(new Set(input.enabledModules));
       return company;
+    },
+    async createUser(input) {
+      const temporaryPassword = generateTemporaryPassword();
+      const user: UserRecord = {
+        id: createPrefixedId("usr"),
+        companyId: input.companyId,
+        fullName: input.fullName,
+        email: input.email,
+        roleKey: input.roleKey,
+        status: input.status,
+        passwordHash: hashPassword(temporaryPassword)
+      };
+
+      state.users.push(user);
+
+      return {
+        user,
+        temporaryPassword
+      };
+    },
+    async updateUserRole(input) {
+      const user = state.users.find((item) => item.id === input.userId);
+      if (!user) {
+        throw new Error("User not found in repository");
+      }
+
+      user.roleKey = input.roleKey;
+      return user;
+    },
+    async updateUserStatus(input) {
+      const user = state.users.find((item) => item.id === input.userId);
+      if (!user) {
+        throw new Error("User not found in repository");
+      }
+
+      user.status = input.status;
+      return user;
     },
     async listAuditEvents(companyId?: string, limit = 50) {
       const items = companyId
@@ -478,6 +528,19 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
           limit 1
         `,
         [email]
+      );
+
+      return result.rows[0] ? mapUserRow(result.rows[0]) : undefined;
+    },
+    async getUserById(userId: string) {
+      const result = await pool.query(
+        `
+          select id, company_id, full_name, email, role_key, status, password_hash
+          from platform_users
+          where id = $1 and deleted_at is null
+          limit 1
+        `,
+        [userId]
       );
 
       return result.rows[0] ? mapUserRow(result.rows[0]) : undefined;
@@ -784,6 +847,76 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       } finally {
         client.release();
       }
+    },
+    async createUser(input) {
+      const temporaryPassword = generateTemporaryPassword();
+      const user: UserRecord = {
+        id: createPrefixedId("usr"),
+        companyId: input.companyId,
+        fullName: input.fullName,
+        email: input.email,
+        roleKey: input.roleKey,
+        status: input.status,
+        passwordHash: hashPassword(temporaryPassword)
+      };
+
+      await pool.query(
+        `
+          insert into platform_users
+            (id, company_id, full_name, email, role_key, status, password_hash)
+          values ($1, $2, $3, $4, $5, $6, $7)
+        `,
+        [
+          user.id,
+          user.companyId,
+          user.fullName,
+          user.email,
+          user.roleKey,
+          user.status,
+          user.passwordHash
+        ]
+      );
+
+      return {
+        user,
+        temporaryPassword
+      };
+    },
+    async updateUserRole(input) {
+      const result = await pool.query(
+        `
+          update platform_users
+          set role_key = $2,
+              updated_at = now()
+          where id = $1 and deleted_at is null
+          returning id, company_id, full_name, email, role_key, status, password_hash
+        `,
+        [input.userId, input.roleKey]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("User not found in repository");
+      }
+
+      return mapUserRow(result.rows[0]);
+    },
+    async updateUserStatus(input) {
+      const result = await pool.query(
+        `
+          update platform_users
+          set status = $2,
+              updated_at = now()
+          where id = $1 and deleted_at is null
+          returning id, company_id, full_name, email, role_key, status, password_hash
+        `,
+        [input.userId, input.status]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("User not found in repository");
+      }
+
+      return mapUserRow(result.rows[0]);
     },
     async listAuditEvents(companyId?: string, limit = 50) {
       const result = companyId

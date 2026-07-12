@@ -89,6 +89,24 @@ export type UpdateCompanyModulesInput = {
   actorUserId?: string;
 };
 
+export type CreatePlatformUserInput = {
+  companyId: string;
+  fullName: string;
+  email: string;
+  roleKey: string;
+  status: UserRecord["status"];
+};
+
+export type UpdatePlatformUserRoleInput = {
+  userId: string;
+  roleKey: string;
+};
+
+export type UpdatePlatformUserStatusInput = {
+  userId: string;
+  status: UserRecord["status"];
+};
+
 export type AuthFailureReason =
   | "invalid_credentials"
   | "company_not_found"

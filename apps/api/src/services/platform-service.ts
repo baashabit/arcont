@@ -77,6 +77,11 @@ function validateSettingsInput(input: {
   }
 }
 
+function sanitizeUser<T extends { passwordHash: string }>(user: T) {
+  const { passwordHash: _passwordHash, ...safeUser } = user;
+  return safeUser;
+}
+
 export function createPlatformService(repository: PlatformRepository) {
   return {
     async listCompanies() {
@@ -89,7 +94,36 @@ export function createPlatformService(repository: PlatformRepository) {
       return repository.listRoles();
     },
     async listUsers(companyId?: string) {
-      return (await repository.listUsers(companyId)).map(({ passwordHash: _passwordHash, ...user }) => user);
+      return (await repository.listUsers(companyId)).map(sanitizeUser);
+    },
+    async getUserDetail(userId: string) {
+      const user = await repository.getUserById(userId);
+      if (!user) {
+        throw notFound("PLATFORM_USER_NOT_FOUND", "User not found", {
+          userId
+        });
+      }
+
+      const company = await repository.getCompanyById(user.companyId);
+      if (!company) {
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: user.companyId
+        });
+      }
+
+      const role = (await repository.listRoles()).find((item) => item.key === user.roleKey);
+      if (!role) {
+        throw notFound("PLATFORM_ROLE_NOT_FOUND", "Role not found", {
+          roleKey: user.roleKey
+        });
+      }
+
+      return {
+        user: sanitizeUser(user),
+        company,
+        role,
+        permissions: role.permissions
+      };
     },
     async getSettings(companyId: string) {
       const settings = await repository.getSettings(companyId);
@@ -305,6 +339,165 @@ export function createPlatformService(repository: PlatformRepository) {
       });
 
       return this.listCompanyModules(updatedCompany.id);
+    },
+    async createUser(input: {
+      companyId: string;
+      fullName: string;
+      email: string;
+      roleKey: string;
+      status: "invited" | "active" | "disabled";
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      if (await repository.userEmailExists(input.email)) {
+        throw conflictError("PLATFORM_USER_EMAIL_EXISTS", "A user with this email already exists", {
+          email: input.email
+        });
+      }
+
+      const role = (await repository.listRoles()).find((item) => item.key === input.roleKey);
+      if (!role) {
+        throw validationError("PLATFORM_ROLE_UNKNOWN", "The selected role is not recognized", {
+          roleKey: input.roleKey
+        });
+      }
+
+      if (role.scope === "platform" && company.id !== "cmp_arcont_demo") {
+        throw validationError("PLATFORM_ROLE_SCOPE_INVALID", "Platform roles are reserved for platform tenants", {
+          roleKey: input.roleKey,
+          companyId: input.companyId
+        });
+      }
+
+      const result = await repository.createUser(input);
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: result.user.id,
+        aggregateType: "user",
+        aggregateId: result.user.id,
+        action: "platform.user.created",
+        metadata: {
+          roleKey: result.user.roleKey,
+          status: result.user.status
+        }
+      });
+
+      return {
+        user: sanitizeUser(result.user),
+        temporaryPassword: result.temporaryPassword,
+        role,
+        permissions: role.permissions
+      };
+    },
+    async updateUserRole(input: {
+      userId: string;
+      roleKey: string;
+    }) {
+      const existingUser = await repository.getUserById(input.userId);
+      if (!existingUser) {
+        throw notFound("PLATFORM_USER_NOT_FOUND", "User not found", {
+          userId: input.userId
+        });
+      }
+
+      const role = (await repository.listRoles()).find((item) => item.key === input.roleKey);
+      if (!role) {
+        throw validationError("PLATFORM_ROLE_UNKNOWN", "The selected role is not recognized", {
+          roleKey: input.roleKey
+        });
+      }
+
+      const company = await repository.getCompanyById(existingUser.companyId);
+      if (!company) {
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: existingUser.companyId
+        });
+      }
+
+      if (role.scope === "platform" && company.id !== "cmp_arcont_demo") {
+        throw validationError("PLATFORM_ROLE_SCOPE_INVALID", "Platform roles are reserved for platform tenants", {
+          roleKey: input.roleKey,
+          companyId: existingUser.companyId
+        });
+      }
+
+      const user = await repository.updateUserRole(input);
+
+      await repository.addAuditEvent({
+        companyId: user.companyId,
+        actorUserId: user.id,
+        aggregateType: "user",
+        aggregateId: user.id,
+        action: "platform.user.role_updated",
+        metadata: {
+          roleKey: user.roleKey
+        }
+      });
+
+      return {
+        user: sanitizeUser(user),
+        role,
+        permissions: role.permissions
+      };
+    },
+    async updateUserStatus(input: {
+      userId: string;
+      status: "invited" | "active" | "disabled";
+    }) {
+      const existingUser = await repository.getUserById(input.userId);
+      if (!existingUser) {
+        throw notFound("PLATFORM_USER_NOT_FOUND", "User not found", {
+          userId: input.userId
+        });
+      }
+
+      if (input.status === "disabled") {
+        const companyUsers = await repository.listUsers(existingUser.companyId);
+        const activeUsers = companyUsers.filter((user) => user.status === "active");
+
+        if (
+          existingUser.status === "active" &&
+          activeUsers.length === 1 &&
+          activeUsers[0]?.id === existingUser.id
+        ) {
+          throw validationError("PLATFORM_LAST_ACTIVE_USER", "Cannot disable the last active user of a company", {
+            companyId: existingUser.companyId,
+            userId: existingUser.id
+          });
+        }
+      }
+
+      const user = await repository.updateUserStatus(input);
+      const role = (await repository.listRoles()).find((item) => item.key === user.roleKey);
+
+      if (!role) {
+        throw notFound("PLATFORM_ROLE_NOT_FOUND", "Role not found", {
+          roleKey: user.roleKey
+        });
+      }
+
+      await repository.addAuditEvent({
+        companyId: user.companyId,
+        actorUserId: user.id,
+        aggregateType: "user",
+        aggregateId: user.id,
+        action: "platform.user.status_updated",
+        metadata: {
+          status: user.status
+        }
+      });
+
+      return {
+        user: sanitizeUser(user),
+        role,
+        permissions: role.permissions
+      };
     },
     async listAuditEvents(companyId?: string, limit = 50) {
       return repository.listAuditEvents(companyId, limit);
