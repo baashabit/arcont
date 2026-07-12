@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { UpdateFinanceLedgerItemRequestSchema } from "@arcont/contracts";
 import { authError } from "../lib/domain-error.js";
 
 function getBearerToken(authorization?: string) {
@@ -27,4 +28,26 @@ export async function registerFinanceRoutes(app: FastifyInstance) {
 
     return app.container.financeService.getOverview(companyId);
   });
+
+  app.patch<{ Params: { ledgerId: string }; Body: unknown; Querystring: { companyId?: string } }>(
+    "/finance/items/:ledgerId",
+    async (request) => {
+      const accessToken = getBearerToken(request.headers.authorization);
+      const session = await app.container.authService.authorize(accessToken, {
+        requiredPermissions: ["finance:*"],
+        companyId: request.query.companyId
+      });
+      const input = UpdateFinanceLedgerItemRequestSchema.parse(request.body);
+
+      const companyId =
+        session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
+
+      return app.container.financeService.updateLedgerItem({
+        companyId,
+        ledgerId: request.params.ledgerId,
+        satStatus: input.satStatus,
+        note: input.note
+      });
+    }
+  );
 }

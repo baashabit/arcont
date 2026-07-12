@@ -12,6 +12,7 @@ import {
   DocumentControlItemSchema,
   DocumentControlOverviewSchema,
   FinanceOverviewSchema,
+  FinanceLedgerItemSchema,
   HrOverviewSchema,
   IntegrationOverviewSchema,
   InventoryOverviewSchema,
@@ -29,6 +30,7 @@ import {
   RoleSchema,
   UpdateComplianceCaseRequestSchema,
   UpdateDocumentControlItemRequestSchema,
+  UpdateFinanceLedgerItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
@@ -49,6 +51,7 @@ import {
   type CreatePlatformUserResponseContract,
   type DocumentControlItemContract,
   type DocumentControlOverviewContract,
+  type FinanceLedgerItemContract,
   type FinanceOverviewContract,
   type HrOverviewContract,
   type IntegrationOverviewContract,
@@ -67,6 +70,7 @@ import {
   type RoleContract,
   type UpdateComplianceCaseRequestContract,
   type UpdateDocumentControlItemRequestContract,
+  type UpdateFinanceLedgerItemRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
@@ -366,6 +370,35 @@ export async function fetchFinanceOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/finance/overview${query}`, options);
   return response ? FinanceOverviewSchema.parse(response) : null;
+}
+
+export async function updateFinanceLedgerItem(
+  ledgerId: string,
+  companyId: string | undefined,
+  input: UpdateFinanceLedgerItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<FinanceLedgerItemContract>> {
+  const payload = UpdateFinanceLedgerItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/finance/items/${ledgerId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: FinanceLedgerItemSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchCrmOverview(

@@ -134,6 +134,12 @@ type FinanceRiskRecord = {
   status: string;
 };
 
+type UpdateFinanceLedgerItemInput = {
+  ledgerId: string;
+  satStatus: "controlled" | "watch" | "critical";
+  note: string;
+};
+
 type CrmLeadBucketRecord = {
   id: string;
   companyId: string;
@@ -364,6 +370,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
   updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
@@ -1797,6 +1804,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       user.status = input.status;
       return user;
     },
+    async updateFinanceLedgerItem(input) {
+      const item = state.financeItems.find((candidate) => candidate.id === input.ledgerId);
+      if (!item) {
+        throw new Error("Finance ledger item not found in repository");
+      }
+
+      item.satStatus = input.satStatus;
+      item.note = input.note;
+      item.updatedAt = new Date().toISOString();
+      return item;
+    },
     async updateComplianceCase(input) {
       const complianceCase = state.complianceCases.find((item) => item.id === input.caseId);
       if (!complianceCase) {
@@ -2666,6 +2684,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }
 
       return mapUserRow(result.rows[0]);
+    },
+    async updateFinanceLedgerItem(input) {
+      void input;
+      throw new Error("Finance ledger updates are not implemented for the postgres repository yet");
     },
     async updateComplianceCase(input) {
       void input;

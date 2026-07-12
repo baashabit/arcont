@@ -272,6 +272,11 @@ export const FinanceOverviewSchema = z.object({
   focusItem: FinanceLedgerItemSchema.nullable()
 });
 
+export const UpdateFinanceLedgerItemRequestSchema = z.object({
+  satStatus: z.enum(["controlled", "watch", "critical"]),
+  note: z.string().min(8)
+});
+
 export const CrmRiskSchema = z.object({
   id: z.string(),
   leadBucketId: z.string(),
@@ -672,6 +677,7 @@ export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;
 export type FinanceRiskContract = z.infer<typeof FinanceRiskSchema>;
 export type FinanceLedgerItemContract = z.infer<typeof FinanceLedgerItemSchema>;
 export type FinanceOverviewContract = z.infer<typeof FinanceOverviewSchema>;
+export type UpdateFinanceLedgerItemRequestContract = z.infer<typeof UpdateFinanceLedgerItemRequestSchema>;
 export type CrmRiskContract = z.infer<typeof CrmRiskSchema>;
 export type CrmLeadBucketContract = z.infer<typeof CrmLeadBucketSchema>;
 export type CrmOverviewContract = z.infer<typeof CrmOverviewSchema>;

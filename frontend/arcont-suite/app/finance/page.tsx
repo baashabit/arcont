@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { FinanceLedgerItemContract, FinanceOverviewContract } from "@/lib/contracts";
-import { fetchFinanceOverview } from "@/lib/platform-api";
+import { fetchFinanceOverview, updateFinanceLedgerItem } from "@/lib/platform-api";
 
 function satTone(status: FinanceLedgerItemContract["satStatus"]) {
   switch (status) {
@@ -24,12 +24,52 @@ function satTone(status: FinanceLedgerItemContract["satStatus"]) {
   }
 }
 
+function financeActionOptions(item: FinanceLedgerItemContract) {
+  switch (item.satStatus) {
+    case "critical":
+      return [
+        {
+          label: "Move to watch",
+          satStatus: "watch" as const,
+          note: "Critical exceptions reduced; keep active monitoring until close evidence stabilizes."
+        }
+      ];
+    case "watch":
+      return [
+        {
+          label: "Escalate to critical",
+          satStatus: "critical" as const,
+          note: "Escalate because fiscal or close pressure remains unresolved."
+        },
+        {
+          label: "Mark controlled",
+          satStatus: "controlled" as const,
+          note: "Exceptions resolved and fiscal control is back within acceptable posture."
+        }
+      ];
+    case "controlled":
+      return [
+        {
+          label: "Move to watch",
+          satStatus: "watch" as const,
+          note: "New observations require monitoring before they become critical."
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function FinancePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<FinanceOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +118,85 @@ export default function FinancePage() {
     () => overview?.risks.filter((risk) => risk.ledgerId === selectedItem?.id) ?? [],
     [overview, selectedItem]
   );
+
+  const actionOptions = useMemo(() => (selectedItem ? financeActionOptions(selectedItem) : []), [selectedItem]);
+
+  useEffect(() => {
+    setNoteDraft(selectedItem?.note ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedItemId, selectedItem?.id, selectedItem?.note]);
+
+  async function handleFinanceAction(
+    satStatus: FinanceLedgerItemContract["satStatus"],
+    suggestedNote: string
+  ) {
+    if (!selectedItem || !session.accessToken) {
+      return;
+    }
+
+    const note = noteDraft.trim() || suggestedNote;
+    if (note.length < 8) {
+      setActionError("Note must be more specific before updating the finance signal.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateFinanceLedgerItem(
+      selectedItem.id,
+      activeCompany.id,
+      {
+        satStatus,
+        note
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Finance update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const items = current.items.map((item) => (item.id === response.data?.id ? response.data : item));
+      const cashPosition = items.reduce((sum, item) => sum + item.cashImpact, 0);
+      const urgentPayables = items.reduce((sum, item) => sum + item.urgentItems, 0);
+      const closeReadiness =
+        items.length > 0 ? Number((items.reduce((sum, item) => sum + item.closeReadiness, 0) / items.length).toFixed(1)) : 0;
+      const satStatusSummary = items.some((item) => item.satStatus === "critical")
+        ? "critical"
+        : items.some((item) => item.satStatus === "watch")
+          ? "watch"
+          : "controlled";
+
+      return {
+        ...current,
+        summary: {
+          cashPosition,
+          urgentPayables,
+          closeReadiness,
+          satStatus: satStatusSummary
+        },
+        items,
+        focusItem: current.focusItem?.id === response.data?.id ? response.data : current.focusItem
+      };
+    });
+
+    setNoteDraft(response.data.note);
+    setActionMessage(`Finance signal moved to ${response.data.satStatus}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -198,11 +317,45 @@ export default function FinancePage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Note</div>
-                      <div>{selectedItem.note}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={noteDraft}
+                          onChange={(event) => setNoteDraft(event.target.value)}
+                          placeholder="Describe the current fiscal, payable or close action"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedItem.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Controlled status requires zero urgent items.</span>
+                        <span className="tableCellMuted">Controlled status also requires at least 90% close readiness.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.satStatus === "critical" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleFinanceAction(option.satStatus, option.note)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (
