@@ -1,0 +1,16 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 4 - Arc Cut</title>
+
+  <g transform="translate(128 150)">
+    <path d="M356 110C238 110 146 202 146 320V532H236V320C236 252 288 200 356 200C424 200 476 252 476 320V532H566V320C566 202 474 110 356 110Z" fill="#0E2238"/>
+    <path d="M286 346H426" stroke="#F97316" stroke-width="20" stroke-linecap="round"/>
+    <path d="M356 170V532" stroke="#DCE6F1" stroke-width="34" stroke-linecap="round"/>
+    <circle cx="356" cy="110" r="16" fill="#F97316"/>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0B1F35" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="224" font-weight="800" letter-spacing="5">ARCONT</text>
+    <rect x="8" y="72" width="190" height="10" rx="5" fill="#F97316"/>
+    <text x="12" y="160" fill="#5C6E81" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="600" letter-spacing="9">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

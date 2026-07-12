@@ -1,0 +1,17 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 4 - Split Apex</title>
+
+  <g transform="translate(132 156)">
+    <path d="M150 548L336 116L434 116L250 548H150Z" fill="#0E2238"/>
+    <path d="M510 548L420 336L466 228L610 548H510Z" fill="#0E2238"/>
+    <path d="M256 394H466" stroke="#F97316" stroke-width="20" stroke-linecap="round"/>
+    <circle cx="384" cy="116" r="18" fill="#F97316"/>
+    <path d="M384 170V548" stroke="#D8E3EF" stroke-width="34" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0C2036" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="224" font-weight="800" letter-spacing="5">ARCONT</text>
+    <rect x="8" y="72" width="170" height="10" rx="5" fill="#F97316"/>
+    <text x="12" y="160" fill="#5D6F82" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="600" letter-spacing="9">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

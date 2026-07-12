@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARCONT Campo, Lean y Calidad</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body data-page="field">
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 56L22 12H32L19 56H9Z" fill="url(#a)"/>
+          <path d="M36 12H46L59 56H49L38 22L36 12Z" fill="url(#b)"/>
+          <path d="M27 36L32 12L38 22L33 30L27 36Z" fill="white"/>
+          <path d="M30 36L35 33V56H30V36Z" fill="#10285B"/>
+          <path d="M35 28L45 34V56H35V28Z" fill="#7AB6E0"/>
+          <defs>
+            <linearGradient id="a" x1="14" y1="56" x2="26" y2="12" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#10285B"/>
+              <stop offset="1" stop-color="#376CAA"/>
+            </linearGradient>
+            <linearGradient id="b" x1="43" y1="12" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#75A7D6"/>
+              <stop offset="1" stop-color="#184982"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div>
+          <strong>ARCONT</strong>
+          <small>Field & Lean</small>
+        </div>
+      </div>
+      <div class="sidebar-group">
+        <p class="sidebar-label">Mockups</p>
+        <a class="nav-link" data-nav="index" href="./index.html"><span>Suite Overview</span><span class="nav-pill">05</span></a>
+        <a class="nav-link" data-nav="dashboard" href="./executive-dashboard.html"><span>Executive Dashboard</span><span class="nav-pill">BI</span></a>
+        <a class="nav-link" data-nav="crm" href="./commercial-crm.html"><span>CRM Comercial</span><span class="nav-pill">CRM</span></a>
+        <a class="nav-link" data-nav="erp" href="./erp-costs-procurement.html"><span>ERP y Costos</span><span class="nav-pill">ERP</span></a>
+        <a class="nav-link" data-nav="field" href="./field-lean-quality.html"><span>Campo y Lean</span><span class="nav-pill">Field</span></a>
+      </div>
+      <div class="sidebar-footer">
+        <p>Operación móvil para supervisores, auxiliares, calidad, almacenistas y contratistas con disciplina Lean incorporada.</p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div class="headline">
+          <h1>Field App, Lean Construction y Calidad</h1>
+          <p>Captura móvil simple para campo y tablero táctico de restricciones, compromisos, avances y liberaciones ligado a frente, espacio y elemento BIM.</p>
+        </div>
+        <div class="top-actions">
+          <div class="segmented"><span class="active">Avance</span><span>Calidad</span><span>Lean</span></div>
+          <span class="button primary">Nueva evidencia</span>
+        </div>
+      </div>
+
+      <section class="section-grid cols-2">
+        <article class="card">
+          <h3>App móvil de campo</h3>
+          <div class="mobile-frame">
+            <div class="mobile-screen">
+              <div class="mobile-header">
+                <strong>Frente Torre B · Piso 12</strong>
+                <div class="mini">Supervisor: Luis Escalante</div>
+              </div>
+              <div class="mobile-body">
+                <div class="mobile-card">
+                  <strong>Avance del día</strong>
+                  <div class="mini">Tablaroca 82% · Instalación eléctrica 76%</div>
+                  <div class="progress" style="margin-top:12px"><span data-fill="82"></span></div>
+                </div>
+                <div class="mobile-card">
+                  <strong>Checklist de calidad</strong>
+                  <div class="mini">4 liberaciones listas · 2 no conformidades.</div>
+                </div>
+                <div class="mobile-card">
+                  <strong>Materiales</strong>
+                  <div class="mini">Salida de 14 rollos de cable y 8 cajas de luminarias.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Lookahead y restricciones</h3>
+          <div class="kanban">
+            <div class="lane">
+              <h4>Lista</h4>
+              <div class="task">
+                <strong>Muros ligeros nivel 12</strong>
+                <div class="mini">Sin bloqueo. Contratista confirmado.</div>
+              </div>
+            </div>
+            <div class="lane">
+              <h4>Restricción</h4>
+              <div class="task">
+                <strong>HVAC Shaft C</strong>
+                <div class="mini">Falta liberación de ingeniería y material especial.</div>
+                <span class="status alert">Crítica</span>
+              </div>
+            </div>
+            <div class="lane">
+              <h4>En ejecución</h4>
+              <div class="task">
+                <strong>Acabados húmedos</strong>
+                <div class="mini">Takt estable, variabilidad baja.</div>
+                <span class="status ok">Confiable</span>
+              </div>
+            </div>
+            <div class="lane">
+              <h4>Cerrado</h4>
+              <div class="task">
+                <strong>Punch list lobby norte</strong>
+                <div class="mini">Liberado por calidad y operaciones.</div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="section-grid cols-3">
+        <article class="card">
+          <h3>KPIs Lean</h3>
+          <div class="stack">
+            <div>
+              <strong>PPC semanal</strong>
+              <div class="progress"><span data-fill="84"></span></div>
+            </div>
+            <div>
+              <strong>Restricciones cerradas a tiempo</strong>
+              <div class="progress"><span data-fill="77"></span></div>
+            </div>
+            <div>
+              <strong>Takt adherence</strong>
+              <div class="progress"><span data-fill="81"></span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Calidad y punch list</h3>
+          <ul class="list">
+            <li class="list-item">
+              <div>
+                <strong>Unidad B-1204</strong>
+                <div class="mini">Sellado en baño principal fuera de estándar.</div>
+              </div>
+              <span class="status warn">Requiere retrabajo</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>Lobby Torre A</strong>
+                <div class="mini">Liberación final condicionada a prueba de luminarias.</div>
+              </div>
+              <span class="status info">Commissioning</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>Cuarto eléctrico C2</strong>
+                <div class="mini">Checklist completo y evidencia georreferenciada.</div>
+              </div>
+              <span class="status ok">Liberado</span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Handover digital</h3>
+          <p class="mini">Cada liberación puede arrastrar manuales, garantías, evidencias, fotos, certificados y relación directa con el elemento BIM o el sistema operativo que recibirá facility.</p>
+          <div class="tag-row">
+            <span class="tag">As-built</span>
+            <span class="tag">Garantías</span>
+            <span class="tag">Readiness</span>
+            <span class="tag">Operación</span>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="./assets/app.js"></script>
+</body>
+</html>

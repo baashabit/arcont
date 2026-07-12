@@ -1,0 +1,16 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 4 - Keystone Line</title>
+
+  <g transform="translate(124 150)">
+    <path d="M166 544L356 118L546 544" stroke="#0E2238" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M240 430H472" stroke="#0E2238" stroke-width="50" stroke-linecap="round"/>
+    <path d="M356 182V534" stroke="#CFDDED" stroke-width="28" stroke-linecap="round"/>
+    <path d="M218 510L494 186" stroke="#F97316" stroke-width="16" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0C2036" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="224" font-weight="800" letter-spacing="5">ARCONT</text>
+    <rect x="8" y="72" width="230" height="10" rx="5" fill="#F97316"/>
+    <text x="12" y="160" fill="#5D6F82" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="600" letter-spacing="9">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

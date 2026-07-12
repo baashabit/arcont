@@ -1,0 +1,39 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 2 - Blueprint Core</title>
+  <defs>
+    <linearGradient id="coreBody" x1="118" y1="72" x2="608" y2="563" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#183E66"/>
+      <stop offset="1" stop-color="#0A1B2D"/>
+    </linearGradient>
+    <linearGradient id="coreAccent" x1="214" y1="132" x2="501" y2="436" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8B2C"/>
+      <stop offset="1" stop-color="#F55D12"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(110 145)">
+    <path d="M358 20L650 540H518L443 409H273L198 540H66L358 20Z" fill="url(#coreBody)"/>
+    <path d="M358 139L458 320H381V525H336V320H259L358 139Z" fill="#F8FBFF"/>
+    <path d="M210 430H505" stroke="#C6D4E4" stroke-opacity="0.35" stroke-width="6"/>
+    <path d="M257 339H457" stroke="#C6D4E4" stroke-opacity="0.28" stroke-width="5"/>
+    <path d="M292 274H423" stroke="#C6D4E4" stroke-opacity="0.22" stroke-width="4"/>
+    <path d="M358 74V540" stroke="#A6BDD5" stroke-opacity="0.26" stroke-width="6"/>
+    <path d="M300 183V540" stroke="#A6BDD5" stroke-opacity="0.22" stroke-width="4"/>
+    <path d="M416 183V540" stroke="#A6BDD5" stroke-opacity="0.22" stroke-width="4"/>
+    <path d="M358 139L458 320H381V525H336V320H259L358 139Z" stroke="#DCE6F0" stroke-width="8"/>
+
+    <g fill="url(#coreAccent)">
+      <circle cx="358" cy="74" r="15"/>
+      <circle cx="416" cy="274" r="11"/>
+      <circle cx="300" cy="274" r="11"/>
+      <circle cx="210" cy="430" r="11"/>
+      <circle cx="505" cy="430" r="11"/>
+    </g>
+  </g>
+
+  <g transform="translate(770 338)">
+    <text x="0" y="0" fill="#0E2137" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="222" font-weight="800" letter-spacing="7">ARCONT</text>
+    <rect x="8" y="72" width="640" height="12" rx="6" fill="#F97316"/>
+    <text x="12" y="162" fill="#5D6E80" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="10">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

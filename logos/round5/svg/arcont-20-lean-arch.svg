@@ -1,0 +1,24 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 5 - Lean Arch</title>
+  <defs>
+    <linearGradient id="leanArchBase" x1="132" y1="116" x2="604" y2="548" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132F4E"/>
+      <stop offset="1" stop-color="#0B1F33"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(118 146)">
+    <path d="M180 548V318C180 184 258 104 356 104C454 104 532 184 532 318V548H452V324C452 240 412 196 356 196C300 196 260 240 260 324V548H180Z" fill="url(#leanArchBase)"/>
+    <path d="M262 548L356 198L450 548H388L356 420L324 548H262Z" fill="#F8FBFF"/>
+    <path d="M258 374H454" stroke="#F97316" stroke-width="18" stroke-linecap="round"/>
+    <path d="M356 146V548" stroke="#DCE6F1" stroke-width="24" stroke-linecap="round" opacity="0.95"/>
+    <path d="M204 470H126" stroke="#F97316" stroke-width="14" stroke-linecap="round"/>
+    <path d="M586 470H508" stroke="#F97316" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0C2036" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="224" font-weight="800" letter-spacing="5">ARCONT</text>
+    <rect x="8" y="72" width="224" height="10" rx="5" fill="#F97316"/>
+    <text x="12" y="160" fill="#5D6F82" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="600" letter-spacing="9">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

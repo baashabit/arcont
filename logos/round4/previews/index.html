@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARCONT Round 4</title>
+    <style>
+      :root {
+        --bg: #eef2f7;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --card: rgba(255,255,255,0.9);
+        --border: rgba(148,163,184,0.25);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(249,115,22,0.18), transparent 24%),
+          radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 22%),
+          linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      }
+      .wrap {
+        max-width: 1700px;
+        margin: 0 auto;
+        padding: 46px 28px 68px;
+      }
+      h1 { margin: 0; font-size: 46px; }
+      p { margin: 12px 0 0; color: var(--muted); font-size: 19px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 28px;
+        margin-top: 34px;
+      }
+      .card {
+        padding: 22px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
+      }
+      .tag {
+        display: inline-block;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #334155;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 1.4px;
+      }
+      h2 { margin: 14px 0 8px; font-size: 28px; }
+      .desc { margin: 0 0 18px; font-size: 16px; line-height: 1.5; }
+      .artboard {
+        overflow: hidden;
+        border-radius: 22px;
+        border: 1px solid rgba(203,213,225,0.72);
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      }
+      .artboard img { width: 100%; display: block; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>ARCONT • Ronda 4 Disruptiva</h1>
+      <p>Propuestas mas limpias, con una lectura mas de marca premium y menos de simbolo tecnico literal. Buscan originalidad, elegancia y caracter propio.</p>
+
+      <section class="grid">
+        <article class="card">
+          <span class="tag">OPCION 13</span>
+          <h2>Split Apex</h2>
+          <p class="desc">Escultural y asimetrica. Se siente mas exclusiva y menos convencional que una A tradicional.</p>
+          <div class="artboard"><img src="../svg/arcont-13-split-apex.svg" alt="ARCONT Split Apex" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 14</span>
+          <h2>Arc Cut</h2>
+          <p class="desc">Mas editorial y distintiva. Tiene un gesto suave pero firme, con una geometria menos esperada.</p>
+          <div class="artboard"><img src="../svg/arcont-14-arc-cut.svg" alt="ARCONT Arc Cut" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 15</span>
+          <h2>Keystone Line</h2>
+          <p class="desc">Elegante y afilada. La diagonal acento le da una personalidad mas contemporanea y disruptiva.</p>
+          <div class="artboard"><img src="../svg/arcont-15-keystone-line.svg" alt="ARCONT Keystone Line" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 16</span>
+          <h2>Fold Mark</h2>
+          <p class="desc">Mas premium y de producto digital. Tiene una sensacion de pliegue o precision construida.</p>
+          <div class="artboard"><img src="../svg/arcont-16-fold-mark.svg" alt="ARCONT Fold Mark" /></div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

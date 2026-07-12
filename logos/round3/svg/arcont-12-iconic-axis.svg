@@ -1,0 +1,19 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 3 - Iconic Axis</title>
+
+  <g transform="translate(138 162)">
+    <rect x="98" y="62" width="470" height="470" rx="84" fill="#10263F"/>
+    <path d="M332 124L492 470H398L362 388H302L266 470H172L332 124Z" fill="#F8FBFF"/>
+    <path d="M332 206L382 320H348V444H316V320H282L332 206Z" fill="#10263F"/>
+    <path d="M170 170H236" stroke="#F97316" stroke-width="14" stroke-linecap="round"/>
+    <path d="M428 170H494" stroke="#F97316" stroke-width="14" stroke-linecap="round"/>
+    <path d="M170 424H236" stroke="#F97316" stroke-width="14" stroke-linecap="round"/>
+    <path d="M428 424H494" stroke="#F97316" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0D2137" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="226" font-weight="800" letter-spacing="6">ARCONT</text>
+    <rect x="8" y="74" width="206" height="12" rx="6" fill="#F97316"/>
+    <text x="12" y="164" fill="#56687B" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="10">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

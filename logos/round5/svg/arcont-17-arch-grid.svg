@@ -1,0 +1,39 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 5 - Arch Grid</title>
+  <defs>
+    <linearGradient id="archGridBase" x1="124" y1="112" x2="586" y2="556" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14385D"/>
+      <stop offset="1" stop-color="#0B1F33"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(116 148)">
+    <path d="M166 548V318C166 182 250 96 356 96C462 96 546 182 546 318V548H454V322C454 242 413 194 356 194C299 194 258 242 258 322V548H166Z" fill="url(#archGridBase)"/>
+    <path d="M282 548V330C282 266 313 230 356 230C399 230 430 266 430 330V548H282Z" fill="#F8FBFF"/>
+    <path d="M356 138V548" stroke="#D8E3EF" stroke-width="26" stroke-linecap="round"/>
+    <path d="M290 348H422" stroke="#F97316" stroke-width="20" stroke-linecap="round"/>
+
+    <g stroke="#8AA9C6" stroke-opacity="0.34" stroke-width="4">
+      <line x1="230" y1="262" x2="482" y2="262"/>
+      <line x1="210" y1="340" x2="504" y2="340"/>
+      <line x1="196" y1="420" x2="518" y2="420"/>
+      <line x1="356" y1="122" x2="356" y2="548"/>
+      <line x1="276" y1="206" x2="276" y2="548"/>
+      <line x1="436" y1="206" x2="436" y2="548"/>
+    </g>
+
+    <g fill="#F97316">
+      <circle cx="356" cy="96" r="16"/>
+      <circle cx="276" cy="262" r="12"/>
+      <circle cx="436" cy="262" r="12"/>
+      <circle cx="210" cy="340" r="10"/>
+      <circle cx="504" cy="340" r="10"/>
+    </g>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0C2036" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="224" font-weight="800" letter-spacing="5">ARCONT</text>
+    <rect x="8" y="72" width="238" height="10" rx="5" fill="#F97316"/>
+    <text x="12" y="160" fill="#5D6F82" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="600" letter-spacing="9">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

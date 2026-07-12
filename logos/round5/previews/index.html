@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARCONT Round 5</title>
+    <style>
+      :root {
+        --bg: #eef2f7;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --card: rgba(255,255,255,0.9);
+        --border: rgba(148,163,184,0.25);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(249,115,22,0.18), transparent 24%),
+          radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 22%),
+          linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      }
+      .wrap {
+        max-width: 1700px;
+        margin: 0 auto;
+        padding: 46px 28px 68px;
+      }
+      h1 { margin: 0; font-size: 46px; }
+      p { margin: 12px 0 0; color: var(--muted); font-size: 19px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 28px;
+        margin-top: 34px;
+      }
+      .card {
+        padding: 22px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
+      }
+      .tag {
+        display: inline-block;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #334155;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 1.4px;
+      }
+      h2 { margin: 14px 0 8px; font-size: 28px; }
+      .desc { margin: 0 0 18px; font-size: 16px; line-height: 1.5; }
+      .artboard {
+        overflow: hidden;
+        border-radius: 22px;
+        border: 1px solid rgba(203,213,225,0.72);
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      }
+      .artboard img { width: 100%; display: block; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>ARCONT • Ronda 5 con Arco</h1>
+      <p>Propuestas donde el arco ya es parte central del simbolo. Buscan mezclar construccion, control y software con una lectura mas memorable.</p>
+
+      <section class="grid">
+        <article class="card">
+          <span class="tag">OPCION 17</span>
+          <h2>Arch Grid</h2>
+          <p class="desc">La mas tecnica. El arco se mezcla con una reticula y nodos de control, ideal si quieres que ARCONT se vea ingenieril y preciso.</p>
+          <div class="artboard"><img src="../svg/arcont-17-arch-grid.svg" alt="ARCONT Arch Grid" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 18</span>
+          <h2>Keystone Portal</h2>
+          <p class="desc">Mas arquitectonica y corporativa. El arco tipo portal y la pieza superior recuerdan una dovela o keystone estructural.</p>
+          <div class="artboard"><img src="../svg/arcont-18-keystone-portal.svg" alt="ARCONT Keystone Portal" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 19</span>
+          <h2>BIM Arch</h2>
+          <p class="desc">La mas digital. Une un arco limpio con un cubo tipo BIM para comunicar tecnologia, modelado y plataforma.</p>
+          <div class="artboard"><img src="../svg/arcont-19-bim-arch.svg" alt="ARCONT BIM Arch" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 20</span>
+          <h2>Lean Arch</h2>
+          <p class="desc">Mas fuerte y sencilla. Mantiene un gesto de A estructural, pero ahora enmarcada por un arco para que la idea sea mas directa.</p>
+          <div class="artboard"><img src="../svg/arcont-20-lean-arch.svg" alt="ARCONT Lean Arch" /></div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

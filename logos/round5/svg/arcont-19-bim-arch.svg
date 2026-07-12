@@ -1,0 +1,33 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 5 - BIM Arch</title>
+  <defs>
+    <linearGradient id="bimArchBlue" x1="116" y1="140" x2="602" y2="550" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <linearGradient id="bimArchDark" x1="208" y1="118" x2="520" y2="532" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#132F4E"/>
+      <stop offset="1" stop-color="#081828"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(104 140)">
+    <path d="M170 548V332C170 190 253 102 356 102C459 102 542 190 542 332V548H478V334C478 229 427 166 356 166C285 166 234 229 234 334V548H170Z" stroke="url(#bimArchBlue)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <path d="M356 194L476 262V398L356 466L236 398V262L356 194Z" fill="url(#bimArchDark)"/>
+    <path d="M356 194L476 262L356 330L236 262L356 194Z" fill="#60A5FA"/>
+    <path d="M356 330L476 262V398L356 466V330Z" fill="#2563EB"/>
+    <path d="M356 330L236 262V398L356 466V330Z" fill="#14385D"/>
+
+    <path d="M356 106V170" stroke="#F97316" stroke-width="18" stroke-linecap="round"/>
+    <circle cx="356" cy="92" r="14" fill="#F97316"/>
+    <circle cx="202" cy="364" r="12" fill="#38BDF8"/>
+    <circle cx="510" cy="364" r="12" fill="#38BDF8"/>
+  </g>
+
+  <g transform="translate(760 338)">
+    <text x="0" y="0" fill="#081828" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="224" font-weight="800" letter-spacing="5">ARCONT</text>
+    <rect x="8" y="72" width="220" height="10" rx="5" fill="#1D4ED8"/>
+    <text x="12" y="160" fill="#1D4ED8" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="52" font-weight="700" letter-spacing="9">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

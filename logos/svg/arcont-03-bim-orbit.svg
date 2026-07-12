@@ -1,0 +1,40 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Logo Concept 03 - BIM Orbit</title>
+  <defs>
+    <linearGradient id="orbitBlue" x1="112" y1="162" x2="630" y2="533" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00B4D8"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="orbitDark" x1="204" y1="91" x2="538" y2="547" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#16324F"/>
+      <stop offset="1" stop-color="#0B1625"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(90 170)">
+    <ellipse cx="350" cy="286" rx="282" ry="146" stroke="#93C5FD" stroke-opacity="0.36" stroke-width="14"/>
+    <ellipse cx="350" cy="286" rx="154" ry="282" transform="rotate(35 350 286)" stroke="#60A5FA" stroke-opacity="0.28" stroke-width="12"/>
+    <ellipse cx="350" cy="286" rx="154" ry="282" transform="rotate(-35 350 286)" stroke="#38BDF8" stroke-opacity="0.22" stroke-width="12"/>
+
+    <path d="M350 68L520 166V362L350 460L180 362V166L350 68Z" fill="url(#orbitDark)"/>
+    <path d="M350 68L520 166L350 262L180 166L350 68Z" fill="url(#orbitBlue)"/>
+    <path d="M350 262L520 166V362L350 460V262Z" fill="#184DAB"/>
+    <path d="M350 262L180 166V362L350 460V262Z" fill="#102D4A"/>
+
+    <path d="M350 154L438 205V314L350 365L262 314V205L350 154Z" fill="#E0F2FE" fill-opacity="0.94"/>
+    <path d="M350 154L438 205L350 256L262 205L350 154Z" fill="#BAE6FD"/>
+    <path d="M350 256L438 205V314L350 365V256Z" fill="#7DD3FC"/>
+
+    <g fill="#00D4FF">
+      <circle cx="70" cy="286" r="18"/>
+      <circle cx="630" cy="286" r="18"/>
+      <circle cx="240" cy="60" r="14"/>
+      <circle cx="462" cy="503" r="14"/>
+    </g>
+  </g>
+
+  <g transform="translate(755 330)">
+    <text x="0" y="0" fill="#071828" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="216" font-weight="800" letter-spacing="8">ARCONT</text>
+    <text x="10" y="104" fill="#1D4ED8" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="11">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

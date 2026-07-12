@@ -1,0 +1,16 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 3 - Monoline Apex</title>
+
+  <g transform="translate(132 166)">
+    <path d="M112 530L330 86L548 530" stroke="#102742" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M250 362H410" stroke="#102742" stroke-width="54" stroke-linecap="round"/>
+    <path d="M330 180V520" stroke="#DCE7F2" stroke-width="38" stroke-linecap="round"/>
+    <circle cx="330" cy="86" r="18" fill="#F97316"/>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0E2238" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="226" font-weight="800" letter-spacing="6">ARCONT</text>
+    <rect x="8" y="74" width="180" height="12" rx="6" fill="#F97316"/>
+    <text x="12" y="164" fill="#596B7E" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="10">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

@@ -1,0 +1,2026 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARCONT Real Estate OS • Investor Deck</title>
+    <style>
+      :root {
+        --bg: #07111d;
+        --bg-soft: #0d1b2a;
+        --panel: rgba(11, 25, 40, 0.78);
+        --panel-strong: rgba(8, 16, 28, 0.94);
+        --ink: #e8f2ff;
+        --muted: #8ea3bb;
+        --line: rgba(126, 197, 243, 0.18);
+        --blue: #1e74b4;
+        --blue-2: #73bceb;
+        --cyan: #9adcf8;
+        --navy: #0b2e57;
+        --orange: #ff8a3d;
+        --green: #37c89a;
+        --shadow: 0 32px 90px rgba(0, 0, 0, 0.34);
+        --radius-xl: 32px;
+        --radius-lg: 24px;
+        --radius-md: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(115, 188, 235, 0.18), transparent 24%),
+          radial-gradient(circle at top right, rgba(255, 138, 61, 0.14), transparent 18%),
+          radial-gradient(circle at 50% 120%, rgba(30, 116, 180, 0.24), transparent 28%),
+          linear-gradient(180deg, #08111d 0%, #050b13 100%);
+        overflow-x: hidden;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(154, 220, 248, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(154, 220, 248, 0.03) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: radial-gradient(circle at center, black 35%, transparent 88%);
+      }
+
+      .hud {
+        position: fixed;
+        z-index: 30;
+        top: 20px;
+        left: 20px;
+        right: 20px;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        pointer-events: none;
+      }
+
+      .hud-card {
+        pointer-events: auto;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 18px;
+        border: 1px solid rgba(154, 220, 248, 0.14);
+        border-radius: 999px;
+        background: rgba(8, 18, 31, 0.66);
+        backdrop-filter: blur(18px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+      }
+
+      .brand-chip {
+        width: 44px;
+        height: 44px;
+        padding: 4px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.96);
+        display: grid;
+        place-items: center;
+      }
+
+      .brand-chip img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: contain;
+      }
+
+      .hud-meta {
+        display: grid;
+        gap: 3px;
+      }
+
+      .hud-label {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .hud-value {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .progress-shell {
+        width: min(260px, 34vw);
+        height: 8px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .progress-bar {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, var(--blue) 0%, var(--blue-2) 55%, var(--orange) 100%);
+        box-shadow: 0 0 24px rgba(115, 188, 235, 0.5);
+        transition: width 260ms ease;
+      }
+
+      .deck-nav {
+        position: fixed;
+        z-index: 25;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: grid;
+        gap: 12px;
+      }
+
+      .deck-dot {
+        width: 12px;
+        height: 12px;
+        border: 0;
+        padding: 0;
+        border-radius: 999px;
+        cursor: pointer;
+        background: rgba(154, 220, 248, 0.24);
+        box-shadow: inset 0 0 0 1px rgba(154, 220, 248, 0.08);
+        transition: transform 220ms ease, background 220ms ease;
+      }
+
+      .deck-dot.is-active {
+        transform: scale(1.35);
+        background: linear-gradient(180deg, var(--blue-2), var(--orange));
+      }
+
+      .deck {
+        scroll-snap-type: y mandatory;
+      }
+
+      .slide {
+        position: relative;
+        min-height: 100vh;
+        padding: 110px 72px 72px;
+        scroll-snap-align: start;
+        display: flex;
+        align-items: center;
+      }
+
+      .slide::after {
+        content: "";
+        position: absolute;
+        inset: 34px;
+        border-radius: 36px;
+        border: 1px solid rgba(154, 220, 248, 0.08);
+        pointer-events: none;
+      }
+
+      .slide-inner {
+        position: relative;
+        z-index: 1;
+        width: min(1320px, 100%);
+        margin: 0 auto;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: rgba(154, 220, 248, 0.08);
+        border: 1px solid rgba(154, 220, 248, 0.12);
+        color: var(--cyan);
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: linear-gradient(180deg, var(--orange), #ffd4b2);
+        box-shadow: 0 0 18px rgba(255, 138, 61, 0.7);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .display {
+        margin-top: 24px;
+        font-size: clamp(42px, 7vw, 88px);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      .lede {
+        margin-top: 20px;
+        max-width: 720px;
+        font-size: clamp(18px, 2vw, 24px);
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .hero-grid,
+      .two-col,
+      .market-grid,
+      .fund-grid {
+        display: grid;
+        gap: 30px;
+      }
+
+      .hero-grid {
+        grid-template-columns: 1.1fr 0.9fr;
+        align-items: center;
+      }
+
+      .two-col {
+        grid-template-columns: 0.92fr 1.08fr;
+        align-items: center;
+      }
+
+      .problem-layout {
+        grid-template-columns: 0.9fr 1.1fr;
+      }
+
+      .problem-layout .stat-num {
+        font-size: clamp(24px, 2.2vw, 30px);
+      }
+
+      .market-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .fund-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+
+      .card,
+      .stat,
+      .quote,
+      .module-card,
+      .timeline-card,
+      .persona,
+      .model-card {
+        background: linear-gradient(180deg, rgba(13, 27, 42, 0.92) 0%, rgba(8, 18, 31, 0.9) 100%);
+        border: 1px solid rgba(154, 220, 248, 0.12);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow);
+      }
+
+      .card,
+      .quote,
+      .timeline-card,
+      .model-card {
+        padding: 26px;
+      }
+
+      .stat {
+        padding: 22px 24px;
+      }
+
+      .stat-num {
+        font-size: clamp(28px, 3vw, 44px);
+        font-weight: 800;
+        color: #f9fcff;
+        line-height: 1.08;
+        overflow-wrap: anywhere;
+      }
+
+      .stat-label {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .stats-grid,
+      .module-grid,
+      .persona-grid,
+      .model-grid,
+      .roadmap-grid,
+      .ask-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .module-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .compact-module-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .persona-grid,
+      .model-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .roadmap-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .ask-grid {
+        grid-template-columns: 1.1fr 0.9fr;
+      }
+
+      .module-card,
+      .persona {
+        padding: 22px;
+      }
+
+      .card h3,
+      .module-card h3,
+      .timeline-card h3,
+      .persona h3,
+      .model-card h3 {
+        font-size: 22px;
+        margin-bottom: 12px;
+      }
+
+      .card p,
+      .module-card p,
+      .timeline-card p,
+      .persona p,
+      .model-card p,
+      .quote p {
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 15px;
+      }
+
+      ul.clean {
+        margin: 14px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 12px;
+      }
+
+      ul.clean li {
+        position: relative;
+        padding-left: 18px;
+        color: #cedaf0;
+        line-height: 1.5;
+      }
+
+      ul.clean li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.6em;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: linear-gradient(180deg, var(--blue-2), var(--orange));
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .pill {
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(154, 220, 248, 0.08);
+        border: 1px solid rgba(154, 220, 248, 0.1);
+        color: #d8e7fb;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+      }
+
+      .section-title {
+        font-size: clamp(34px, 4vw, 56px);
+        line-height: 1.02;
+        letter-spacing: -0.03em;
+      }
+
+      .section-copy {
+        margin-top: 16px;
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.55;
+      }
+
+      .visual-shell {
+        position: relative;
+        min-height: 440px;
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+        background:
+          radial-gradient(circle at top, rgba(115, 188, 235, 0.14), transparent 42%),
+          linear-gradient(180deg, rgba(8, 20, 34, 0.92) 0%, rgba(5, 10, 18, 0.98) 100%);
+        border: 1px solid rgba(154, 220, 248, 0.12);
+        box-shadow: var(--shadow);
+      }
+
+      .visual-shell::before,
+      .visual-shell::after {
+        content: "";
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(40px);
+      }
+
+      .visual-shell::before {
+        width: 260px;
+        height: 260px;
+        top: -50px;
+        right: -60px;
+        background: rgba(115, 188, 235, 0.16);
+      }
+
+      .visual-shell::after {
+        width: 220px;
+        height: 220px;
+        bottom: -40px;
+        left: -40px;
+        background: rgba(255, 138, 61, 0.12);
+      }
+
+      .visual-shell svg {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .problem-visual {
+        min-height: 420px;
+      }
+
+      .tiny {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .quote strong {
+        display: block;
+        font-size: 18px;
+        margin-bottom: 10px;
+      }
+
+      .revenue-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .revenue-item {
+        padding: 18px 20px;
+        border-radius: var(--radius-md);
+        background: linear-gradient(180deg, rgba(13, 27, 42, 0.92) 0%, rgba(8, 18, 31, 0.9) 100%);
+        border: 1px solid rgba(154, 220, 248, 0.12);
+      }
+
+      .revenue-item h3 {
+        margin: 0 0 8px;
+        font-size: 20px;
+      }
+
+      .revenue-item p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .manifesto-layout {
+        max-width: 980px;
+      }
+
+      .manifesto-panel {
+        display: grid;
+        gap: 14px;
+        margin-top: 28px;
+        padding: 28px;
+        border-radius: var(--radius-lg);
+        background: linear-gradient(180deg, rgba(13, 27, 42, 0.92) 0%, rgba(8, 18, 31, 0.9) 100%);
+        border: 1px solid rgba(154, 220, 248, 0.12);
+        box-shadow: var(--shadow);
+      }
+
+      .manifesto-line {
+        color: #f4f8ff;
+        font-size: clamp(22px, 2.3vw, 34px);
+        font-weight: 800;
+        line-height: 1.08;
+        letter-spacing: -0.02em;
+      }
+
+      .manifesto-note {
+        max-width: 760px;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      .metric-line {
+        margin-top: 18px;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(115, 188, 235, 0.5), transparent);
+      }
+
+      .timeline {
+        position: relative;
+        margin-top: 20px;
+        padding-top: 18px;
+      }
+
+      .timeline::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, rgba(115, 188, 235, 0.44), rgba(255, 138, 61, 0.16));
+      }
+
+      .timeline-card span,
+      .model-card span,
+      .persona span {
+        display: inline-block;
+        margin-bottom: 10px;
+        color: var(--cyan);
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .allocation {
+        display: grid;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .allocation-row {
+        display: grid;
+        grid-template-columns: 140px 1fr 60px;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .allocation-bar {
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+
+      .allocation-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--blue), var(--blue-2));
+      }
+
+      .allocation-row:nth-child(2) .allocation-fill {
+        background: linear-gradient(90deg, #1f5c8d, #37c89a);
+      }
+
+      .allocation-row:nth-child(3) .allocation-fill {
+        background: linear-gradient(90deg, #275a88, #ff8a3d);
+      }
+
+      .allocation-row:nth-child(4) .allocation-fill {
+        background: linear-gradient(90deg, #193b63, #9adcf8);
+      }
+
+      .footer-note {
+        margin-top: 22px;
+        color: #6f859f;
+        font-size: 13px;
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(20px);
+        transition: opacity 560ms ease, transform 560ms ease;
+      }
+
+      .slide.is-active .reveal {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .slide:target .reveal {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .slide.is-active .delay-1 { transition-delay: 90ms; }
+      .slide.is-active .delay-2 { transition-delay: 170ms; }
+      .slide.is-active .delay-3 { transition-delay: 250ms; }
+      .slide.is-active .delay-4 { transition-delay: 330ms; }
+
+      .pulse-ring {
+        transform-origin: center;
+        animation: pulse-ring 3.6s ease-out infinite;
+      }
+
+      .pulse-dot {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: pulse-dot 2.4s ease-in-out infinite;
+      }
+
+      .float-slow {
+        animation: float-slow 5.8s ease-in-out infinite;
+      }
+
+      .float-reverse {
+        animation: float-reverse 6.8s ease-in-out infinite;
+      }
+
+      .scan-line {
+        animation: scan-line 4.4s linear infinite;
+      }
+
+      .path-flow {
+        stroke-dasharray: 10 14;
+        animation: dash-flow 10s linear infinite;
+      }
+
+      .rise {
+        transform-box: fill-box;
+        transform-origin: center bottom;
+        animation: rise 3.2s ease-in-out infinite;
+      }
+
+      .glow {
+        filter: drop-shadow(0 0 16px rgba(154, 220, 248, 0.45));
+      }
+
+      .orbit {
+        transform-origin: center;
+        animation: orbit 18s linear infinite;
+      }
+
+      .orbit-reverse {
+        transform-origin: center;
+        animation: orbit-reverse 14s linear infinite;
+      }
+
+      .counter-grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 28px;
+      }
+
+      .counter-grid .card {
+        min-height: 160px;
+      }
+
+      .counter-label {
+        color: var(--muted);
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .counter-value {
+        margin-top: 10px;
+        font-size: clamp(26px, 3vw, 40px);
+        font-weight: 800;
+      }
+
+      .counter-foot {
+        margin-top: 10px;
+        color: #b8cae4;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      @keyframes pulse-ring {
+        0% { opacity: 0.14; transform: scale(0.84); }
+        65% { opacity: 0.42; }
+        100% { opacity: 0; transform: scale(1.22); }
+      }
+
+      @keyframes pulse-dot {
+        0%, 100% { transform: scale(1); opacity: 0.9; }
+        50% { transform: scale(1.28); opacity: 1; }
+      }
+
+      @keyframes float-slow {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+      }
+
+      @keyframes float-reverse {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(12px); }
+      }
+
+      @keyframes dash-flow {
+        to { stroke-dashoffset: -260; }
+      }
+
+      @keyframes rise {
+        0%, 100% { transform: scaleY(0.9); opacity: 0.82; }
+        50% { transform: scaleY(1.08); opacity: 1; }
+      }
+
+      @keyframes orbit {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      @keyframes orbit-reverse {
+        from { transform: rotate(360deg); }
+        to { transform: rotate(0deg); }
+      }
+
+      @keyframes scan-line {
+        0% { transform: translateY(-40px); opacity: 0; }
+        12% { opacity: 1; }
+        100% { transform: translateY(460px); opacity: 0; }
+      }
+
+      @media (max-width: 1100px) {
+        .slide {
+          padding: 108px 28px 56px;
+        }
+
+        .hero-grid,
+        .two-col,
+        .market-grid,
+        .fund-grid,
+        .ask-grid,
+        .roadmap-grid,
+        .stats-grid,
+        .module-grid,
+        .persona-grid,
+        .model-grid,
+        .counter-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .deck-nav {
+          display: none;
+        }
+
+        .visual-shell {
+          min-height: 360px;
+        }
+      }
+
+      @media (max-height: 820px) and (min-width: 1101px) {
+        .hud {
+          top: 18px;
+          left: 20px;
+          right: 20px;
+        }
+
+        .hud-card {
+          padding: 10px 16px;
+        }
+
+        .slide {
+          padding: 132px 76px 28px;
+        }
+
+        .slide::after {
+          inset: 26px 34px;
+        }
+
+        .hero-grid,
+        .two-col,
+        .market-grid,
+        .fund-grid,
+        .ask-grid {
+          gap: 28px;
+        }
+
+        .section-title {
+          font-size: clamp(32px, 3.55vw, 50px);
+          line-height: 1.03;
+        }
+
+        .section-copy {
+          margin-top: 12px;
+          font-size: 16px;
+          line-height: 1.45;
+        }
+
+        .display {
+          font-size: clamp(38px, 6vw, 74px);
+        }
+
+        .lede {
+          margin-top: 16px;
+          font-size: 18px;
+          line-height: 1.38;
+        }
+
+        .eyebrow {
+          padding: 8px 13px;
+          font-size: 11px;
+        }
+
+        .pill-row {
+          gap: 8px;
+          margin-top: 14px;
+        }
+
+        .pill {
+          padding: 8px 12px;
+          font-size: 12px;
+        }
+
+        .card,
+        .quote,
+        .timeline-card,
+        .model-card {
+          padding: 20px;
+        }
+
+        .module-card,
+        .persona,
+        .stat {
+          padding: 18px;
+        }
+
+        .card h3,
+        .module-card h3,
+        .timeline-card h3,
+        .persona h3,
+        .model-card h3 {
+          font-size: 20px;
+          margin-bottom: 10px;
+        }
+
+        .card p,
+        .module-card p,
+        .timeline-card p,
+        .persona p,
+        .model-card p,
+        .quote p {
+          font-size: 14px;
+          line-height: 1.5;
+        }
+
+        .stat-num {
+          font-size: clamp(24px, 2.45vw, 34px);
+        }
+
+        .stat-label {
+          font-size: 13px;
+          line-height: 1.42;
+        }
+
+        .stats-grid,
+        .module-grid,
+        .persona-grid,
+        .model-grid,
+        .roadmap-grid,
+        .ask-grid {
+          gap: 14px;
+        }
+
+        .visual-shell {
+          min-height: 360px;
+        }
+
+        .problem-visual {
+          min-height: 390px;
+        }
+
+        .problem-layout {
+          grid-template-columns: 0.86fr 1.14fr;
+        }
+
+        .problem-layout .stats-grid {
+          gap: 12px;
+        }
+
+        .problem-layout .stat {
+          min-height: 174px;
+        }
+
+        .compact-module-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .compact-module-grid .module-card {
+          min-height: 128px;
+        }
+
+        .revenue-list {
+          gap: 10px;
+          margin-top: 16px;
+        }
+
+        .revenue-item {
+          padding: 15px 18px;
+        }
+
+        .manifesto-panel {
+          gap: 10px;
+          margin-top: 22px;
+          padding: 22px;
+        }
+
+        .manifesto-line {
+          font-size: clamp(20px, 2.1vw, 28px);
+        }
+
+        .manifesto-note {
+          font-size: 14px;
+        }
+
+        .deck-nav {
+          right: 16px;
+          gap: 10px;
+        }
+
+        .lean-slide .pill-row {
+          display: none;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .hud {
+          top: 12px;
+          left: 12px;
+          right: 12px;
+          flex-direction: column;
+        }
+
+        .hud-card:last-child {
+          justify-content: space-between;
+        }
+
+        .slide {
+          min-height: auto;
+          padding-top: 160px;
+          padding-bottom: 56px;
+        }
+
+        .slide::after {
+          inset: 14px;
+          border-radius: 26px;
+        }
+
+        .display {
+          line-height: 1;
+        }
+
+        .reveal {
+          opacity: 1;
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hud">
+      <div class="hud-card">
+        <div class="brand-chip">
+          <img src="./assets/arcont-mark.png" alt="ARCONT" />
+        </div>
+        <div class="hud-meta">
+          <span class="hud-label">Deck</span>
+          <span class="hud-value">ARCONT Real Estate OS</span>
+        </div>
+      </div>
+      <div class="hud-card">
+        <div class="hud-meta">
+          <span class="hud-label">Slide</span>
+          <span class="hud-value" id="slide-label">01 / 15</span>
+        </div>
+        <div class="progress-shell" aria-hidden="true">
+          <div class="progress-bar" id="progress-bar" style="width: 7.14%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="deck-nav" id="deck-nav" aria-label="Slide navigation"></div>
+
+    <main class="deck" id="deck">
+      <section class="slide is-active" id="slide-1" data-title="Cover">
+        <div class="slide-inner hero-grid">
+          <div class="stack">
+            <span class="eyebrow reveal">PropTech • BIM • Lean Construction • IA • Hardware</span>
+            <h1 class="display reveal delay-1">El sistema operativo del inmueble.</h1>
+            <p class="lede reveal delay-2">
+              ARCONT convierte un modelo Revit en un activo vivo: usable desde planeación Lean y entrega de obra, conectado a sensores,
+              legible por ventas y accionable por IA.
+            </p>
+            <div class="pill-row reveal delay-3">
+              <span class="pill">Digital Twin nativo para real estate</span>
+              <span class="pill">Conector Revit + presupuestos automáticos</span>
+              <span class="pill">CRM + ERP + Field App</span>
+              <span class="pill">Integración ERP tipo Microsip</span>
+              <span class="pill">Lean delivery + handover digital</span>
+              <span class="pill">Preventa, venta y postventa conectadas</span>
+              <span class="pill">Copiloto de IA para activos</span>
+              <span class="pill">Integración con IoT y sistemas heredados</span>
+            </div>
+          </div>
+
+          <div class="visual-shell reveal delay-2">
+            <svg viewBox="0 0 780 620" role="img" aria-label="Gemelo digital ARCONT">
+              <defs>
+                <linearGradient id="heroA1" x1="216" y1="100" x2="294" y2="414" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#1E74B4"/>
+                  <stop offset="1" stop-color="#0B2E57"/>
+                </linearGradient>
+                <linearGradient id="heroA2" x1="410" y1="94" x2="526" y2="410" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#7BC5F1"/>
+                  <stop offset="1" stop-color="#2D6FA3"/>
+                </linearGradient>
+                <linearGradient id="tower1" x1="345" y1="255" x2="345" y2="430" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#204F81"/>
+                  <stop offset="1" stop-color="#0D2D53"/>
+                </linearGradient>
+                <linearGradient id="tower2" x1="395" y1="225" x2="395" y2="430" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#70BFEE"/>
+                  <stop offset="1" stop-color="#2A77B7"/>
+                </linearGradient>
+                <linearGradient id="tower3" x1="463" y1="284" x2="463" y2="430" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#B7E1F8"/>
+                  <stop offset="1" stop-color="#58ADE1"/>
+                </linearGradient>
+              </defs>
+
+              <g opacity="0.78">
+                <circle class="pulse-ring" cx="390" cy="266" r="120" fill="none" stroke="rgba(123,197,241,0.44)" stroke-width="1.5"/>
+                <circle class="pulse-ring" cx="390" cy="266" r="160" fill="none" stroke="rgba(255,138,61,0.24)" stroke-width="1.5" style="animation-delay: 1.2s"/>
+              </g>
+
+              <g class="orbit">
+                <ellipse cx="390" cy="266" rx="230" ry="112" fill="none" stroke="rgba(123,197,241,0.2)" stroke-width="2" />
+                <circle class="pulse-dot" cx="620" cy="266" r="6.5" fill="#9ADCF8"/>
+              </g>
+              <g class="orbit-reverse">
+                <ellipse cx="390" cy="266" rx="174" ry="230" fill="none" stroke="rgba(255,138,61,0.12)" stroke-width="2" transform="rotate(32 390 266)"/>
+                <circle class="pulse-dot" cx="390" cy="36" r="5.5" fill="#FF8A3D"/>
+              </g>
+
+              <path class="path-flow" d="M118 456H656" fill="none" stroke="rgba(123,197,241,0.44)" stroke-width="3" stroke-linecap="round"/>
+              <path class="path-flow" d="M136 488H638" fill="none" stroke="rgba(255,138,61,0.18)" stroke-width="2" stroke-linecap="round" style="animation-duration: 14s"/>
+              <circle cx="120" cy="456" r="10" fill="#07111D" stroke="#9ADCF8" stroke-width="4"/>
+              <circle cx="658" cy="456" r="10" fill="#07111D" stroke="#9ADCF8" stroke-width="4"/>
+
+              <g class="float-slow glow">
+                <path d="M240 430L334 138H425L306 430H240Z" fill="url(#heroA1)"/>
+                <path d="M429 138H520L626 430H561L478 212L429 138Z" fill="url(#heroA2)"/>
+                <path d="M352 244L425 138L468 198L414 268L352 244Z" fill="#F7FBFF"/>
+
+                <path class="rise" d="M354 292L398 267V430H354V292Z" fill="url(#tower1)"/>
+                <path class="rise" d="M398 245L452 214V430H398V245Z" fill="url(#tower2)" style="animation-delay: .4s"/>
+                <path class="rise" d="M452 314L534 358V430H452V314Z" fill="url(#tower3)" style="animation-delay: .8s"/>
+
+                <path d="M398 267L452 236" stroke="#E6F4FC" stroke-width="4" stroke-linecap="round"/>
+                <path d="M452 358L534 401" stroke="#D1EBF8" stroke-width="4" stroke-linecap="round"/>
+              </g>
+
+              <g opacity="0.75">
+                <rect x="92" y="128" width="104" height="44" rx="14" fill="rgba(8,18,31,0.84)" stroke="rgba(154,220,248,0.14)"/>
+                <text x="110" y="154" fill="#9ADCF8" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Revit / BIM</text>
+                <rect x="542" y="120" width="140" height="44" rx="14" fill="rgba(8,18,31,0.84)" stroke="rgba(154,220,248,0.14)"/>
+                <text x="564" y="147" fill="#9ADCF8" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Hardware</text>
+                <rect x="582" y="464" width="106" height="44" rx="14" fill="rgba(8,18,31,0.84)" stroke="rgba(154,220,248,0.14)"/>
+                <text x="616" y="491" fill="#9ADCF8" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">IA</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-1b" data-title="Revit to Budget">
+        <div class="slide-inner two-col">
+          <div class="stack">
+            <span class="eyebrow reveal">Entrada inicial</span>
+            <h2 class="section-title reveal delay-1">Revit a presupuesto, sin recaptura.</h2>
+            <p class="section-copy reveal delay-2">
+              ARCONT lee el modelo Revit, mapea partidas y genera presupuestos vivos conectados al sistema interno y al ERP.
+            </p>
+            <div class="model-grid reveal delay-3">
+              <article class="model-card">
+                <span>01</span>
+                <h3>Conector Revit</h3>
+                <p>Extrae unidades, espacios, familias, cantidades, equipos y metadatos del modelo.</p>
+              </article>
+              <article class="model-card">
+                <span>02</span>
+                <h3>Motor de presupuesto</h3>
+                <p>Relaciona cantidades con catálogos, matrices, indirectos, rendimientos y reglas.</p>
+              </article>
+              <article class="model-card">
+                <span>03</span>
+                <h3>Control de cambios</h3>
+                <p>Detecta variaciones por versión, recalcula impacto y deja trazabilidad de costo.</p>
+              </article>
+              <article class="model-card">
+                <span>04</span>
+                <h3>ERP tipo Microsip</h3>
+                <p>Sincroniza presupuestos, centros de costo, requisiciones, compras y reportes.</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="visual-shell reveal delay-2">
+            <svg viewBox="0 0 780 560" role="img" aria-label="Flujo de Revit a presupuesto y ERP">
+              <defs>
+                <linearGradient id="budgetFlow" x1="88" y1="0" x2="692" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#73BCEB"/>
+                  <stop offset="0.55" stop-color="#37C89A"/>
+                  <stop offset="1" stop-color="#FF8A3D"/>
+                </linearGradient>
+              </defs>
+
+              <path class="path-flow" d="M118 280H662" fill="none" stroke="url(#budgetFlow)" stroke-width="6" stroke-linecap="round"/>
+
+              <g class="float-slow">
+                <rect x="62" y="208" width="148" height="144" rx="28" fill="rgba(10,24,40,0.92)" stroke="rgba(154,220,248,0.18)"/>
+                <text x="136" y="268" text-anchor="middle" fill="#E8F2FF" font-size="26" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">Revit</text>
+                <text x="136" y="302" text-anchor="middle" fill="#9ADCF8" font-size="16" font-family="Avenir Next, Trebuchet MS, sans-serif">modelo BIM</text>
+              </g>
+
+              <g class="float-reverse">
+                <rect x="238" y="178" width="156" height="204" rx="28" fill="rgba(16,56,95,0.88)" stroke="rgba(154,220,248,0.18)"/>
+                <text x="316" y="246" text-anchor="middle" fill="#E8F2FF" font-size="24" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">ARCONT</text>
+                <text x="316" y="278" text-anchor="middle" fill="#9ADCF8" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">normaliza</text>
+                <text x="316" y="304" text-anchor="middle" fill="#9ADCF8" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">cantidades</text>
+              </g>
+
+              <g class="float-slow" style="animation-delay:.25s">
+                <rect x="422" y="208" width="156" height="144" rx="28" fill="rgba(22,76,124,0.86)" stroke="rgba(154,220,248,0.18)"/>
+                <text x="500" y="268" text-anchor="middle" fill="#E8F2FF" font-size="24" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">Ppto.</text>
+                <text x="500" y="302" text-anchor="middle" fill="#9ADCF8" font-size="16" font-family="Avenir Next, Trebuchet MS, sans-serif">automático</text>
+              </g>
+
+              <g class="float-reverse" style="animation-delay:.4s">
+                <rect x="606" y="208" width="126" height="144" rx="28" fill="rgba(42,104,157,0.8)" stroke="rgba(154,220,248,0.18)"/>
+                <text x="669" y="268" text-anchor="middle" fill="#E8F2FF" font-size="24" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">ERP</text>
+                <text x="669" y="302" text-anchor="middle" fill="#9ADCF8" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">Microsip</text>
+              </g>
+
+              <circle class="pulse-dot" cx="218" cy="280" r="8" fill="#73BCEB"/>
+              <circle class="pulse-dot" cx="410" cy="280" r="8" fill="#37C89A"/>
+              <circle class="pulse-dot" cx="590" cy="280" r="8" fill="#FF8A3D"/>
+
+              <rect x="116" y="426" width="548" height="72" rx="24" fill="rgba(8,18,31,0.84)" stroke="rgba(154,220,248,0.14)"/>
+              <text x="390" y="456" text-anchor="middle" fill="#E8F2FF" font-size="19" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">Salida: presupuesto, variaciones, requisiciones y centros de costo</text>
+              <text x="390" y="482" text-anchor="middle" fill="#8EA3BB" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">Aprobable por dirección y sincronizable con el ERP existente.</text>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-2" data-title="Problem">
+        <div class="slide-inner two-col problem-layout">
+          <div class="stack">
+            <span class="eyebrow reveal">Problema</span>
+            <h2 class="section-title reveal delay-1">El activo más costoso del cliente sigue operando a ciegas.</h2>
+            <p class="section-copy reveal delay-2">
+              El modelo BIM se queda en diseño. La obra corre en otro sistema. La operación vive en hojas de cálculo. Ventas corre por otro lado.
+              Y el hardware del edificio no conversa con el negocio.
+            </p>
+            <div class="stats-grid reveal delay-3">
+              <div class="stat">
+                <div class="stat-num">Silos de datos</div>
+                <div class="stat-label">Revit, presupuestos, cronograma, ERP, CRM, tickets, contratos, sensores y BMS no comparten una sola fuente de verdad.</div>
+              </div>
+              <div class="stat">
+                <div class="stat-num">Costo manual</div>
+                <div class="stat-label">Los presupuestos se recapturan, se actualizan tarde y pierden trazabilidad cuando cambia el modelo.</div>
+              </div>
+              <div class="stat">
+                <div class="stat-num">ROI invisible</div>
+                <div class="stat-label">No existe una forma simple de conectar diseño, presupuesto, compras, obra, operación y experiencia del cliente.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-shell problem-visual reveal delay-2">
+            <svg viewBox="0 0 780 540" role="img" aria-label="Sistemas fragmentados">
+              <g class="float-slow">
+                <rect x="56" y="100" width="208" height="118" rx="28" fill="rgba(10,24,40,0.9)" stroke="rgba(154,220,248,0.16)"/>
+                <text x="88" y="146" fill="#E8F2FF" font-size="30" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">BIM</text>
+                <text x="88" y="182" fill="#8EA3BB" font-size="20" font-family="Avenir Next, Trebuchet MS, sans-serif">Revit, IFC, planos</text>
+                <path d="M92 194H228" stroke="rgba(123,197,241,0.25)" stroke-width="2"/>
+                <path d="M90 208H210" stroke="rgba(123,197,241,0.18)" stroke-width="2"/>
+              </g>
+
+              <g class="float-reverse">
+                <rect x="514" y="100" width="208" height="118" rx="28" fill="rgba(10,24,40,0.9)" stroke="rgba(154,220,248,0.16)"/>
+                <text x="548" y="146" fill="#E8F2FF" font-size="30" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">ERP</text>
+                <text x="548" y="182" fill="#8EA3BB" font-size="20" font-family="Avenir Next, Trebuchet MS, sans-serif">Microsip, compras</text>
+                <circle cx="560" cy="196" r="8" fill="#37C89A"/>
+                <circle cx="592" cy="196" r="8" fill="#FF8A3D"/>
+                <circle cx="624" cy="196" r="8" fill="#9ADCF8"/>
+              </g>
+
+              <g class="float-slow" style="animation-delay: .4s">
+                <rect x="286" y="314" width="208" height="118" rx="28" fill="rgba(10,24,40,0.9)" stroke="rgba(154,220,248,0.16)"/>
+                <text x="320" y="360" fill="#E8F2FF" font-size="30" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">Presupuesto</text>
+                <text x="320" y="396" fill="#8EA3BB" font-size="20" font-family="Avenir Next, Trebuchet MS, sans-serif">cantidades, partidas, presupuesto</text>
+              </g>
+
+              <path class="path-flow" d="M264 160C340 160 362 178 390 258" fill="none" stroke="rgba(255,138,61,0.36)" stroke-width="4" stroke-linecap="round"/>
+              <path class="path-flow" d="M514 160C438 160 418 178 390 258" fill="none" stroke="rgba(123,197,241,0.36)" stroke-width="4" stroke-linecap="round"/>
+              <path class="path-flow" d="M390 314V272" fill="none" stroke="rgba(154,220,248,0.26)" stroke-width="4" stroke-linecap="round"/>
+
+              <g class="pulse-dot">
+                <circle cx="390" cy="258" r="18" fill="#07111D" stroke="#FF8A3D" stroke-width="4"/>
+                <circle cx="390" cy="258" r="6" fill="#FF8A3D"/>
+              </g>
+
+              <text x="390" y="496" text-anchor="middle" fill="#8EA3BB" font-size="16" font-family="Avenir Next, Trebuchet MS, sans-serif">
+                Resultado: costos tardíos, baja trazabilidad y decisiones parciales.
+              </text>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-3" data-title="Solution">
+        <div class="slide-inner two-col">
+          <div class="visual-shell reveal delay-1">
+            <svg viewBox="0 0 780 560" role="img" aria-label="Arquitectura de la solucion">
+              <defs>
+                <linearGradient id="stackTop" x1="178" y1="112" x2="560" y2="220" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#7BC5F1"/>
+                  <stop offset="1" stop-color="#2B6A9C"/>
+                </linearGradient>
+                <linearGradient id="stackMid" x1="160" y1="224" x2="584" y2="310" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#204F81"/>
+                  <stop offset="1" stop-color="#0E3157"/>
+                </linearGradient>
+                <linearGradient id="stackLow" x1="170" y1="330" x2="596" y2="418" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#12304E"/>
+                  <stop offset="1" stop-color="#0A1B2F"/>
+                </linearGradient>
+              </defs>
+
+              <g class="float-slow">
+                <path d="M184 128L392 68L600 128L392 188L184 128Z" fill="url(#stackTop)"/>
+                <path d="M184 128V188L392 246V188L184 128Z" fill="#2C78B7"/>
+                <path d="M600 128V188L392 246V188L600 128Z" fill="#559FD4"/>
+                <text x="326" y="154" fill="#07111D" font-size="28" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">AI + WORKFLOWS</text>
+              </g>
+
+              <g class="float-reverse">
+                <path d="M160 246L392 194L624 246L392 298L160 246Z" fill="url(#stackMid)"/>
+                <path d="M160 246V308L392 360V298L160 246Z" fill="#113B68"/>
+                <path d="M624 246V308L392 360V298L624 246Z" fill="#2A628F"/>
+                <text x="270" y="275" fill="#E8F2FF" font-size="28" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">PRESUPUESTO / ERP / OPS</text>
+              </g>
+
+              <g class="float-slow" style="animation-delay: .3s">
+                <path d="M176 372L392 320L608 372L392 424L176 372Z" fill="url(#stackLow)"/>
+                <path d="M176 372V434L392 486V424L176 372Z" fill="#0C223A"/>
+                <path d="M608 372V434L392 486V424L608 372Z" fill="#123250"/>
+                <text x="248" y="400" fill="#9ADCF8" font-size="28" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">REVIT / BIM / FIELD / HARDWARE</text>
+              </g>
+
+              <g class="orbit">
+                <circle cx="392" cy="278" r="196" fill="none" stroke="rgba(154,220,248,0.1)" stroke-width="2"/>
+                <circle cx="588" cy="278" r="6" fill="#FF8A3D"/>
+              </g>
+              <g class="orbit-reverse">
+                <circle cx="392" cy="278" r="154" fill="none" stroke="rgba(123,197,241,0.18)" stroke-width="2"/>
+                <circle cx="238" cy="278" r="6" fill="#9ADCF8"/>
+              </g>
+            </svg>
+          </div>
+
+          <div class="stack">
+            <span class="eyebrow reveal">Solución</span>
+            <h2 class="section-title reveal delay-1">Una sola plataforma para vender, operar y optimizar el inmueble.</h2>
+            <p class="section-copy reveal delay-2">
+              ARCONT unifica el modelo técnico, el presupuesto, el ERP, el estado real del edificio y la inteligencia de negocio en una capa operativa que cualquier
+              usuario puede consultar en lenguaje natural.
+            </p>
+            <div class="quote reveal delay-3">
+              <strong>"Convertimos tu modelo Revit en el cerebro operativo del inmueble."</strong>
+              <p>
+                Esa es la cuña: entrar por BIM operativo y presupuesto automático, sumar Lean Construction y expandir hacia comercial, mantenimiento, eficiencia energética y analítica de portafolio.
+              </p>
+            </div>
+            <div class="pill-row reveal delay-4">
+              <span class="pill">Revit/IFC ingestion</span>
+              <span class="pill">Budget automation</span>
+              <span class="pill">ERP connector tipo Microsip</span>
+              <span class="pill">Last Planner + PPC + constraints</span>
+              <span class="pill">IoT + BMS + access control</span>
+              <span class="pill">RAG y copiloto</span>
+              <span class="pill">Alertas + workflows + dashboards</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-4" data-title="Product">
+        <div class="slide-inner">
+          <span class="eyebrow reveal">Producto</span>
+          <h2 class="section-title reveal delay-1">Módulos clave, una sola fuente de verdad.</h2>
+          <p class="section-copy reveal delay-2">
+            El producto está diseñado para capturar valor desde Revit, presupuestos, sembrados, preventa y costos, pasando por obra y entrega, hasta postventa, operación, legal y analítica de portafolio.
+          </p>
+          <div class="module-grid compact-module-grid reveal delay-3" style="margin-top: 28px;">
+            <article class="module-card">
+              <h3>BIM Hub + Revit Connector</h3>
+              <p>Importa Revit/IFC, normaliza entidades, extrae cantidades y deja el gemelo digital listo para operar.</p>
+            </article>
+            <article class="module-card">
+              <h3>Budget Automation</h3>
+              <p>Genera presupuestos por etapa, torre, frente o unidad usando catálogos, reglas, rendimientos e indirectos.</p>
+            </article>
+            <article class="module-card">
+              <h3>ERP Core + Microsip-ready</h3>
+              <p>Compras, requisiciones, almacén, costos, cuentas por pagar/cobrar e integración configurable con ERP tipo Microsip.</p>
+            </article>
+            <article class="module-card">
+              <h3>Field App</h3>
+              <p>App para supervisores, calidad, auxiliares, contratistas y almacenistas con avance, evidencia y checklists.</p>
+            </article>
+            <article class="module-card">
+              <h3>Development Planning</h3>
+              <p>Sembrados, mezcla de producto, etapas, masterplan y alineación entre inventario, costo y absorción.</p>
+            </article>
+            <article class="module-card">
+              <h3>Lean Construction OS</h3>
+              <p>Pull planning, lookahead, constraints board, takt y PPC ligados al espacio y sistema BIM.</p>
+            </article>
+            <article class="module-card">
+              <h3>Commercial Intelligence</h3>
+              <p>Inventario, atributos, comparador de unidades y material comercial generado desde BIM.</p>
+            </article>
+            <article class="module-card">
+              <h3>AI Copilot</h3>
+              <p>Responde en lenguaje natural, resume estados, detecta riesgos y recomienda acciones sobre BIM, costos, obra y operación.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-4b" data-title="Suite Architecture">
+        <div class="slide-inner market-grid">
+          <div class="stack">
+            <span class="eyebrow reveal">Platform Suite</span>
+            <h2 class="section-title reveal delay-1">Una arquitectura pensada para oficina, campo, cliente y dirección.</h2>
+            <p class="section-copy reveal delay-2">
+              La tesis ya no es un módulo aislado. Es una suite que conecta CRM, ERP tipo Microsip, presupuestos, Field App, Service Cloud y Digital Twin
+              bajo un mismo modelo operativo.
+            </p>
+            <div class="model-grid reveal delay-3">
+              <article class="model-card">
+                <span>Office</span>
+                <h3>ERP, presupuestos, legal y reportes</h3>
+                <p>Presupuestos automáticos, compras, almacén, costos, contabilidad, expedientes, permisos y reportes ejecutivos.</p>
+              </article>
+              <article class="model-card">
+                <span>Field</span>
+                <h3>App de avance y calidad</h3>
+                <p>Supervisión, contratistas, auxiliares y calidad operando desde móvil con evidencia y checklists.</p>
+              </article>
+              <article class="model-card">
+                <span>Customer</span>
+                <h3>Ventas, postventa y service cloud</h3>
+                <p>Lead, reserva, cierre, entrega, postventa, bots, WhatsApp y central telefónica virtual.</p>
+              </article>
+              <article class="model-card">
+                <span>Asset</span>
+                <h3>BIM, Revit, hardware e IA</h3>
+                <p>Gemelo digital, conector Revit, sensores, dashboards, automatizaciones y copiloto para decisiones.</p>
+              </article>
+            </div>
+          </div>
+          <div class="visual-shell reveal delay-2">
+            <svg viewBox="0 0 780 560" role="img" aria-label="Arquitectura de suite ARCONT">
+              <rect x="248" y="220" width="284" height="118" rx="28" fill="rgba(12,32,54,0.92)" stroke="rgba(154,220,248,0.18)"/>
+              <text x="390" y="272" text-anchor="middle" fill="#E8F2FF" font-size="28" font-weight="800" font-family="Avenir Next, Trebuchet MS, sans-serif">ARCONT OS</text>
+              <text x="390" y="304" text-anchor="middle" fill="#8EA3BB" font-size="16" font-family="Avenir Next, Trebuchet MS, sans-serif">Single source of truth</text>
+
+              <rect x="88" y="72" width="220" height="96" rx="24" fill="rgba(16,56,95,0.85)" stroke="rgba(154,220,248,0.14)"/>
+              <text x="198" y="118" text-anchor="middle" fill="#E8F2FF" font-size="24" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">Office Suite</text>
+              <text x="198" y="144" text-anchor="middle" fill="#9ADCF8" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">ERP • presupuesto • legal • BI</text>
+
+              <rect x="472" y="72" width="220" height="96" rx="24" fill="rgba(25,90,141,0.78)" stroke="rgba(154,220,248,0.14)"/>
+              <text x="582" y="118" text-anchor="middle" fill="#E8F2FF" font-size="24" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">Field Suite</text>
+              <text x="582" y="144" text-anchor="middle" fill="#9ADCF8" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">avance • calidad • Lean</text>
+
+              <rect x="88" y="392" width="220" height="96" rx="24" fill="rgba(13,46,87,0.88)" stroke="rgba(154,220,248,0.14)"/>
+              <text x="198" y="438" text-anchor="middle" fill="#E8F2FF" font-size="24" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">Customer Suite</text>
+              <text x="198" y="464" text-anchor="middle" fill="#9ADCF8" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">CRM • bots • postventa</text>
+
+              <rect x="472" y="392" width="220" height="96" rx="24" fill="rgba(24,74,120,0.82)" stroke="rgba(154,220,248,0.14)"/>
+              <text x="582" y="438" text-anchor="middle" fill="#E8F2FF" font-size="24" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">Asset Suite</text>
+              <text x="582" y="464" text-anchor="middle" fill="#9ADCF8" font-size="15" font-family="Avenir Next, Trebuchet MS, sans-serif">BIM • IoT • IA • ops</text>
+
+              <path class="path-flow" d="M308 168L346 220" fill="none" stroke="rgba(154,220,248,0.5)" stroke-width="4" stroke-linecap="round"/>
+              <path class="path-flow" d="M472 168L434 220" fill="none" stroke="rgba(154,220,248,0.5)" stroke-width="4" stroke-linecap="round"/>
+              <path class="path-flow" d="M308 392L346 338" fill="none" stroke="rgba(255,138,61,0.36)" stroke-width="4" stroke-linecap="round"/>
+              <path class="path-flow" d="M472 392L434 338" fill="none" stroke="rgba(255,138,61,0.36)" stroke-width="4" stroke-linecap="round"/>
+              <circle class="pulse-dot" cx="390" cy="279" r="8" fill="#FF8A3D"/>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide lean-slide" id="slide-5" data-title="Lean Construction">
+        <div class="slide-inner two-col">
+          <div class="stack">
+            <span class="eyebrow reveal">Lean Construction OS</span>
+            <h2 class="section-title reveal delay-1">La mejor versión del producto empieza antes de que el activo entre en operación.</h2>
+            <p class="section-copy reveal delay-2">
+              Si el sistema captura pull planning, restricciones, takt, PPC, punch list y commissioning, el cliente no solo opera mejor:
+              entrega mejor, con menos retrabajo y con una transición mucho más limpia.
+            </p>
+            <div class="persona-grid reveal delay-3">
+              <article class="persona">
+                <span>Lean Core</span>
+                <h3>Last Planner y constraints</h3>
+                <p>Compromisos semanales, restricciones, causas raíz y confiabilidad de planeación por frente, piso o disciplina.</p>
+              </article>
+              <article class="persona">
+                <span>Flow</span>
+                <h3>Takt y handover</h3>
+                <p>Flujo por zonas, readiness por sistema y cierre de entrega digital con contexto BIM y evidencia.</p>
+              </article>
+            </div>
+            <div class="pill-row reveal delay-4">
+              <span class="pill">Last Planner</span>
+              <span class="pill">Lookahead 3-6 sem.</span>
+              <span class="pill">PPC + causas</span>
+              <span class="pill">Commissioning</span>
+            </div>
+          </div>
+
+          <div class="visual-shell reveal delay-2">
+            <svg viewBox="0 0 780 560" role="img" aria-label="Lean Construction workflow">
+              <defs>
+                <linearGradient id="leanPath" x1="120" y1="0" x2="642" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#73BCEB"/>
+                  <stop offset="1" stop-color="#FF8A3D"/>
+                </linearGradient>
+                <linearGradient id="leanBar" x1="0" y1="0" x2="0" y2="1">
+                  <stop stop-color="#7BC5F1"/>
+                  <stop offset="1" stop-color="#1E74B4"/>
+                </linearGradient>
+              </defs>
+
+              <path d="M118 182C176 182 198 134 256 134H540C594 134 612 186 662 186" fill="none" stroke="url(#leanPath)" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+              <path class="path-flow" d="M118 182C176 182 198 134 256 134H540C594 134 612 186 662 186" fill="none" stroke="rgba(154,220,248,0.7)" stroke-width="2.5" stroke-linecap="round"/>
+
+              <g class="float-slow">
+                <circle cx="118" cy="182" r="28" fill="#07111D" stroke="#73BCEB" stroke-width="4"/>
+                <circle class="pulse-dot" cx="118" cy="182" r="9" fill="#73BCEB"/>
+                <text x="84" y="240" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Pull</text>
+              </g>
+              <g class="float-reverse">
+                <circle cx="256" cy="134" r="28" fill="#07111D" stroke="#73BCEB" stroke-width="4"/>
+                <circle class="pulse-dot" cx="256" cy="134" r="9" fill="#73BCEB"/>
+                <text x="214" y="90" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Lookahead</text>
+              </g>
+              <g class="float-slow" style="animation-delay:.2s">
+                <circle cx="390" cy="134" r="28" fill="#07111D" stroke="#FF8A3D" stroke-width="4"/>
+                <circle class="pulse-dot" cx="390" cy="134" r="9" fill="#FF8A3D"/>
+                <text x="354" y="90" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Constraints</text>
+              </g>
+              <g class="float-reverse" style="animation-delay:.4s">
+                <circle cx="540" cy="134" r="28" fill="#07111D" stroke="#37C89A" stroke-width="4"/>
+                <circle class="pulse-dot" cx="540" cy="134" r="9" fill="#37C89A"/>
+                <text x="518" y="90" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">PPC</text>
+              </g>
+              <g class="float-slow" style="animation-delay:.5s">
+                <circle cx="662" cy="186" r="28" fill="#07111D" stroke="#9ADCF8" stroke-width="4"/>
+                <circle class="pulse-dot" cx="662" cy="186" r="9" fill="#9ADCF8"/>
+                <text x="598" y="240" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Handover</text>
+              </g>
+
+              <rect x="144" y="322" width="492" height="142" rx="28" fill="rgba(10,24,40,0.86)" stroke="rgba(154,220,248,0.16)"/>
+              <text x="180" y="362" fill="#E8F2FF" font-size="24" font-weight="700" font-family="Avenir Next, Trebuchet MS, sans-serif">Takt + Ready for Ops</text>
+              <text x="180" y="392" fill="#8EA3BB" font-size="17" font-family="Avenir Next, Trebuchet MS, sans-serif">Frentes, niveles y sistemas avanzando hacia una entrega digital.</text>
+
+              <g class="rise">
+                <rect x="184" y="416" width="72" height="22" rx="11" fill="url(#leanBar)"/>
+                <rect x="270" y="402" width="72" height="36" rx="11" fill="url(#leanBar)"/>
+                <rect x="356" y="386" width="72" height="52" rx="11" fill="url(#leanBar)"/>
+                <rect x="442" y="370" width="72" height="68" rx="11" fill="url(#leanBar)"/>
+                <rect x="528" y="350" width="72" height="88" rx="11" fill="url(#leanBar)"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-6" data-title="Benchmark">
+        <div class="slide-inner">
+          <span class="eyebrow reveal">Benchmark Strategy</span>
+          <h2 class="section-title reveal delay-1">No estamos inventando una categoría desde cero. Estamos ensamblando la mejor arquitectura del mercado.</h2>
+          <p class="section-copy reveal delay-2">
+            La oportunidad es combinar en un solo producto lo mejor de las suites líderes de construcción y real estate, pero con una visión mucho más unificada para entrega, operación y activos inmobiliarios.
+          </p>
+          <div class="module-grid reveal delay-3" style="margin-top: 28px;">
+            <article class="module-card">
+              <h3>ENKONTROL</h3>
+              <p>Tomamos la profundidad en control administrativo, costos, compras, inventarios y visión de constructoras/desarrolladoras.</p>
+            </article>
+            <article class="module-card">
+              <h3>Procore</h3>
+              <p>Tomamos la lógica de plataforma conectada, alineación campo-oficina, facilidad de adopción y ecosistema de integraciones.</p>
+            </article>
+            <article class="module-card">
+              <h3>Autodesk</h3>
+              <p>Tomamos la continuidad BIM, la colaboración sobre modelos y el handover digital como fuente de verdad del activo.</p>
+            </article>
+            <article class="module-card">
+              <h3>Oracle</h3>
+              <p>Tomamos la disciplina de project controls, capital visibility, workflows y trazabilidad enterprise.</p>
+            </article>
+            <article class="module-card">
+              <h3>Touchplan / Lean</h3>
+              <p>Tomamos pull planning, lookahead, constraints management y PPC como motor real de confiabilidad en obra.</p>
+            </article>
+            <article class="module-card">
+              <h3>ARCONT</h3>
+              <p>La síntesis: BIM + Lean + IA + hardware + operación + capa comercial para activos inmobiliarios.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-7" data-title="Hardware">
+        <div class="slide-inner two-col">
+          <div class="stack">
+            <span class="eyebrow reveal">Hardware Integration</span>
+            <h2 class="section-title reveal delay-1">La ventaja competitiva es cerrar el loop con el mundo físico.</h2>
+            <p class="section-copy reveal delay-2">
+              No solo visualizamos datos: conectamos medidores, accesos, HVAC, CCTV y sensores al espacio BIM exacto para automatizar decisiones.
+            </p>
+            <div class="persona-grid reveal delay-3">
+              <article class="persona">
+                <span>Input</span>
+                <h3>Telemetría en tiempo real</h3>
+                <p>Energía, agua, gas, ocupación, CO2, accesos, elevadores, clima, humo y equipos críticos.</p>
+              </article>
+              <article class="persona">
+                <span>Output</span>
+                <h3>Acción operativa</h3>
+                <p>Alertas, tickets, reglas, mantenimiento predictivo y control cruzado entre sistemas.</p>
+              </article>
+            </div>
+            <div class="pill-row reveal delay-4">
+              <span class="pill">BACnet</span>
+              <span class="pill">Modbus</span>
+              <span class="pill">MQTT</span>
+              <span class="pill">OPC-UA</span>
+              <span class="pill">APIs de fabricantes</span>
+            </div>
+          </div>
+
+          <div class="visual-shell reveal delay-2">
+            <svg viewBox="0 0 780 560" role="img" aria-label="Mapa de integración de hardware">
+              <rect x="162" y="118" width="456" height="308" rx="28" fill="rgba(10,24,40,0.9)" stroke="rgba(154,220,248,0.15)"/>
+              <rect x="206" y="160" width="110" height="222" rx="18" fill="rgba(17,59,104,0.78)" stroke="rgba(154,220,248,0.12)"/>
+              <rect x="334" y="160" width="110" height="222" rx="18" fill="rgba(23,78,128,0.72)" stroke="rgba(154,220,248,0.12)"/>
+              <rect x="462" y="160" width="110" height="222" rx="18" fill="rgba(42,104,157,0.62)" stroke="rgba(154,220,248,0.12)"/>
+              <line x1="262" y1="160" x2="262" y2="382" stroke="rgba(154,220,248,0.16)"/>
+              <line x1="390" y1="160" x2="390" y2="382" stroke="rgba(154,220,248,0.16)"/>
+              <line x1="518" y1="160" x2="518" y2="382" stroke="rgba(154,220,248,0.16)"/>
+              <line x1="206" y1="230" x2="572" y2="230" stroke="rgba(154,220,248,0.16)"/>
+              <line x1="206" y1="300" x2="572" y2="300" stroke="rgba(154,220,248,0.16)"/>
+
+              <g class="scan-line">
+                <rect x="186" y="154" width="408" height="10" rx="5" fill="url(#scanGlow)"/>
+              </g>
+              <defs>
+                <linearGradient id="scanGlow" x1="186" y1="0" x2="594" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#9ADCF8" stop-opacity="0"/>
+                  <stop offset="0.5" stop-color="#9ADCF8" stop-opacity="1"/>
+                  <stop offset="1" stop-color="#9ADCF8" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+
+              <g>
+                <circle cx="116" cy="170" r="18" fill="#07111D" stroke="#9ADCF8" stroke-width="4"/>
+                <circle class="pulse-dot" cx="116" cy="170" r="7" fill="#9ADCF8"/>
+                <text x="56" y="144" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Medidor</text>
+                <path class="path-flow" d="M134 170H162" fill="none" stroke="#9ADCF8" stroke-width="4" stroke-linecap="round"/>
+              </g>
+
+              <g>
+                <circle cx="664" cy="190" r="18" fill="#07111D" stroke="#FF8A3D" stroke-width="4"/>
+                <circle class="pulse-dot" cx="664" cy="190" r="7" fill="#FF8A3D"/>
+                <text x="626" y="148" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Acceso</text>
+                <path class="path-flow" d="M618 190H646" fill="none" stroke="#FF8A3D" stroke-width="4" stroke-linecap="round"/>
+              </g>
+
+              <g>
+                <circle cx="120" cy="380" r="18" fill="#07111D" stroke="#37C89A" stroke-width="4"/>
+                <circle class="pulse-dot" cx="120" cy="380" r="7" fill="#37C89A"/>
+                <text x="46" y="426" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">HVAC / BMS</text>
+                <path class="path-flow" d="M138 380H162" fill="none" stroke="#37C89A" stroke-width="4" stroke-linecap="round"/>
+              </g>
+
+              <g>
+                <circle cx="660" cy="366" r="18" fill="#07111D" stroke="#73BCEB" stroke-width="4"/>
+                <circle class="pulse-dot" cx="660" cy="366" r="7" fill="#73BCEB"/>
+                <text x="616" y="412" fill="#E8F2FF" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">CCTV</text>
+                <path class="path-flow" d="M618 366H642" fill="none" stroke="#73BCEB" stroke-width="4" stroke-linecap="round"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-8" data-title="Beachhead">
+        <div class="slide-inner market-grid">
+          <div class="stack">
+            <span class="eyebrow reveal">Beachhead</span>
+            <h2 class="section-title reveal delay-1">Empezamos donde el dolor es agudo y el ROI es visible.</h2>
+            <p class="section-copy reveal delay-2">
+              La entrada inicial es Revit operativo + presupuesto automático + integración ERP, y desde ahí se expande a Lean delivery, comercial, operación y activos.
+            </p>
+            <div class="model-grid reveal delay-3">
+              <article class="model-card">
+                <span>Cliente 01</span>
+                <h3>Desarrollador</h3>
+                <p>Necesita convertir Revit en presupuesto, inventario, trazabilidad técnica, entrega y transición a operación sin recaptura.</p>
+              </article>
+              <article class="model-card">
+                <span>Cliente 02</span>
+                <h3>Constructora / Lean lead</h3>
+                <p>Quiere conectar cantidades, costos, compras, avance, PPC, restricciones y handover en un flujo medible.</p>
+              </article>
+              <article class="model-card">
+                <span>Expansión</span>
+                <h3>Operador / Asset manager</h3>
+                <p>Busca KPIs de portafolio, salud del activo, comparables entre edificios, CapEx, postventa y mayor eficiencia energética.</p>
+              </article>
+              <article class="model-card">
+                <span>Ventaja</span>
+                <h3>ACV creciente</h3>
+                <p>Cada módulo adicional incrementa stickiness: presupuestos, ERP, software, dispositivos conectados, automatizaciones, handover digital, reporting y analítica premium.</p>
+              </article>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card reveal delay-2">
+              <h3>Go-to-market secuencial</h3>
+              <ul class="clean">
+                <li>Entrar por un activo piloto con modelo Revit y presupuesto vivo.</li>
+                <li>Instalar BIM hub + motor de presupuesto + conector ERP tipo Microsip + field app.</li>
+                <li>Expandir a sembrados, Lean board, tickets, commissioning, bots, IA, costos, legal y portafolio ejecutivo.</li>
+                <li>Convertir el piloto en plantilla replicable por vertical.</li>
+              </ul>
+            </div>
+            <div class="quote reveal delay-4">
+              <strong>La oportunidad</strong>
+              <p>
+                Si somos la capa que conecta diseño, operación y datos reales del activo, nos volvemos extremadamente difíciles de reemplazar.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-9" data-title="Business Model">
+        <div class="slide-inner two-col">
+          <div class="stack">
+            <span class="eyebrow reveal">Modelo de Negocio</span>
+            <h2 class="section-title reveal delay-1">Múltiples flujos de ingresos sobre la misma infraestructura de datos.</h2>
+            <div class="revenue-list reveal delay-2">
+              <div class="revenue-item">
+                <h3>SaaS base</h3>
+                <p>Suscripción por activo, torre o metros cuadrados administrados.</p>
+              </div>
+              <div class="revenue-item">
+                <h3>Setup Revit + presupuesto</h3>
+                <p>Onboarding BIM, catálogos de costo, reglas de presupuesto y configuración Lean.</p>
+              </div>
+              <div class="revenue-item">
+                <h3>ERP tipo Microsip + operación</h3>
+                <p>Compras, almacén, costos, aprobaciones y trazabilidad administrativa.</p>
+              </div>
+              <div class="revenue-item">
+                <h3>Premium IA</h3>
+                <p>Copiloto, automatizaciones, hardware conectado y reporting premium.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="visual-shell reveal delay-2">
+            <svg viewBox="0 0 780 560" role="img" aria-label="Motor de ingresos">
+              <path d="M170 410C222 342 286 312 366 294C454 274 526 244 612 160" fill="none" stroke="rgba(123,197,241,0.42)" stroke-width="6" stroke-linecap="round"/>
+              <path d="M170 432C232 390 302 364 380 348C460 332 536 300 628 222" fill="none" stroke="rgba(255,138,61,0.24)" stroke-width="4" stroke-linecap="round"/>
+
+              <g class="rise">
+                <rect x="170" y="274" width="74" height="158" rx="20" fill="#10385F"/>
+                <rect x="270" y="226" width="74" height="206" rx="20" fill="#1E5E93"/>
+                <rect x="370" y="176" width="74" height="256" rx="20" fill="#2C78B7"/>
+                <rect x="470" y="122" width="74" height="310" rx="20" fill="#5EA7D8"/>
+                <rect x="570" y="78" width="74" height="354" rx="20" fill="#9ADCF8"/>
+              </g>
+
+              <text x="154" y="470" fill="#8EA3BB" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Pilot</text>
+              <text x="252" y="470" fill="#8EA3BB" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">SaaS</text>
+              <text x="342" y="470" fill="#8EA3BB" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">ERP</text>
+              <text x="436" y="470" fill="#8EA3BB" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">AI + HW</text>
+              <text x="548" y="470" fill="#8EA3BB" font-size="18" font-family="Avenir Next, Trebuchet MS, sans-serif">Portfolio</text>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-10" data-title="Moat">
+        <div class="slide-inner market-grid">
+          <div class="stack">
+            <span class="eyebrow reveal">Moat</span>
+            <h2 class="section-title reveal delay-1">La defensibilidad nace de la estructura de datos y la integración.</h2>
+            <p class="section-copy reveal delay-2">
+              Una vez que el gemelo digital mapea cantidades, presupuestos, equipos, espacios, telemetría, tickets, restricciones, handover y contexto comercial, cambiar de plataforma deja de ser trivial.
+            </p>
+            <div class="card reveal delay-3">
+              <h3>Por qué es difícil copiarlo</h3>
+              <ul class="clean">
+                <li>Profundidad de control tipo ERP para un contexto constructor e inmobiliario.</li>
+                <li>Normalización de modelos Revit/IFC hacia una capa operativa.</li>
+                <li>Conector ERP configurable para sistemas existentes como Microsip.</li>
+                <li>Mapeo de hardware y sistemas heredados al contexto BIM real.</li>
+                <li>Workflow de Lean Construction y commissioning sobre espacios, sistemas y responsables.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card reveal delay-2">
+              <h3>Moat compuesto</h3>
+              <p>No es solo software. Es software + grafo del activo + motor de presupuesto + conectores ERP + workflows Lean + datos operativos + copiloto.</p>
+              <div class="metric-line"></div>
+              <ul class="clean">
+                <li>Mayor costo de cambio con cada edificio conectado.</li>
+                <li>Mejor producto cuanto más señales entren.</li>
+                <li>Handover digital y memoria operativa difíciles de reconstruir fuera del sistema.</li>
+                <li>Posibilidad de benchmark y modelos predictivos propietarios.</li>
+              </ul>
+            </div>
+            <div class="quote reveal delay-4">
+              <strong>Insight</strong>
+              <p>
+                En real estate, quien controla la capa operativa del activo no solo reporta lo que pasó: decide lo que debe pasar después.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-11" data-title="Roadmap">
+        <div class="slide-inner">
+          <span class="eyebrow reveal">Roadmap</span>
+          <h2 class="section-title reveal delay-1">Cuatro fases para construir una plataforma difícil de reemplazar.</h2>
+          <div class="roadmap-grid timeline reveal delay-2">
+            <article class="timeline-card">
+              <span>Fase 1</span>
+              <h3>Foundation</h3>
+              <p>Conector Revit, extracción de cantidades, motor de presupuesto, estructura del activo, visualizador web, dashboards base y conector ERP tipo Microsip.</p>
+            </article>
+            <article class="timeline-card">
+              <span>Fase 2</span>
+              <h3>Operations</h3>
+              <p>Requisiciones, compras, avance de obra, costos reales vs presupuesto, tickets, mantenimientos, SLA, lookahead, constraints log y PPC.</p>
+            </article>
+            <article class="timeline-card">
+              <span>Fase 3</span>
+              <h3>Commercial + Portfolio</h3>
+              <p>Inventario comercial, CRM integrations, commissioning, sembrados avanzados, reporting programable, legal y visión ejecutiva multi-site.</p>
+            </article>
+            <article class="timeline-card">
+              <span>Fase 4</span>
+              <h3>Intelligence</h3>
+              <p>Predicción de fallas, optimización energética, CapEx intelligence, forecasting de costos/absorción, IA de variaciones y alertas legales inteligentes.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-11b" data-title="Enterprise Readiness">
+        <div class="slide-inner market-grid">
+          <div class="stack">
+            <span class="eyebrow reveal">Enterprise Readiness</span>
+            <h2 class="section-title reveal delay-1">Listo para gobierno corporativo, no solo para un piloto bonito.</h2>
+            <p class="section-copy reveal delay-2">
+              Para vender a desarrolladoras, constructoras y operadores grandes, el producto necesita disciplina enterprise:
+              seguridad, permisos, auditoría, workflows y operación confiable.
+            </p>
+            <div class="model-grid reveal delay-3">
+              <article class="model-card">
+                <span>Security</span>
+                <h3>SSO, MFA y auditoría</h3>
+                <p>Integración con identidad corporativa, trazabilidad completa y segregación de funciones.</p>
+              </article>
+              <article class="model-card">
+                <span>Org Model</span>
+                <h3>Multiempresa y multiobra</h3>
+                <p>Holding, razones sociales, proyectos, activos y permisos por alcance organizacional.</p>
+              </article>
+              <article class="model-card">
+                <span>Workflow</span>
+                <h3>Aprobaciones enterprise</h3>
+                <p>Compras, contratos, legal, costos y postventa con reglas y jerarquías configurables.</p>
+              </article>
+              <article class="model-card">
+                <span>Reliability</span>
+                <h3>SLA, observabilidad y DRP</h3>
+                <p>Backups, monitoreo, runbooks, ambientes separados y soporte para operación crítica.</p>
+              </article>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card reveal delay-2">
+              <h3>Checklist de compra enterprise</h3>
+              <ul class="clean">
+                <li>SSO / SAML / OIDC</li>
+                <li>Auditoría y bitácora inmutable</li>
+                <li>Políticas de permisos y segregación de funciones</li>
+                <li>APIs, webhooks e integración estándar</li>
+                <li>Retención documental y expedientes</li>
+                <li>SLA, ambientes y continuidad operativa</li>
+              </ul>
+            </div>
+            <div class="quote reveal delay-4">
+              <strong>Resultado</strong>
+              <p>
+                La plataforma no solo es atractiva para usuarios. También es aprobable por compras, TI, finanzas y dirección.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-12" data-title="Ask">
+        <div class="slide-inner ask-grid">
+          <div class="stack">
+            <span class="eyebrow reveal">La ronda</span>
+            <h2 class="section-title reveal delay-1">Financiar la capa operativa del real estate inteligente.</h2>
+            <p class="section-copy reveal delay-2">
+              Este deck ya deja clara la tesis. Para la conversación con inversionistas solo falta personalizar el monto de la ronda, hitos de tracción, pipeline comercial y entrada inicial Revit/presupuesto/ERP.
+            </p>
+            <div class="card reveal delay-3">
+              <h3>Uso de fondos sugerido</h3>
+              <div class="allocation">
+                <div class="allocation-row">
+                  <div class="tiny">Producto, presupuestos e IA</div>
+                  <div class="allocation-bar"><div class="allocation-fill" style="width: 38%"></div></div>
+                  <div class="tiny">38%</div>
+                </div>
+                <div class="allocation-row">
+                  <div class="tiny">Integraciones</div>
+                  <div class="allocation-bar"><div class="allocation-fill" style="width: 24%"></div></div>
+                  <div class="tiny">24%</div>
+                </div>
+                <div class="allocation-row">
+                  <div class="tiny">Go-to-market</div>
+                  <div class="allocation-bar"><div class="allocation-fill" style="width: 22%"></div></div>
+                  <div class="tiny">22%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="quote reveal delay-2">
+              <strong>6 semanas de integración</strong>
+              <p>Conectar Revit, presupuesto e integración ERP tipo Microsip en un piloto funcional, con alcance cerrado, datos base y primer tablero de ROI operativo.</p>
+            </div>
+            <div class="card reveal delay-3">
+              <h3>Checklist para cerrar el deck real</h3>
+              <ul class="clean">
+                <li>Agregar pipeline comercial actual y logos de clientes objetivo.</li>
+                <li>Incluir 1-2 casos de uso con ahorro o impacto esperado en obra y operación.</li>
+                <li>Definir alcance del conector Revit y la integración ERP tipo Microsip para el piloto.</li>
+              </ul>
+            </div>
+            <div class="footer-note reveal delay-4">
+              Deck generado desde el PRD. Próximo paso ideal: incorporar números reales de mercado, tracción y monto de la ronda.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="slide-13" data-title="Gracias">
+        <div class="slide-inner manifesto-layout">
+          <span class="eyebrow reveal">Gracias</span>
+          <h2 class="section-title reveal delay-1">Para clientes que construyen, venden y operan activos reales.</h2>
+          <p class="section-copy reveal delay-2">
+            ARCONT existe para que el modelo, el presupuesto, la obra y la operación dejen de vivir separados.
+          </p>
+          <div class="manifesto-panel reveal delay-3">
+            <div class="manifesto-line">Menos recaptura.</div>
+            <div class="manifesto-line">Más trazabilidad.</div>
+            <div class="manifesto-line">Decisiones más rápidas.</div>
+            <div class="manifesto-line">Activos vivos desde el primer día.</div>
+            <p class="manifesto-note">
+              Gracias por construir con nosotros una forma más clara, medible y conectada de operar real estate.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const slides = [...document.querySelectorAll(".slide")];
+      const nav = document.getElementById("deck-nav");
+      const progressBar = document.getElementById("progress-bar");
+      const slideLabel = document.getElementById("slide-label");
+
+      slides.forEach((slide, index) => {
+        const button = document.createElement("button");
+        button.className = "deck-dot" + (index === 0 ? " is-active" : "");
+        button.type = "button";
+        button.setAttribute("aria-label", `Ir a ${slide.dataset.title}`);
+        button.addEventListener("click", () => slide.scrollIntoView({ behavior: "smooth", block: "start" }));
+        nav.appendChild(button);
+      });
+
+      const dots = [...document.querySelectorAll(".deck-dot")];
+
+      function setActiveSlide(index) {
+        slides.forEach((slide, slideIndex) => {
+          slide.classList.toggle("is-active", slideIndex === index);
+        });
+        dots.forEach((dot, dotIndex) => dot.classList.toggle("is-active", dotIndex === index));
+        slideLabel.textContent = `${String(index + 1).padStart(2, "0")} / ${String(slides.length).padStart(2, "0")}`;
+        progressBar.style.width = `${((index + 1) / slides.length) * 100}%`;
+      }
+
+      function scrollToSlide(index, behavior = "auto") {
+        if (index < 0 || index >= slides.length) return;
+        setActiveSlide(index);
+        slides[index].scrollIntoView({ behavior, block: "start" });
+      }
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+          if (!visible) return;
+
+          const index = slides.indexOf(visible.target);
+          if (index >= 0) setActiveSlide(index);
+        },
+        {
+          rootMargin: "-15% 0px -15% 0px",
+          threshold: [0.4, 0.55, 0.7],
+        }
+      );
+
+      slides.forEach((slide) => observer.observe(slide));
+
+      window.addEventListener("keydown", (event) => {
+        const current = slides.findIndex((slide) => slide.classList.contains("is-active"));
+        if (event.key === "ArrowDown" || event.key === "PageDown") {
+          const next = Math.min(current + 1, slides.length - 1);
+          slides[next].scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        if (event.key === "ArrowUp" || event.key === "PageUp") {
+          const prev = Math.max(current - 1, 0);
+          slides[prev].scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+
+      const initialSlideIndex = slides.findIndex((slide) => `#${slide.id}` === window.location.hash);
+      scrollToSlide(initialSlideIndex >= 0 ? initialSlideIndex : 0);
+      if (initialSlideIndex >= 0) {
+        window.setTimeout(() => scrollToSlide(initialSlideIndex), 250);
+        window.setTimeout(() => scrollToSlide(initialSlideIndex), 1100);
+      }
+    </script>
+  </body>
+</html>

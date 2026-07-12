@@ -1,0 +1,22 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 3 - Minimal Beam</title>
+  <defs>
+    <linearGradient id="beamFill" x1="148" y1="110" x2="576" y2="558" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#173A61"/>
+      <stop offset="1" stop-color="#0B1E33"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(130 160)">
+    <path d="M330 24L596 540H472L403 406H257L188 540H64L330 24Z" fill="url(#beamFill)"/>
+    <path d="M330 160L417 324H356V518H304V324H243L330 160Z" fill="#F8FBFF"/>
+    <circle cx="330" cy="102" r="14" fill="#F97316"/>
+    <path d="M205 392H455" stroke="#F97316" stroke-width="14" stroke-linecap="round" stroke-opacity="0.96"/>
+  </g>
+
+  <g transform="translate(760 344)">
+    <text x="0" y="0" fill="#0D2137" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="226" font-weight="800" letter-spacing="6">ARCONT</text>
+    <rect x="8" y="74" width="214" height="12" rx="6" fill="#F97316"/>
+    <text x="12" y="164" fill="#56687B" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="10">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

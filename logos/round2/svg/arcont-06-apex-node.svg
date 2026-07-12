@@ -1,0 +1,37 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 2 - Apex Node</title>
+  <defs>
+    <linearGradient id="apexBody" x1="140" y1="92" x2="610" y2="570" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#123964"/>
+      <stop offset="1" stop-color="#081A2E"/>
+    </linearGradient>
+    <linearGradient id="apexGlow" x1="230" y1="148" x2="498" y2="414" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB266"/>
+      <stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(120 145)">
+    <rect x="96" y="58" width="520" height="520" rx="72" fill="#EFF5FB"/>
+    <rect x="96" y="58" width="520" height="520" rx="72" stroke="#D5E0EB" stroke-width="8"/>
+    <path d="M356 102L566 520H469L412 408H300L243 520H146L356 102Z" fill="url(#apexBody)"/>
+    <path d="M356 214L420 340H374V510H338V340H292L356 214Z" fill="#F8FBFF"/>
+    <path d="M188 448H522" stroke="#7FA0C1" stroke-opacity="0.26" stroke-width="5"/>
+    <path d="M224 374H488" stroke="#7FA0C1" stroke-opacity="0.22" stroke-width="4"/>
+    <path d="M258 304H453" stroke="#7FA0C1" stroke-opacity="0.18" stroke-width="4"/>
+    <path d="M356 138V542" stroke="#7FA0C1" stroke-opacity="0.22" stroke-width="5"/>
+    <path d="M310 210V542" stroke="#7FA0C1" stroke-opacity="0.18" stroke-width="4"/>
+    <path d="M402 210V542" stroke="#7FA0C1" stroke-opacity="0.18" stroke-width="4"/>
+    <circle cx="356" cy="138" r="17" fill="url(#apexGlow)"/>
+    <circle cx="310" cy="304" r="12" fill="#F97316"/>
+    <circle cx="402" cy="304" r="12" fill="#F97316"/>
+    <circle cx="224" cy="448" r="12" fill="#F97316"/>
+    <circle cx="488" cy="448" r="12" fill="#F97316"/>
+  </g>
+
+  <g transform="translate(790 338)">
+    <text x="0" y="0" fill="#0C1F35" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="220" font-weight="800" letter-spacing="6">ARCONT</text>
+    <rect x="10" y="70" width="298" height="12" rx="6" fill="#F97316"/>
+    <text x="12" y="160" fill="#506276" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="10">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARCONT ERP y Costos</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body data-page="erp">
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 56L22 12H32L19 56H9Z" fill="url(#a)"/>
+          <path d="M36 12H46L59 56H49L38 22L36 12Z" fill="url(#b)"/>
+          <path d="M27 36L32 12L38 22L33 30L27 36Z" fill="white"/>
+          <path d="M30 36L35 33V56H30V36Z" fill="#10285B"/>
+          <path d="M35 28L45 34V56H35V28Z" fill="#7AB6E0"/>
+          <defs>
+            <linearGradient id="a" x1="14" y1="56" x2="26" y2="12" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#10285B"/>
+              <stop offset="1" stop-color="#376CAA"/>
+            </linearGradient>
+            <linearGradient id="b" x1="43" y1="12" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#75A7D6"/>
+              <stop offset="1" stop-color="#184982"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div>
+          <strong>ARCONT</strong>
+          <small>ERP Core</small>
+        </div>
+      </div>
+      <div class="sidebar-group">
+        <p class="sidebar-label">Mockups</p>
+        <a class="nav-link" data-nav="index" href="./index.html"><span>Suite Overview</span><span class="nav-pill">05</span></a>
+        <a class="nav-link" data-nav="dashboard" href="./executive-dashboard.html"><span>Executive Dashboard</span><span class="nav-pill">BI</span></a>
+        <a class="nav-link" data-nav="crm" href="./commercial-crm.html"><span>CRM Comercial</span><span class="nav-pill">CRM</span></a>
+        <a class="nav-link" data-nav="erp" href="./erp-costs-procurement.html"><span>ERP y Costos</span><span class="nav-pill">ERP</span></a>
+        <a class="nav-link" data-nav="field" href="./field-lean-quality.html"><span>Campo y Lean</span><span class="nav-pill">Field</span></a>
+      </div>
+      <div class="sidebar-footer">
+        <p>Compras, almacén, contratos, presupuesto y cuentas enlazados con el avance real y el plan de obra.</p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div class="headline">
+          <h1>ERP Core, Costos y Procurement</h1>
+          <p>La trazabilidad financiera deja de vivir aislada: cada requisición, entrada de almacén, estimación y factura se relaciona con frente, torre, contratista y presupuesto objetivo.</p>
+        </div>
+        <div class="top-actions">
+          <span class="chip">Proyecto activo Torre C</span>
+          <span class="button primary">Nueva requisición</span>
+        </div>
+      </div>
+
+      <section class="section-grid">
+        <div class="metric-grid">
+          <article class="metric">
+            <div class="label">Presupuesto base</div>
+            <div class="value">$642M</div>
+            <div class="trend up">Aprobado y congelado</div>
+          </article>
+          <article class="metric">
+            <div class="label">Comprometido</div>
+            <div class="value">$501M</div>
+            <div class="trend warn">78% del plan anual</div>
+          </article>
+          <article class="metric">
+            <div class="label">Ejercido</div>
+            <div class="value">$412M</div>
+            <div class="trend up">64% ejecutado</div>
+          </article>
+          <article class="metric">
+            <div class="label">Variación forecast</div>
+            <div class="value">+2.1%</div>
+            <div class="trend down">Presión en estructura metálica</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-grid cols-2">
+        <article class="card">
+          <h3>Flujo de compras con aprobaciones</h3>
+          <div class="stack">
+            <div class="list-item">
+              <div>
+                <strong>REQ-24018 · Instalación sanitaria</strong>
+                <div class="mini">Frente Torre B · Responsable residente · Monto $1.48M</div>
+              </div>
+              <span class="status warn">Pendiente costos</span>
+            </div>
+            <div class="list-item">
+              <div>
+                <strong>OC-11877 · Elevadores</strong>
+                <div class="mini">Proveedor homologado · Contrato marco · Entrega en 21 días</div>
+              </div>
+              <span class="status ok">Aprobada</span>
+            </div>
+            <div class="list-item">
+              <div>
+                <strong>FAC-9912 · Cancelería</strong>
+                <div class="mini">Recepción parcial confirmada por almacén y calidad.</div>
+              </div>
+              <span class="status info">En conciliación</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Control de costos por centro</h3>
+          <table class="table">
+            <thead>
+              <tr><th>Centro</th><th>Presupuesto</th><th>Forecast</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Estructura</td><td>$88M</td><td>$90.2M</td></tr>
+              <tr><td>Acabados</td><td>$62M</td><td>$61.4M</td></tr>
+              <tr><td>MEP</td><td>$124M</td><td>$129.7M</td></tr>
+              <tr><td>Urbanización</td><td>$36M</td><td>$35.1M</td></tr>
+            </tbody>
+          </table>
+        </article>
+      </section>
+
+      <section class="section-grid cols-3">
+        <article class="card">
+          <h3>Almacén y suministro</h3>
+          <ul class="list">
+            <li class="list-item">
+              <div>
+                <strong>Acero corrugado</strong>
+                <div class="mini">Stock 12 días, consumo acelerado por frente sur.</div>
+              </div>
+              <span class="status warn">Reorden</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>Yeso y plafón</strong>
+                <div class="mini">Cobertura 21 días, sin riesgo.</div>
+              </div>
+              <span class="status ok">Óptimo</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>Tubería sanitaria</strong>
+                <div class="mini">Recepción parcial hoy, liberar calidad antes de salida.</div>
+              </div>
+              <span class="status info">En patio</span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Cuentas y flujo</h3>
+          <div class="stack">
+            <div>
+              <strong>Cuentas por pagar conciliadas</strong>
+              <div class="progress"><span data-fill="79"></span></div>
+            </div>
+            <div>
+              <strong>Cobranza inmobiliaria</strong>
+              <div class="progress"><span data-fill="91"></span></div>
+            </div>
+            <div>
+              <strong>Órdenes con soporte documental completo</strong>
+              <div class="progress"><span data-fill="86"></span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Gobernanza</h3>
+          <div class="tag-row">
+            <span class="tag">Segregación de funciones</span>
+            <span class="tag">Workflow multinivel</span>
+            <span class="tag">Auditoría</span>
+          </div>
+          <p class="mini">Nadie puede crear proveedor y aprobar pago en el mismo flujo. Las recepciones de almacén exigen cruce con OC, evidencia y validación de alcance.</p>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="./assets/app.js"></script>
+</body>
+</html>

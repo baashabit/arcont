@@ -1,0 +1,43 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Round 2 - Tech Frame</title>
+  <defs>
+    <linearGradient id="frameBody" x1="128" y1="95" x2="595" y2="564" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#173B61"/>
+      <stop offset="1" stop-color="#09192B"/>
+    </linearGradient>
+    <linearGradient id="frameAccent" x1="264" y1="154" x2="438" y2="461" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFB36B"/>
+      <stop offset="1" stop-color="#F97316"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(112 145)">
+    <rect x="86" y="66" width="528" height="528" rx="86" fill="#0E2238"/>
+    <rect x="118" y="98" width="464" height="464" rx="62" stroke="#D7E3EE" stroke-opacity="0.18" stroke-width="8"/>
+    <path d="M350 120L518 510H428L390 417H310L272 510H182L350 120Z" fill="url(#frameBody)"/>
+    <path d="M350 220L398 335H365V502H335V335H302L350 220Z" fill="#F8FBFF"/>
+
+    <g stroke="#8FAECC" stroke-opacity="0.28" stroke-width="4">
+      <line x1="184" y1="470" x2="516" y2="470"/>
+      <line x1="212" y1="406" x2="488" y2="406"/>
+      <line x1="242" y1="342" x2="458" y2="342"/>
+      <line x1="350" y1="154" x2="350" y2="530"/>
+      <line x1="306" y1="218" x2="306" y2="530"/>
+      <line x1="394" y1="218" x2="394" y2="530"/>
+    </g>
+
+    <path d="M150 150H252" stroke="url(#frameAccent)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M448 150H550" stroke="url(#frameAccent)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M150 510H252" stroke="url(#frameAccent)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M448 510H550" stroke="url(#frameAccent)" stroke-width="14" stroke-linecap="round"/>
+    <circle cx="350" cy="154" r="16" fill="#F97316"/>
+    <circle cx="242" cy="342" r="11" fill="#F97316"/>
+    <circle cx="458" cy="342" r="11" fill="#F97316"/>
+  </g>
+
+  <g transform="translate(790 338)">
+    <text x="0" y="0" fill="#0D1F34" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="220" font-weight="800" letter-spacing="6">ARCONT</text>
+    <rect x="8" y="72" width="560" height="12" rx="6" fill="#F97316"/>
+    <text x="12" y="160" fill="#536476" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" letter-spacing="10">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

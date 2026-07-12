@@ -1,0 +1,36 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Logo Concept 02 - Control Shield</title>
+  <defs>
+    <linearGradient id="shieldBase" x1="142" y1="48" x2="598" y2="552" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#11A36C"/>
+      <stop offset="1" stop-color="#0F5C4A"/>
+    </linearGradient>
+    <linearGradient id="shieldAccent" x1="232" y1="123" x2="482" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B8FFE2"/>
+      <stop offset="1" stop-color="#E8FFF5"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(110 160)">
+    <path d="M370 0L650 110V320C650 483 534 625 370 670C206 625 90 483 90 320V110L370 0Z" fill="url(#shieldBase)"/>
+    <path d="M370 56L595 144V318C595 451 501 564 370 611C239 564 145 451 145 318V144L370 56Z" fill="#0E2238" fill-opacity="0.16" stroke="white" stroke-opacity="0.28" stroke-width="6"/>
+
+    <g stroke="white" stroke-opacity="0.22" stroke-width="4">
+      <line x1="238" y1="158" x2="238" y2="502"/>
+      <line x1="370" y1="116" x2="370" y2="546"/>
+      <line x1="502" y1="158" x2="502" y2="502"/>
+      <line x1="186" y1="260" x2="554" y2="260"/>
+      <line x1="165" y1="352" x2="575" y2="352"/>
+      <line x1="205" y1="444" x2="535" y2="444"/>
+    </g>
+
+    <path d="M262 372L341 452L492 264" stroke="url(#shieldAccent)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M244 223L370 133L496 223V316C496 416 443 486 370 526C297 486 244 416 244 316V223Z" stroke="white" stroke-opacity="0.78" stroke-width="12"/>
+  </g>
+
+  <g transform="translate(765 344)">
+    <text x="0" y="0" fill="#0D1B2A" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="216" font-weight="800" letter-spacing="4">ARCONT</text>
+    <text x="8" y="92" fill="#11A36C" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="58" font-weight="800" letter-spacing="10">CONTROL GARANTIZADO</text>
+    <rect x="8" y="126" width="514" height="10" rx="5" fill="#11A36C" fill-opacity="0.22"/>
+  </g>
+</svg>

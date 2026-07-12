@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARCONT CRM Comercial</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body data-page="crm">
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 56L22 12H32L19 56H9Z" fill="url(#a)"/>
+          <path d="M36 12H46L59 56H49L38 22L36 12Z" fill="url(#b)"/>
+          <path d="M27 36L32 12L38 22L33 30L27 36Z" fill="white"/>
+          <path d="M30 36L35 33V56H30V36Z" fill="#10285B"/>
+          <path d="M35 28L45 34V56H35V28Z" fill="#7AB6E0"/>
+          <defs>
+            <linearGradient id="a" x1="14" y1="56" x2="26" y2="12" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#10285B"/>
+              <stop offset="1" stop-color="#376CAA"/>
+            </linearGradient>
+            <linearGradient id="b" x1="43" y1="12" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#75A7D6"/>
+              <stop offset="1" stop-color="#184982"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div>
+          <strong>ARCONT</strong>
+          <small>Customer & Sales</small>
+        </div>
+      </div>
+      <div class="sidebar-group">
+        <p class="sidebar-label">Mockups</p>
+        <a class="nav-link" data-nav="index" href="./index.html"><span>Suite Overview</span><span class="nav-pill">05</span></a>
+        <a class="nav-link" data-nav="dashboard" href="./executive-dashboard.html"><span>Executive Dashboard</span><span class="nav-pill">BI</span></a>
+        <a class="nav-link" data-nav="crm" href="./commercial-crm.html"><span>CRM Comercial</span><span class="nav-pill">CRM</span></a>
+        <a class="nav-link" data-nav="erp" href="./erp-costs-procurement.html"><span>ERP y Costos</span><span class="nav-pill">ERP</span></a>
+        <a class="nav-link" data-nav="field" href="./field-lean-quality.html"><span>Campo y Lean</span><span class="nav-pill">Field</span></a>
+      </div>
+      <div class="sidebar-footer">
+        <p>Vista comercial con pipeline, inventario conectado al gemelo digital y omnicanalidad en una sola operación.</p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div class="headline">
+          <h1>CRM Comercial y Customer Journey</h1>
+          <p>Lead, oportunidad, reserva, cierre, escrituración, entrega y postventa viajan sobre el mismo registro del cliente y la misma unidad.</p>
+        </div>
+        <div class="top-actions">
+          <div class="segmented"><span class="active">Ventas</span><span>Postventa</span><span>Omnicanal</span></div>
+          <span class="button primary">Nuevo lead</span>
+        </div>
+      </div>
+
+      <section class="section-grid cols-2">
+        <article class="card">
+          <h3>Pipeline comercial</h3>
+          <div class="kanban">
+            <div class="lane">
+              <h4>Captado</h4>
+              <div class="task">
+                <strong>María Ponce</strong>
+                <div class="mini">Canal: Meta Ads · Score IA 89</div>
+                <span class="status info">Torre B</span>
+              </div>
+              <div class="task">
+                <strong>Grupo InverHab</strong>
+                <div class="mini">Canal: Referido · Ticket alto</div>
+                <span class="status warn">Multiunidad</span>
+              </div>
+            </div>
+            <div class="lane">
+              <h4>Visita</h4>
+              <div class="task">
+                <strong>Laura y Arturo</strong>
+                <div class="mini">Prefieren 2 recámaras y vista norte</div>
+                <span class="status ok">Agendado</span>
+              </div>
+            </div>
+            <div class="lane">
+              <h4>Reserva</h4>
+              <div class="task">
+                <strong>Depto C-1406</strong>
+                <div class="mini">Reserva vigente por 72 horas</div>
+                <span class="status warn">Pendiente anticipo</span>
+              </div>
+            </div>
+            <div class="lane">
+              <h4>Cierre</h4>
+              <div class="task">
+                <strong>Casa V-27</strong>
+                <div class="mini">Promesa firmada, expediente legal 94%</div>
+                <span class="status ok">Listo para escrituración</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Unidad recomendada por IA</h3>
+          <div class="tag-row">
+            <span class="tag">Lead score 91</span>
+            <span class="tag">Afinidad familiar</span>
+            <span class="tag">Entrega en 8 semanas</span>
+          </div>
+          <svg class="sparkline" viewBox="0 0 520 260" xmlns="http://www.w3.org/2000/svg">
+            <rect x="48" y="42" width="108" height="164" rx="20" fill="#173C72"/>
+            <rect x="166" y="22" width="108" height="184" rx="20" fill="#2F6FAE"/>
+            <rect x="284" y="66" width="108" height="140" rx="20" fill="#9CC9EA"/>
+            <path d="M166 44L220 76L220 206L166 206Z" fill="rgba(255,255,255,0.08)"/>
+            <circle cx="444" cy="90" r="44" fill="rgba(28,94,168,0.1)"/>
+            <path d="M424 90L438 104L466 76" stroke="#1C5EA8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          <p class="mini">La IA sugiere unidad C-1406 por compatibilidad con presupuesto, orientación térmica, avance real de obra y menor riesgo de postventa inicial.</p>
+        </article>
+      </section>
+
+      <section class="section-grid cols-3">
+        <article class="card">
+          <h3>Central telefónica y bots</h3>
+          <ul class="list">
+            <li class="list-item">
+              <div>
+                <strong>Bot de preventa</strong>
+                <div class="mini">Califica leads, responde disponibilidad y agenda cita.</div>
+              </div>
+              <span class="status ok">Activo</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>PBX virtual</strong>
+                <div class="mini">IVR por proyecto, grabación y resumen automático por llamada.</div>
+              </div>
+              <span class="status info">18 líneas</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>WhatsApp Business</strong>
+                <div class="mini">Mensajería saliente para reservas, entregas y postventa.</div>
+              </div>
+              <span class="status ok">92% SLA</span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Sembrados comerciales</h3>
+          <table class="table">
+            <thead>
+              <tr><th>Cluster</th><th>Disponibles</th><th>Reservadas</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Torre A</td><td>18</td><td>24</td></tr>
+              <tr><td>Torre B</td><td>22</td><td>17</td></tr>
+              <tr><td>Villas Norte</td><td>14</td><td>31</td></tr>
+              <tr><td>Lofts Patio</td><td>9</td><td>12</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <h3>Entrega y postventa temprana</h3>
+          <div class="stack">
+            <div>
+              <strong>Expedientes completos</strong>
+              <div class="progress"><span data-fill="88"></span></div>
+            </div>
+            <div>
+              <strong>Unidades con checklist técnico</strong>
+              <div class="progress"><span data-fill="81"></span></div>
+            </div>
+            <div>
+              <strong>Tickets resueltos en primer contacto</strong>
+              <div class="progress"><span data-fill="74"></span></div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="./assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<svg width="1600" height="1600" viewBox="0 0 1600 1600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Apex City Stacked</title>
+  <defs>
+    <linearGradient id="outerLeft" x1="356" y1="256" x2="654" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0C75B8"/>
+      <stop offset="1" stop-color="#0B2E57"/>
+    </linearGradient>
+    <linearGradient id="outerRight" x1="792" y1="222" x2="1090" y2="762" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7EC5F3"/>
+      <stop offset="1" stop-color="#1A568E"/>
+    </linearGradient>
+    <linearGradient id="towerDark" x1="642" y1="510" x2="642" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#144A7D"/>
+      <stop offset="1" stop-color="#0B2E57"/>
+    </linearGradient>
+    <linearGradient id="towerMid" x1="770" y1="428" x2="770" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#71C0F0"/>
+      <stop offset="1" stop-color="#1C6DA8"/>
+    </linearGradient>
+    <linearGradient id="towerLight" x1="902" y1="524" x2="902" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B6E1F8"/>
+      <stop offset="1" stop-color="#5AAEE2"/>
+    </linearGradient>
+  </defs>
+
+  <g>
+    <path d="M510 760L650 320H786L608 760H510Z" fill="url(#outerLeft)"/>
+    <path d="M792 320H930L1090 760H994L872 432L792 320Z" fill="url(#outerRight)"/>
+    <path d="M682 458L792 320L860 414L778 520L682 458Z" fill="#F7FBFF"/>
+
+    <path d="M688 546L752 510V760H688V546Z" fill="url(#towerDark)"/>
+    <path d="M752 468L840 418V760H752V468Z" fill="url(#towerMid)"/>
+    <path d="M840 556L964 624V760H840V556Z" fill="url(#towerLight)"/>
+
+    <path d="M752 510L840 460" stroke="#E8F5FD" stroke-width="6" stroke-linecap="round"/>
+    <path d="M840 624L964 692" stroke="#D7EEF9" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
+  </g>
+
+  <g transform="translate(0 72)">
+    <text x="800" y="914" text-anchor="middle" fill="#364252" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="150" font-weight="800" letter-spacing="3">ARCONT</text>
+    <text x="800" y="1012" text-anchor="middle" fill="#415066" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="50" font-weight="500" letter-spacing="8">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

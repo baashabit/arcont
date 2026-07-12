@@ -1,0 +1,36 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Apex City Icon</title>
+  <defs>
+    <linearGradient id="iconLeft" x1="168" y1="126" x2="446" y2="744" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0C75B8"/>
+      <stop offset="1" stop-color="#0B2E57"/>
+    </linearGradient>
+    <linearGradient id="iconRight" x1="496" y1="118" x2="842" y2="750" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7EC5F3"/>
+      <stop offset="1" stop-color="#1A568E"/>
+    </linearGradient>
+    <linearGradient id="iconTowerDark" x1="430" y1="430" x2="430" y2="770" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#144A7D"/>
+      <stop offset="1" stop-color="#0B2E57"/>
+    </linearGradient>
+    <linearGradient id="iconTowerMid" x1="514" y1="334" x2="514" y2="770" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#71C0F0"/>
+      <stop offset="1" stop-color="#1C6DA8"/>
+    </linearGradient>
+    <linearGradient id="iconTowerLight" x1="638" y1="462" x2="638" y2="770" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B6E1F8"/>
+      <stop offset="1" stop-color="#5AAEE2"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M218 770L388 214H548L336 770H218Z" fill="url(#iconLeft)"/>
+  <path d="M560 214H724L862 770H744L642 412L560 214Z" fill="url(#iconRight)"/>
+  <path d="M428 388L560 214L642 328L542 458L428 388Z" fill="#F7FBFF"/>
+
+  <path d="M432 492L500 454V770H432V492Z" fill="url(#iconTowerDark)"/>
+  <path d="M500 406L594 352V770H500V406Z" fill="url(#iconTowerMid)"/>
+  <path d="M594 518L716 584V770H594V518Z" fill="url(#iconTowerLight)"/>
+
+  <path d="M500 454L594 402" stroke="#E8F5FD" stroke-width="6" stroke-linecap="round"/>
+  <path d="M594 584L716 650" stroke="#D7EEF9" stroke-width="6" stroke-linecap="round" opacity="0.75"/>
+</svg>

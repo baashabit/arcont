@@ -1,0 +1,41 @@
+<svg width="1600" height="1600" viewBox="0 0 1600 1600" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Enterprise Clean</title>
+  <defs>
+    <linearGradient id="archLeft" x1="485" y1="755" x2="660" y2="270" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10285B"/>
+      <stop offset="1" stop-color="#2F65A1"/>
+    </linearGradient>
+    <linearGradient id="archRight" x1="850" y1="270" x2="1025" y2="755" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6E9CCB"/>
+      <stop offset="1" stop-color="#194B84"/>
+    </linearGradient>
+    <linearGradient id="towerLeft" x1="735" y1="770" x2="735" y2="505" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#091530"/>
+      <stop offset="1" stop-color="#153165"/>
+    </linearGradient>
+    <linearGradient id="towerRight" x1="850" y1="770" x2="850" y2="445" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4D92C5"/>
+      <stop offset="1" stop-color="#9FD0EA"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="1600" fill="white"/>
+
+  <g>
+    <path d="M462 770L627 252H760L596 770H462Z" fill="url(#archLeft)"/>
+    <path d="M836 252H969L1138 770H1002L861 345L836 252Z" fill="url(#archRight)"/>
+
+    <path d="M690 480L792 252L878 404L770 554L690 480Z" fill="white"/>
+
+    <path d="M735 548L799 515V770H735V548Z" fill="url(#towerLeft)"/>
+    <path d="M799 462L928 543V770H799V462Z" fill="url(#towerRight)"/>
+
+    <path d="M799 515L928 595" stroke="#D7EEF8" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+    <path d="M928 543L928 770" stroke="#D7EEF8" stroke-width="4" opacity="0.55"/>
+  </g>
+
+  <g>
+    <text x="800" y="982" text-anchor="middle" fill="#0F1B33" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="218" font-weight="800" letter-spacing="2">ARCONT</text>
+    <text x="800" y="1116" text-anchor="middle" fill="#1A253B" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="300" letter-spacing="13">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

@@ -1,0 +1,25 @@
+{
+  "name": "@arcont/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "predev": "npm run build -w @arcont/contracts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@arcont/contracts": "0.1.0",
+    "@fastify/cors": "^11.1.0",
+    "dotenv": "^17.2.1",
+    "fastify": "^5.6.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARCONT Round 3 Minimal</title>
+    <style>
+      :root {
+        --bg: #edf2f7;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --card: rgba(255,255,255,0.9);
+        --border: rgba(148,163,184,0.26);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(249,115,22,0.18), transparent 25%),
+          radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 22%),
+          linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      }
+      .wrap {
+        max-width: 1700px;
+        margin: 0 auto;
+        padding: 46px 28px 68px;
+      }
+      h1 { margin: 0; font-size: 46px; }
+      p { margin: 12px 0 0; color: var(--muted); font-size: 19px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 28px;
+        margin-top: 34px;
+      }
+      .card {
+        padding: 22px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
+      }
+      .tag {
+        display: inline-block;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #334155;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 1.4px;
+      }
+      h2 { margin: 14px 0 8px; font-size: 28px; }
+      .desc { margin: 0 0 18px; font-size: 16px; line-height: 1.5; }
+      .artboard {
+        overflow: hidden;
+        border-radius: 22px;
+        border: 1px solid rgba(203, 213, 225, 0.72);
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      }
+      .artboard img { width: 100%; display: block; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>ARCONT • Ronda 3 Minimalista</h1>
+      <p>Cuatro direcciones mas limpias y refinadas, manteniendo la A estructural y la sensacion de control, pero con menos elementos visuales.</p>
+
+      <section class="grid">
+        <article class="card">
+          <span class="tag">OPCION 09</span>
+          <h2>Minimal Beam</h2>
+          <p class="desc">La mas sobria y balanceada. Muy buena para marca principal y aplicaciones corporativas.</p>
+          <div class="artboard"><img src="../svg/arcont-09-minimal-beam.svg" alt="ARCONT Minimal Beam" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 10</span>
+          <h2>Monoline Apex</h2>
+          <p class="desc">La mas minimalista de todas. Se acerca mas a una identidad elegante y contemporanea.</p>
+          <div class="artboard"><img src="../svg/arcont-10-monoline-apex.svg" alt="ARCONT Monoline Apex" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 11</span>
+          <h2>Architect Mark</h2>
+          <p class="desc">Minimal, pero todavia con suficiente presencia tecnica para conectar con construccion y metodologia.</p>
+          <div class="artboard"><img src="../svg/arcont-11-architect-mark.svg" alt="ARCONT Architect Mark" /></div>
+        </article>
+
+        <article class="card">
+          <span class="tag">OPCION 12</span>
+          <h2>Iconic Axis</h2>
+          <p class="desc">La mas fuerte como icono. Muy util si quieres que la marca funcione bien en app, software o avatar.</p>
+          <div class="artboard"><img src="../svg/arcont-12-iconic-axis.svg" alt="ARCONT Iconic Axis" /></div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

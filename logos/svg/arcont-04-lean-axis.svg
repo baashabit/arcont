@@ -1,0 +1,33 @@
+<svg width="2000" height="1200" viewBox="0 0 2000 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>ARCONT Logo Concept 04 - Lean Axis</title>
+  <defs>
+    <linearGradient id="axisRed" x1="122" y1="120" x2="610" y2="508" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0592A"/>
+      <stop offset="1" stop-color="#C53030"/>
+    </linearGradient>
+    <linearGradient id="axisSteel" x1="221" y1="70" x2="544" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1F334B"/>
+      <stop offset="1" stop-color="#0D1723"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(105 170)">
+    <rect x="112" y="48" width="476" height="476" rx="72" fill="url(#axisSteel)"/>
+    <rect x="144" y="80" width="412" height="412" rx="48" stroke="white" stroke-opacity="0.18" stroke-width="8"/>
+
+    <path d="M251 402L350 148L449 402H396L350 286L304 402H251Z" fill="white"/>
+    <path d="M472 186C440 162 400 150 358 150C257 150 175 232 175 333C175 434 257 516 358 516C404 516 447 499 480 469" stroke="url(#axisRed)" stroke-width="44" stroke-linecap="round"/>
+
+    <path d="M120 286H56" stroke="#F0592A" stroke-width="16" stroke-linecap="round"/>
+    <path d="M644 286H580" stroke="#F0592A" stroke-width="16" stroke-linecap="round"/>
+    <path d="M350 56V120" stroke="#F0592A" stroke-width="16" stroke-linecap="round"/>
+    <path d="M350 580V516" stroke="#F0592A" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="350" cy="286" r="214" stroke="#F0592A" stroke-opacity="0.18" stroke-width="12" stroke-dasharray="22 18"/>
+  </g>
+
+  <g transform="translate(760 338)">
+    <text x="0" y="0" fill="#111827" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="218" font-weight="900" letter-spacing="5">ARCONT</text>
+    <rect x="8" y="74" width="200" height="14" rx="7" fill="#F0592A"/>
+    <text x="8" y="164" fill="#C53030" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="10">CONTROL GARANTIZADO</text>
+  </g>
+</svg>

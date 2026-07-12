@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARCONT Logos</title>
+    <style>
+      :root {
+        --bg: #edf2f7;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --card: rgba(255, 255, 255, 0.86);
+        --border: rgba(148, 163, 184, 0.3);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(249, 115, 22, 0.18), transparent 28%),
+          radial-gradient(circle at top right, rgba(29, 78, 216, 0.14), transparent 24%),
+          linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      }
+      .wrap {
+        max-width: 1680px;
+        margin: 0 auto;
+        padding: 48px 32px 64px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 48px;
+        letter-spacing: 1px;
+      }
+      p {
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 20px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 28px;
+        margin-top: 36px;
+      }
+      .card {
+        padding: 24px;
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        background: var(--card);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 22px 50px rgba(15, 23, 42, 0.08);
+      }
+      .label {
+        display: inline-block;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #334155;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 1.6px;
+      }
+      .title {
+        margin: 16px 0 8px;
+        font-size: 28px;
+        font-weight: 800;
+      }
+      .desc {
+        margin: 0 0 18px;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+      .artboard {
+        border-radius: 24px;
+        overflow: hidden;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid rgba(203, 213, 225, 0.7);
+      }
+      .artboard img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <h1>ARCONT • Exploracion de logo</h1>
+      <p>Cuatro direcciones visuales con enfoque en software de construccion, control, BIM y precision tecnica.</p>
+
+      <section class="grid">
+        <article class="card">
+          <span class="label">CONCEPTO 01</span>
+          <h2 class="title">Precision Grid</h2>
+          <p class="desc">Una A estructural con reticula tipo plano y nodos de control. Comunica ingenieria, trazabilidad y tecnologia aplicada.</p>
+          <div class="artboard"><img src="../svg/arcont-01-precision-grid.svg" alt="ARCONT precision grid" /></div>
+        </article>
+
+        <article class="card">
+          <span class="label">CONCEPTO 02</span>
+          <h2 class="title">Control Shield</h2>
+          <p class="desc">Direccion corporativa y confiable. El escudo con check transmite supervision, garantia y seguridad operativa.</p>
+          <div class="artboard"><img src="../svg/arcont-02-control-shield.svg" alt="ARCONT control shield" /></div>
+        </article>
+
+        <article class="card">
+          <span class="label">CONCEPTO 03</span>
+          <h2 class="title">BIM Orbit</h2>
+          <p class="desc">Mas digital y avanzado. El cubo orbital sugiere modelado, coordinacion BIM, integracion de datos y vision de plataforma.</p>
+          <div class="artboard"><img src="../svg/arcont-03-bim-orbit.svg" alt="ARCONT BIM orbit" /></div>
+        </article>
+
+        <article class="card">
+          <span class="label">CONCEPTO 04</span>
+          <h2 class="title">Lean Axis</h2>
+          <p class="desc">Monograma fuerte con ejes de control y direccion operativa. Busca verse firme, directo y facil de recordar.</p>
+          <div class="artboard"><img src="../svg/arcont-04-lean-axis.svg" alt="ARCONT lean axis" /></div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

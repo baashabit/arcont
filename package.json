@@ -1,0 +1,20 @@
+{
+  "name": "arcont",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "frontend/arcont-suite",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @arcont/api",
+    "build:api": "npm run build -w @arcont/api",
+    "lint:api": "npm run lint -w @arcont/api",
+    "dev:web": "npm run dev -w arcont-suite",
+    "build:web": "npm run build -w arcont-suite",
+    "lint:web": "npm run lint -w arcont-suite",
+    "build:contracts": "npm run build -w @arcont/contracts",
+    "build": "npm run build:contracts && npm run build:api && npm run build:web",
+    "lint": "npm run build:contracts && npm run lint:api && npm run lint:web"
+  }
+}

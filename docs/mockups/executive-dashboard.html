@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARCONT Executive Dashboard</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+</head>
+<body data-page="dashboard">
+  <div class="page-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 56L22 12H32L19 56H9Z" fill="url(#a)"/>
+          <path d="M36 12H46L59 56H49L38 22L36 12Z" fill="url(#b)"/>
+          <path d="M27 36L32 12L38 22L33 30L27 36Z" fill="white"/>
+          <path d="M30 36L35 33V56H30V36Z" fill="#10285B"/>
+          <path d="M35 28L45 34V56H35V28Z" fill="#7AB6E0"/>
+          <defs>
+            <linearGradient id="a" x1="14" y1="56" x2="26" y2="12" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#10285B"/>
+              <stop offset="1" stop-color="#376CAA"/>
+            </linearGradient>
+            <linearGradient id="b" x1="43" y1="12" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#75A7D6"/>
+              <stop offset="1" stop-color="#184982"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div>
+          <strong>ARCONT</strong>
+          <small>Real Estate OS</small>
+        </div>
+      </div>
+      <div class="sidebar-group">
+        <p class="sidebar-label">Mockups</p>
+        <a class="nav-link" data-nav="index" href="./index.html"><span>Suite Overview</span><span class="nav-pill">05</span></a>
+        <a class="nav-link" data-nav="dashboard" href="./executive-dashboard.html"><span>Executive Dashboard</span><span class="nav-pill">BI</span></a>
+        <a class="nav-link" data-nav="crm" href="./commercial-crm.html"><span>CRM Comercial</span><span class="nav-pill">CRM</span></a>
+        <a class="nav-link" data-nav="erp" href="./erp-costs-procurement.html"><span>ERP y Costos</span><span class="nav-pill">ERP</span></a>
+        <a class="nav-link" data-nav="field" href="./field-lean-quality.html"><span>Campo y Lean</span><span class="nav-pill">Field</span></a>
+      </div>
+      <div class="sidebar-footer">
+        <p>Vista para dirección general, desarrollo, finanzas y operaciones con lectura transversal del portafolio.</p>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div class="headline">
+          <h1>Executive Dashboard</h1>
+          <p>Portafolio vivo con absorción comercial, salud financiera, confiabilidad Lean, readiness de entrega y continuidad operación-activo en una sola vista.</p>
+        </div>
+        <div class="top-actions">
+          <span class="chip">Corte ejecutivo <strong data-now></strong></span>
+          <span class="button primary">Portfolio view</span>
+        </div>
+      </div>
+
+      <section class="hero">
+        <div>
+          <h2>Las decisiones críticas dejan de depender de consolidaciones manuales.</h2>
+          <p>La dirección ve el portafolio desde la mezcla de producto y la absorción comercial hasta la variación por etapa, el PPC semanal, la cartera, la postventa y los activos conectados.</p>
+          <div class="hero-meta">
+            <div class="hero-metric">
+              <strong>91%</strong>
+              <span>Readiness de entrega promedio</span>
+            </div>
+            <div class="hero-metric">
+              <strong>84%</strong>
+              <span>PPC rolling 4 semanas</span>
+            </div>
+            <div class="hero-metric">
+              <strong>+12.8%</strong>
+              <span>Absorción sobre plan</span>
+            </div>
+          </div>
+        </div>
+        <div class="hero-graphic">
+          <svg viewBox="0 0 420 300" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="line" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#7AD9E8"/>
+                <stop offset="100%" stop-color="#4A88C5"/>
+              </linearGradient>
+            </defs>
+            <rect x="36" y="34" width="348" height="220" rx="28" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.14)"/>
+            <path d="M64 200C104 178 120 184 154 146C188 108 213 120 258 86C290 62 326 54 356 50" stroke="url(#line)" stroke-width="6" fill="none" stroke-linecap="round"/>
+            <circle cx="154" cy="146" r="8" fill="#7AD9E8"/>
+            <circle cx="258" cy="86" r="8" fill="#7AD9E8"/>
+            <circle cx="356" cy="50" r="8" fill="#7AD9E8"/>
+            <rect x="64" y="70" width="54" height="116" rx="16" fill="rgba(255,255,255,0.12)"/>
+            <rect x="128" y="108" width="54" height="78" rx="16" fill="rgba(255,255,255,0.18)"/>
+            <rect x="192" y="92" width="54" height="94" rx="16" fill="rgba(123,216,232,0.18)"/>
+            <rect x="256" y="132" width="54" height="54" rx="16" fill="rgba(255,255,255,0.12)"/>
+          </svg>
+        </div>
+      </section>
+
+      <section class="section-grid">
+        <div class="metric-grid">
+          <article class="metric">
+            <div class="label">Ingreso Neto</div>
+            <div class="value">$184.2M</div>
+            <div class="trend up">+6.4% vs forecast</div>
+          </article>
+          <article class="metric">
+            <div class="label">Costo comprometido</div>
+            <div class="value">78%</div>
+            <div class="trend warn">3 torres con presión de compra</div>
+          </article>
+          <article class="metric">
+            <div class="label">Tickets críticos</div>
+            <div class="value">14</div>
+            <div class="trend down">2 vencen hoy</div>
+          </article>
+          <article class="metric">
+            <div class="label">Activos conectados</div>
+            <div class="value">1,286</div>
+            <div class="trend up">97.9% reportando</div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-grid cols-2">
+        <article class="card">
+          <h3>Portafolio por etapa y torre</h3>
+          <div class="stack">
+            <div>
+              <div class="list-item">
+                <div>
+                  <strong>Torre A / Etapa 2</strong>
+                  <div class="mini">Absorción 72%, costo +1.8%, readiness 94%.</div>
+                </div>
+                <span class="status ok">Salud alta</span>
+              </div>
+              <div class="progress"><span data-fill="94"></span></div>
+            </div>
+            <div>
+              <div class="list-item">
+                <div>
+                  <strong>Torre C / Etapa 1</strong>
+                  <div class="mini">Absorción 61%, restricciones HVAC y elevadores abiertas.</div>
+                </div>
+                <span class="status warn">Riesgo medio</span>
+              </div>
+              <div class="progress"><span data-fill="68"></span></div>
+            </div>
+            <div>
+              <div class="list-item">
+                <div>
+                  <strong>Cluster Villas Norte</strong>
+                  <div class="mini">Sembrado estabilizado, cartera saludable, punch list bajo control.</div>
+                </div>
+                <span class="status ok">En objetivo</span>
+              </div>
+              <div class="progress"><span data-fill="87"></span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Radar ejecutivo</h3>
+          <div class="tag-row">
+            <span class="tag">Ventas</span>
+            <span class="tag">Lean</span>
+            <span class="tag">Postventa</span>
+            <span class="tag">Legal</span>
+            <span class="tag">IoT</span>
+          </div>
+          <svg class="sparkline" viewBox="0 0 520 260" xmlns="http://www.w3.org/2000/svg">
+            <g opacity="0.16" stroke="#12366D">
+              <circle cx="260" cy="130" r="100" fill="none"/>
+              <circle cx="260" cy="130" r="70" fill="none"/>
+              <circle cx="260" cy="130" r="40" fill="none"/>
+            </g>
+            <path d="M260 18L330 92L416 110L342 176L352 238L260 208L168 238L178 176L104 110L190 92Z" fill="rgba(117,215,231,0.18)" stroke="#75D7E7" stroke-width="4"/>
+            <path d="M260 36L316 102L382 116L330 166L336 214L260 190L184 214L190 166L138 116L204 102Z" fill="rgba(28,94,168,0.18)" stroke="#1C5EA8" stroke-width="4"/>
+          </svg>
+        </article>
+      </section>
+
+      <section class="section-grid cols-3">
+        <article class="card">
+          <h3>Alertas del día</h3>
+          <ul class="list">
+            <li class="list-item">
+              <div>
+                <strong>Contrato de urbanización vence en 5 días</strong>
+                <div class="mini">Legal y compras requieren firma para no frenar entrega de vialidades.</div>
+              </div>
+              <span class="status alert">Legal</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>Consumo fuera de horario en Torre C</strong>
+                <div class="mini">AI detectó patrón anómalo en bombas de presión.</div>
+              </div>
+              <span class="status warn">IoT</span>
+            </li>
+            <li class="list-item">
+              <div>
+                <strong>PPC cayó bajo 80% en acabados</strong>
+                <div class="mini">Se repite causa raíz por materiales no liberados.</div>
+              </div>
+              <span class="status info">Lean</span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>Embudo comercial consolidado</h3>
+          <table class="table">
+            <thead>
+              <tr><th>Etapa</th><th>Volumen</th><th>Conversión</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Leads</td><td>2,486</td><td>100%</td></tr>
+              <tr><td>Reservas</td><td>424</td><td>17.1%</td></tr>
+              <tr><td>Cierres</td><td>218</td><td>8.8%</td></tr>
+              <tr><td>Entregas listas</td><td>174</td><td>79.8%</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <h3>Salud financiera y de costos</h3>
+          <div class="stack">
+            <div>
+              <strong>CapEx forecast</strong>
+              <div class="progress"><span data-fill="82"></span></div>
+              <div class="mini">82% del presupuesto anual ya comprometido.</div>
+            </div>
+            <div>
+              <strong>Cobranza efectiva</strong>
+              <div class="progress"><span data-fill="91"></span></div>
+              <div class="mini">Cartera vencida controlada en 4.2%.</div>
+            </div>
+            <div>
+              <strong>Facturas conciliadas</strong>
+              <div class="progress"><span data-fill="76"></span></div>
+              <div class="mini">Mayor brecha en instalaciones especiales.</div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="./assets/app.js"></script>
+</body>
+</html>
