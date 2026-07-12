@@ -25,6 +25,8 @@ import {
   InventoryLocationSchema,
   InventoryOverviewSchema,
   ModuleSchema,
+  PostSaleCaseSchema,
+  PostSaleOverviewSchema,
   PlatformApiErrorSchema,
   PlatformBootstrapSchema,
   PlatformDashboardSummarySchema,
@@ -51,6 +53,7 @@ import {
   UpdateHrWorkforceItemRequestSchema,
   UpdateIntegrationStreamRequestSchema,
   UpdateInventoryLocationRequestSchema,
+  UpdatePostSaleCaseRequestSchema,
   UpdateProjectPortfolioItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
@@ -86,6 +89,8 @@ import {
   type InventoryLocationContract,
   type InventoryOverviewContract,
   type ModuleContract,
+  type PostSaleCaseContract,
+  type PostSaleOverviewContract,
   type PlatformApiErrorContract,
   type PlatformBootstrapContract,
   type PlatformDashboardSummaryContract,
@@ -111,6 +116,7 @@ import {
   type UpdateHrWorkforceItemRequestContract,
   type UpdateIntegrationStreamRequestContract,
   type UpdateInventoryLocationRequestContract,
+  type UpdatePostSaleCaseRequestContract,
   type UpdateProjectPortfolioItemRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
@@ -675,6 +681,44 @@ export async function updateComplianceCase(
 
   return {
     data: ComplianceCaseSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchPostSaleOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<PostSaleOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/post-sale/overview${query}`, options);
+  return response ? PostSaleOverviewSchema.parse(response) : null;
+}
+
+export async function updatePostSaleCase(
+  caseId: string,
+  companyId: string | undefined,
+  input: UpdatePostSaleCaseRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<PostSaleCaseContract>> {
+  const payload = UpdatePostSaleCaseRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/post-sale/cases/${caseId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: PostSaleCaseSchema.parse(response.data),
     error: null
   };
 }

@@ -19,6 +19,7 @@ import { createProjectsService } from "./services/projects-service.js";
 import { createQualityService } from "./services/quality-service.js";
 import { createPlatformService } from "./services/platform-service.js";
 import { createSubcontractsService } from "./services/subcontracts-service.js";
+import { createPostSaleService } from "./services/post-sale-service.js";
 
 export function createContainer() {
   const platformRepository =
@@ -40,6 +41,7 @@ export function createContainer() {
   const integrationService = createIntegrationService(platformRepository);
   const qualityService = createQualityService(platformRepository);
   const subcontractsService = createSubcontractsService(platformRepository);
+  const postSaleService = createPostSaleService(platformRepository);
 
   return {
     platformRepository,
@@ -57,6 +59,7 @@ export function createContainer() {
     hrService,
     integrationService,
     qualityService,
+    postSaleService,
     subcontractsService
   };
 }

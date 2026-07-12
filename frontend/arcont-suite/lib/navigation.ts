@@ -10,6 +10,7 @@ export type NavigationItem = {
     | "inventory"
     | "finance"
     | "hr"
+    | "post_sales"
     | "compliance"
     | "integrations";
   moduleKeys?: string[];
@@ -168,6 +169,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["hr:*"]
   },
   {
+    href: "/post-sale",
+    label: "Post-sale",
+    description: "Deliveries, warranties and SLA",
+    domain: "post_sales",
+    moduleKeys: ["compliance.postsale"],
+    requiredPermissions: ["compliance:*", "postsale:*"]
+  },
+  {
     href: "/compliance",
     label: "Compliance",
     description: "Post-sale and cases",
@@ -193,6 +202,7 @@ export const navigationGroups = [
   { key: "inventory", label: "Inventory" },
   { key: "finance", label: "Finance" },
   { key: "hr", label: "HR" },
+  { key: "post_sales", label: "Post-sale" },
   { key: "compliance", label: "Compliance" },
   { key: "integrations", label: "Integrations" }
 ] as const;

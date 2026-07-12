@@ -492,6 +492,16 @@ export const SubcontractRiskSchema = z.object({
   status: z.string()
 });
 
+export const PostSaleRiskSchema = z.object({
+  id: z.string(),
+  caseId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
 export const SubcontractLineSchema = z.object({
   id: z.string(),
   workforceId: z.string(),
@@ -536,6 +546,43 @@ export const SubcontractOverviewSchema = z.object({
 
 export const UpdateSubcontractLineRequestSchema = z.object({
   subcontractHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
+export const PostSaleCaseSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  caseType: z.enum(["delivery", "warranty", "incident"]),
+  projectName: z.string(),
+  customerName: z.string(),
+  assetLabel: z.string(),
+  owner: z.string(),
+  status: z.enum(["reported", "triaged", "scheduled", "in_progress", "customer_validation", "blocked", "closed"]),
+  priority: z.enum(["standard", "urgent", "critical"]),
+  slaHoursRemaining: z.number(),
+  openFindings: z.number().int().nonnegative(),
+  pendingVisits: z.number().int().nonnegative(),
+  customerSatisfaction: z.number().min(0).max(100),
+  nextAction: z.string(),
+  health: z.enum(["healthy", "watch", "critical"]),
+  updatedAt: z.string()
+});
+
+export const PostSaleOverviewSchema = z.object({
+  summary: z.object({
+    openCases: z.number().int().nonnegative(),
+    criticalCases: z.number().int().nonnegative(),
+    overdueSlaCases: z.number().int().nonnegative(),
+    pendingCustomerSignoff: z.number().int().nonnegative()
+  }),
+  items: z.array(PostSaleCaseSchema),
+  risks: z.array(PostSaleRiskSchema),
+  focusItem: PostSaleCaseSchema.nullable()
+});
+
+export const UpdatePostSaleCaseRequestSchema = z.object({
+  status: z.enum(["reported", "triaged", "scheduled", "in_progress", "customer_validation", "blocked", "closed"]),
   nextAction: z.string().min(8)
 });
 
@@ -891,6 +938,10 @@ export type SubcontractRiskContract = z.infer<typeof SubcontractRiskSchema>;
 export type SubcontractLineContract = z.infer<typeof SubcontractLineSchema>;
 export type SubcontractOverviewContract = z.infer<typeof SubcontractOverviewSchema>;
 export type UpdateSubcontractLineRequestContract = z.infer<typeof UpdateSubcontractLineRequestSchema>;
+export type PostSaleRiskContract = z.infer<typeof PostSaleRiskSchema>;
+export type PostSaleCaseContract = z.infer<typeof PostSaleCaseSchema>;
+export type PostSaleOverviewContract = z.infer<typeof PostSaleOverviewSchema>;
+export type UpdatePostSaleCaseRequestContract = z.infer<typeof UpdatePostSaleCaseRequestSchema>;
 export type ComplianceRiskContract = z.infer<typeof ComplianceRiskSchema>;
 export type ComplianceCaseContract = z.infer<typeof ComplianceCaseSchema>;
 export type ComplianceOverviewContract = z.infer<typeof ComplianceOverviewSchema>;

@@ -216,6 +216,42 @@ type UpdateHrWorkforceItemInput = {
   nextAction: string;
 };
 
+type PostSaleCaseRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  caseType: "delivery" | "warranty" | "incident";
+  projectName: string;
+  customerName: string;
+  assetLabel: string;
+  owner: string;
+  status: "reported" | "triaged" | "scheduled" | "in_progress" | "customer_validation" | "blocked" | "closed";
+  priority: "standard" | "urgent" | "critical";
+  slaHoursRemaining: number;
+  openFindings: number;
+  pendingVisits: number;
+  customerSatisfaction: number;
+  nextAction: string;
+  health: "healthy" | "watch" | "critical";
+  updatedAt: string;
+};
+
+type PostSaleRiskRecord = {
+  id: string;
+  caseId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type UpdatePostSaleCaseInput = {
+  caseId: string;
+  status: "reported" | "triaged" | "scheduled" | "in_progress" | "customer_validation" | "blocked" | "closed";
+  nextAction: string;
+};
+
 type ComplianceCaseRecord = {
   id: string;
   companyId: string;
@@ -364,6 +400,8 @@ export type PlatformRepository = {
   listCrmRisks(companyId: string): Promise<CrmRiskRecord[]>;
   listHrWorkforces(companyId: string): Promise<HrWorkforceItemRecord[]>;
   listHrRisks(companyId: string): Promise<HrRiskRecord[]>;
+  listPostSaleCases(companyId: string): Promise<PostSaleCaseRecord[]>;
+  listPostSaleRisks(companyId: string): Promise<PostSaleRiskRecord[]>;
   listComplianceCases(companyId: string): Promise<ComplianceCaseRecord[]>;
   listComplianceRisks(companyId: string): Promise<ComplianceRiskRecord[]>;
   listIntegrationStreams(companyId: string): Promise<IntegrationStreamRecord[]>;
@@ -404,6 +442,7 @@ export type PlatformRepository = {
   updateCrmLeadBucket(input: UpdateCrmLeadBucketInput): Promise<CrmLeadBucketRecord>;
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
+  updatePostSaleCase(input: UpdatePostSaleCaseInput): Promise<PostSaleCaseRecord>;
   updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
   updateIntegrationStream(input: UpdateIntegrationStreamInput): Promise<IntegrationStreamRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
@@ -1054,6 +1093,152 @@ function createSeedState() {
     }
   ];
 
+  const postSaleCases: PostSaleCaseRecord[] = [
+    {
+      id: "psc_handover_torre_b",
+      companyId: "cmp_arcont_demo",
+      code: "PS-DEL-088",
+      caseType: "delivery",
+      projectName: "Torre B Residencial",
+      customerName: "Comite nivel 14",
+      assetLabel: "14 unidades",
+      owner: "Customer care",
+      status: "customer_validation",
+      priority: "urgent",
+      slaHoursRemaining: 12,
+      openFindings: 1,
+      pendingVisits: 1,
+      customerSatisfaction: 88,
+      nextAction: "Close the final punch item and obtain the handover acceptance signatures",
+      health: "watch",
+      updatedAt: "2026-07-11T08:40:00.000Z"
+    },
+    {
+      id: "psc_filtracion_b1406",
+      companyId: "cmp_arcont_demo",
+      code: "PS-WAR-1208",
+      caseType: "warranty",
+      projectName: "Torre B Residencial",
+      customerName: "Fam. Valdez",
+      assetLabel: "Unidad B-1406",
+      owner: "Brigada Postventa 2",
+      status: "in_progress",
+      priority: "urgent",
+      slaHoursRemaining: 18,
+      openFindings: 1,
+      pendingVisits: 1,
+      customerSatisfaction: 72,
+      nextAction: "Complete the corrective visit and capture signed customer closeout evidence",
+      health: "watch",
+      updatedAt: "2026-07-11T09:30:00.000Z"
+    },
+    {
+      id: "psc_elevador_cobalto",
+      companyId: "cmp_bienestar_gov",
+      code: "PS-INC-224",
+      caseType: "incident",
+      projectName: "Infraestructura Vial y Vivienda",
+      customerName: "Supervision federal",
+      assetLabel: "Modulo de acceso 3",
+      owner: "Regional PMO",
+      status: "blocked",
+      priority: "critical",
+      slaHoursRemaining: -9,
+      openFindings: 3,
+      pendingVisits: 2,
+      customerSatisfaction: 54,
+      nextAction: "Release the supplier root-cause report and recover the blocked incident response",
+      health: "critical",
+      updatedAt: "2026-07-11T12:00:00.000Z"
+    },
+    {
+      id: "psc_canceles_nativa",
+      companyId: "cmp_arcont_demo",
+      code: "PS-WAR-1331",
+      caseType: "warranty",
+      projectName: "Residencial Nativa",
+      customerName: "Alejandra Cuevas",
+      assetLabel: "Casa 27",
+      owner: "Brigada Postventa 1",
+      status: "scheduled",
+      priority: "standard",
+      slaHoursRemaining: 34,
+      openFindings: 2,
+      pendingVisits: 1,
+      customerSatisfaction: 81,
+      nextAction: "Confirm the scheduled visit window and carry the updated hardware replacement kit",
+      health: "healthy",
+      updatedAt: "2026-07-11T10:05:00.000Z"
+    },
+    {
+      id: "psc_entrega_sur",
+      companyId: "cmp_bienestar_gov",
+      code: "PS-DEL-305",
+      caseType: "delivery",
+      projectName: "Paquete Bienestar Sur",
+      customerName: "Comite vecinal",
+      assetLabel: "8 viviendas",
+      owner: "Entrega social",
+      status: "triaged",
+      priority: "urgent",
+      slaHoursRemaining: 6,
+      openFindings: 4,
+      pendingVisits: 1,
+      customerSatisfaction: 66,
+      nextAction: "Prioritize unresolved utility punch items before the next community handover slot",
+      health: "critical",
+      updatedAt: "2026-07-11T11:20:00.000Z"
+    }
+  ];
+
+  const postSaleRisks: PostSaleRiskRecord[] = [
+    {
+      id: "psr_handover_signoff",
+      caseId: "psc_handover_torre_b",
+      title: "One legal sign-off still blocks complete delivery acceptance",
+      category: "handover",
+      severity: "warning",
+      owner: "Customer care",
+      status: "Awaiting final homeowner signature pack"
+    },
+    {
+      id: "psr_filtracion_repeat",
+      caseId: "psc_filtracion_b1406",
+      title: "Warranty case risks repeat visit if moisture test is not documented",
+      category: "warranty",
+      severity: "warning",
+      owner: "Brigada Postventa 2",
+      status: "Technician evidence checklist still open"
+    },
+    {
+      id: "psr_incident_supplier",
+      caseId: "psc_elevador_cobalto",
+      title: "Supplier root cause is overdue and the SLA breach is already critical",
+      category: "incident",
+      severity: "critical",
+      owner: "Regional PMO",
+      status: "Escalated with supplier management and supervision"
+    },
+    {
+      id: "psr_canceles_parts",
+      caseId: "psc_canceles_nativa",
+      title: "Replacement hardware must arrive before the scheduled customer visit",
+      category: "materials",
+      severity: "info",
+      owner: "Brigada Postventa 1",
+      status: "Kit release confirmed from warehouse"
+    },
+    {
+      id: "psr_entrega_utilities",
+      caseId: "psc_entrega_sur",
+      title: "Utility punch items still prevent clean delivery to the community committee",
+      category: "delivery",
+      severity: "critical",
+      owner: "Entrega social",
+      status: "Cross-team utility closure plan requested"
+    }
+  ];
+
   const complianceCases: ComplianceCaseRecord[] = [
     {
       id: "cmpc_urbanizacion_addendum",
@@ -1502,6 +1687,8 @@ function createSeedState() {
       crmRisks,
       hrWorkforces,
       hrRisks,
+      postSaleCases,
+      postSaleRisks,
       complianceCases,
       complianceRisks,
       integrationStreams,
@@ -1513,7 +1700,7 @@ function createSeedState() {
       settings,
       refreshTokens,
       auditEvents
-  };
+    };
 }
 
 export function createInMemoryPlatformRepository(): PlatformRepository {
@@ -1582,6 +1769,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.hrWorkforces.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.hrRisks.filter((risk) => workforceIds.has(risk.workforceId));
+    },
+    async listPostSaleCases(companyId: string) {
+      return state.postSaleCases.filter((item) => item.companyId === companyId);
+    },
+    async listPostSaleRisks(companyId: string) {
+      const caseIds = new Set(
+        state.postSaleCases.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.postSaleRisks.filter((risk) => caseIds.has(risk.caseId));
     },
     async listComplianceCases(companyId: string) {
       return state.complianceCases.filter((item) => item.companyId === companyId);
@@ -1882,6 +2078,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       item.nextAction = input.nextAction;
       item.updatedAt = new Date().toISOString();
       return item;
+    },
+    async updatePostSaleCase(input) {
+      const postSaleCase = state.postSaleCases.find((item) => item.id === input.caseId);
+      if (!postSaleCase) {
+        throw new Error("Post-sale case not found in repository");
+      }
+
+      postSaleCase.status = input.status;
+      postSaleCase.nextAction = input.nextAction;
+      postSaleCase.updatedAt = new Date().toISOString();
+      return postSaleCase;
     },
     async updateComplianceCase(input) {
       const complianceCase = state.complianceCases.find((item) => item.id === input.caseId);
@@ -2209,6 +2416,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listHrRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listPostSaleCases(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listPostSaleRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;
@@ -2790,6 +3009,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     async updateHrWorkforceItem(input) {
       void input;
       throw new Error("HR workforce updates are not implemented for the postgres repository yet");
+    },
+    async updatePostSaleCase(input) {
+      void input;
+      throw new Error("Post-sale case updates are not implemented for the postgres repository yet");
     },
     async updateComplianceCase(input) {
       void input;

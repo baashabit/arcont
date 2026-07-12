@@ -16,6 +16,7 @@ import { registerHrRoutes } from "./routes/hr.js";
 import { registerIntegrationRoutes } from "./routes/integrations.js";
 import { registerInventoryRoutes } from "./routes/inventory.js";
 import { registerPlatformRoutes } from "./routes/platform.js";
+import { registerPostSaleRoutes } from "./routes/post-sale.js";
 import { registerProcurementRoutes } from "./routes/procurement.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerQualityRoutes } from "./routes/quality.js";
@@ -76,6 +77,7 @@ export async function buildApp() {
   await registerEstimationsRoutes(app);
   await registerCrmRoutes(app);
   await registerComplianceRoutes(app);
+  await registerPostSaleRoutes(app);
   await registerDocumentControlRoutes(app);
   await registerHrRoutes(app);
   await registerSubcontractsRoutes(app);
