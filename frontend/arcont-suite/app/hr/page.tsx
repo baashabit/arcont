@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { HrOverviewContract, HrWorkforceItemContract } from "@/lib/contracts";
-import { fetchHrOverview } from "@/lib/platform-api";
+import { fetchHrOverview, updateHrWorkforceItem } from "@/lib/platform-api";
 
 function safetyTone(status: HrWorkforceItemContract["safetyStatus"]) {
   switch (status) {
@@ -24,12 +24,52 @@ function safetyTone(status: HrWorkforceItemContract["safetyStatus"]) {
   }
 }
 
+function workforceActionOptions(item: HrWorkforceItemContract) {
+  switch (item.safetyStatus) {
+    case "critical":
+      return [
+        {
+          label: "Move to watch",
+          safetyStatus: "watch" as const,
+          nextAction: "Stabilize attendance and compliance gaps before returning to controlled posture."
+        }
+      ];
+    case "watch":
+      return [
+        {
+          label: "Escalate to critical",
+          safetyStatus: "critical" as const,
+          nextAction: "Escalate due to unresolved field risk or contractor non-compliance."
+        },
+        {
+          label: "Mark controlled",
+          safetyStatus: "controlled" as const,
+          nextAction: "Keep workforce steady and sustain the compliance and safety controls in place."
+        }
+      ];
+    case "controlled":
+      return [
+        {
+          label: "Move to watch",
+          safetyStatus: "watch" as const,
+          nextAction: "Open monitoring due to early signs of attendance or compliance drift."
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function HrPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<HrOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedWorkforceId, setSelectedWorkforceId] = useState<string | null>(null);
+  const [nextActionDraft, setNextActionDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +118,83 @@ export default function HrPage() {
     () => overview?.risks.filter((risk) => risk.workforceId === selectedWorkforce?.id) ?? [],
     [overview, selectedWorkforce]
   );
+
+  const actionOptions = useMemo(
+    () => (selectedWorkforce ? workforceActionOptions(selectedWorkforce) : []),
+    [selectedWorkforce]
+  );
+
+  useEffect(() => {
+    setNextActionDraft(selectedWorkforce?.nextAction ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedWorkforceId, selectedWorkforce?.id, selectedWorkforce?.nextAction]);
+
+  async function handleWorkforceAction(
+    safetyStatus: HrWorkforceItemContract["safetyStatus"],
+    suggestedNextAction: string
+  ) {
+    if (!selectedWorkforce || !session.accessToken) {
+      return;
+    }
+
+    const nextAction = nextActionDraft.trim() || suggestedNextAction;
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before updating the workforce item.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateHrWorkforceItem(
+      selectedWorkforce.id,
+      activeCompany.id,
+      {
+        safetyStatus,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "HR update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const workforces = current.workforces.map((item) => (item.id === response.data?.id ? response.data : item));
+      const activeHeadcount = workforces.reduce((sum, item) => sum + item.activeHeadcount, 0);
+      const attendanceRate =
+        workforces.length > 0 ? Number((workforces.reduce((sum, item) => sum + item.attendanceRate, 0) / workforces.length).toFixed(1)) : 0;
+      const openIncidents = workforces.reduce((sum, item) => sum + item.incidentCount, 0);
+
+      return {
+        ...current,
+        summary: {
+          activeHeadcount,
+          activeContractors: workforces.length,
+          attendanceRate,
+          openIncidents
+        },
+        workforces,
+        focusWorkforce: current.focusWorkforce?.id === response.data?.id ? response.data : current.focusWorkforce
+      };
+    });
+
+    setNextActionDraft(response.data.nextAction);
+    setActionMessage(`Workforce signal moved to ${response.data.safetyStatus}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -197,11 +314,45 @@ export default function HrPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>
-                      <div>{selectedWorkforce.nextAction}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextActionDraft}
+                          onChange={(event) => setNextActionDraft(event.target.value)}
+                          placeholder="Describe the next workforce, safety or contractor action"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedWorkforce.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Controlled requires zero incidents and zero compliance expirations.</span>
+                        <span className="tableCellMuted">Attendance below 85% cannot stay only on watch.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.safetyStatus === "critical" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleWorkforceAction(option.safetyStatus, option.nextAction)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

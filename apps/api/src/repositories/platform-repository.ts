@@ -192,6 +192,12 @@ type HrRiskRecord = {
   status: string;
 };
 
+type UpdateHrWorkforceItemInput = {
+  workforceId: string;
+  safetyStatus: "controlled" | "watch" | "critical";
+  nextAction: string;
+};
+
 type ComplianceCaseRecord = {
   id: string;
   companyId: string;
@@ -371,6 +377,7 @@ export type PlatformRepository = {
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
+  updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
   updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
@@ -1815,6 +1822,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       item.updatedAt = new Date().toISOString();
       return item;
     },
+    async updateHrWorkforceItem(input) {
+      const item = state.hrWorkforces.find((candidate) => candidate.id === input.workforceId);
+      if (!item) {
+        throw new Error("HR workforce item not found in repository");
+      }
+
+      item.safetyStatus = input.safetyStatus;
+      item.nextAction = input.nextAction;
+      item.updatedAt = new Date().toISOString();
+      return item;
+    },
     async updateComplianceCase(input) {
       const complianceCase = state.complianceCases.find((item) => item.id === input.caseId);
       if (!complianceCase) {
@@ -2688,6 +2706,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     async updateFinanceLedgerItem(input) {
       void input;
       throw new Error("Finance ledger updates are not implemented for the postgres repository yet");
+    },
+    async updateHrWorkforceItem(input) {
+      void input;
+      throw new Error("HR workforce updates are not implemented for the postgres repository yet");
     },
     async updateComplianceCase(input) {
       void input;

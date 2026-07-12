@@ -353,6 +353,11 @@ export const HrOverviewSchema = z.object({
   focusWorkforce: HrWorkforceItemSchema.nullable()
 });
 
+export const UpdateHrWorkforceItemRequestSchema = z.object({
+  safetyStatus: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const ComplianceRiskSchema = z.object({
   id: z.string(),
   caseId: z.string(),
@@ -684,6 +689,7 @@ export type CrmOverviewContract = z.infer<typeof CrmOverviewSchema>;
 export type HrRiskContract = z.infer<typeof HrRiskSchema>;
 export type HrWorkforceItemContract = z.infer<typeof HrWorkforceItemSchema>;
 export type HrOverviewContract = z.infer<typeof HrOverviewSchema>;
+export type UpdateHrWorkforceItemRequestContract = z.infer<typeof UpdateHrWorkforceItemRequestSchema>;
 export type ComplianceRiskContract = z.infer<typeof ComplianceRiskSchema>;
 export type ComplianceCaseContract = z.infer<typeof ComplianceCaseSchema>;
 export type ComplianceOverviewContract = z.infer<typeof ComplianceOverviewSchema>;

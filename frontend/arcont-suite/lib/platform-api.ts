@@ -13,6 +13,7 @@ import {
   DocumentControlOverviewSchema,
   FinanceOverviewSchema,
   FinanceLedgerItemSchema,
+  HrWorkforceItemSchema,
   HrOverviewSchema,
   IntegrationOverviewSchema,
   InventoryOverviewSchema,
@@ -31,6 +32,7 @@ import {
   UpdateComplianceCaseRequestSchema,
   UpdateDocumentControlItemRequestSchema,
   UpdateFinanceLedgerItemRequestSchema,
+  UpdateHrWorkforceItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
@@ -53,6 +55,7 @@ import {
   type DocumentControlOverviewContract,
   type FinanceLedgerItemContract,
   type FinanceOverviewContract,
+  type HrWorkforceItemContract,
   type HrOverviewContract,
   type IntegrationOverviewContract,
   type InventoryOverviewContract,
@@ -71,6 +74,7 @@ import {
   type UpdateComplianceCaseRequestContract,
   type UpdateDocumentControlItemRequestContract,
   type UpdateFinanceLedgerItemRequestContract,
+  type UpdateHrWorkforceItemRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
@@ -540,6 +544,35 @@ export async function fetchHrOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/hr/overview${query}`, options);
   return response ? HrOverviewSchema.parse(response) : null;
+}
+
+export async function updateHrWorkforceItem(
+  workforceId: string,
+  companyId: string | undefined,
+  input: UpdateHrWorkforceItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<HrWorkforceItemContract>> {
+  const payload = UpdateHrWorkforceItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/hr/workforces/${workforceId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: HrWorkforceItemSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchUserDetail(

@@ -1,4 +1,4 @@
-import { notFound } from "../lib/domain-error.js";
+import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
 
 export function createHrService(repository: PlatformRepository) {
@@ -45,6 +45,75 @@ export function createHrService(repository: PlatformRepository) {
         risks,
         focusWorkforce
       };
+    },
+    async updateWorkforceItem(input: {
+      companyId: string;
+      workforceId: string;
+      safetyStatus: "controlled" | "watch" | "critical";
+      nextAction: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("HR_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const workforces = await repository.listHrWorkforces(input.companyId);
+      const item = workforces.find((candidate) => candidate.id === input.workforceId);
+      if (!item) {
+        throw notFound("HR_WORKFORCE_NOT_FOUND", "Workforce item not found", {
+          companyId: input.companyId,
+          workforceId: input.workforceId
+        });
+      }
+
+      if (item.safetyStatus === input.safetyStatus && item.nextAction === input.nextAction) {
+        return item;
+      }
+
+      if (input.safetyStatus === "controlled") {
+        if (item.incidentCount > 0) {
+          throw validationError("HR_OPEN_INCIDENTS", "Workforce cannot be marked controlled while incidents remain open", {
+            workforceId: item.id,
+            incidentCount: item.incidentCount
+          });
+        }
+
+        if (item.complianceExpirations > 0) {
+          throw validationError("HR_COMPLIANCE_EXPIRATIONS", "Workforce cannot be marked controlled while compliance expirations remain", {
+            workforceId: item.id,
+            complianceExpirations: item.complianceExpirations
+          });
+        }
+      }
+
+      if (input.safetyStatus === "watch" && item.attendanceRate < 85) {
+        throw validationError("HR_ATTENDANCE_TOO_LOW", "Attendance is too low for watch status and should remain critical", {
+          workforceId: item.id,
+          attendanceRate: item.attendanceRate
+        });
+      }
+
+      const updatedItem = await repository.updateHrWorkforceItem({
+        workforceId: input.workforceId,
+        safetyStatus: input.safetyStatus,
+        nextAction: input.nextAction
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "hr_workforce_item",
+        aggregateId: updatedItem.id,
+        action: "hr.workforce_item.updated",
+        metadata: {
+          safetyStatus: updatedItem.safetyStatus,
+          nextAction: updatedItem.nextAction
+        }
+      });
+
+      return updatedItem;
     }
   };
 }
