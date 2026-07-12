@@ -42,6 +42,14 @@ This API currently exposes the first platform capabilities that the web app can 
 - `GET /platform/bootstrap/:companyId?userEmail=...`
 - `POST /platform/provision-company`
 
+## Authorization Baseline
+
+- every `/platform/*` route now requires a bearer access token
+- read access to tenant context is scoped to the authenticated company unless the role is platform-scoped
+- write access keeps using role permissions such as `users:write`, `settings:write`, `modules:*`, `companies:*`
+- cross-company access for non-platform roles returns `403 AUTH_COMPANY_SCOPE_FORBIDDEN`
+- missing permission returns `403 AUTH_PERMISSION_DENIED`
+
 ## Local Run
 
 ```bash

@@ -1,5 +1,5 @@
 import { env } from "../config/env.js";
-import { authError } from "../lib/domain-error.js";
+import { authError, forbiddenError } from "../lib/domain-error.js";
 import { signJwt, verifyJwt } from "../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../lib/passwords.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
@@ -40,6 +40,19 @@ function buildSessionPayload(
 
 function createRefreshToken(userId: string) {
   return `refresh-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function matchesPermission(grantedPermission: string, requiredPermission: string) {
+  if (grantedPermission === requiredPermission) {
+    return true;
+  }
+
+  if (grantedPermission.endsWith("*")) {
+    const prefix = grantedPermission.slice(0, -1);
+    return requiredPermission.startsWith(prefix);
+  }
+
+  return false;
 }
 
 export function createAuthService(repository: PlatformRepository) {
@@ -207,6 +220,47 @@ export function createAuthService(repository: PlatformRepository) {
         ...buildSessionPayload(user, company, role.permissions),
         role
       };
+    },
+    async authorize(
+      accessToken: string,
+      input?: {
+        requiredPermissions?: string[];
+        companyId?: string;
+        platformOnly?: boolean;
+      }
+    ) {
+      const session = await this.getCurrentSession(accessToken);
+      const requiredPermissions = input?.requiredPermissions ?? [];
+
+      if (input?.platformOnly && session.role.scope !== "platform") {
+        throw forbiddenError("AUTH_PLATFORM_SCOPE_REQUIRED", "Platform scope is required", {
+          companyId: session.company.id,
+          roleKey: session.role.key
+        });
+      }
+
+      if (input?.companyId && session.role.scope !== "platform" && session.company.id !== input.companyId) {
+        throw forbiddenError("AUTH_COMPANY_SCOPE_FORBIDDEN", "Session cannot access the requested company", {
+          sessionCompanyId: session.company.id,
+          requestedCompanyId: input.companyId
+        });
+      }
+
+      if (
+        requiredPermissions.length > 0 &&
+        !requiredPermissions.some((requiredPermission) =>
+          session.permissions.some((grantedPermission) =>
+            matchesPermission(grantedPermission, requiredPermission)
+          )
+        )
+      ) {
+        throw forbiddenError("AUTH_PERMISSION_DENIED", "Session lacks required permission", {
+          requiredPermissions,
+          grantedPermissions: session.permissions
+        });
+      }
+
+      return session;
     },
     async logout(accessToken?: string, refreshToken?: string) {
       if (!accessToken && !refreshToken) {

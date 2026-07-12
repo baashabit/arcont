@@ -24,6 +24,10 @@ export function conflictError(code: string, message: string, details?: Record<st
   return new DomainError(409, code, message, details);
 }
 
+export function forbiddenError(code: string, message: string, details?: Record<string, unknown>) {
+  return new DomainError(403, code, message, details);
+}
+
 export function authError(code: string, message: string, details?: Record<string, unknown>) {
   return new DomainError(401, code, message, details);
 }
