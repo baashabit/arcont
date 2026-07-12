@@ -103,6 +103,31 @@ type InventoryRiskRecord = {
   status: string;
 };
 
+type FinanceLedgerItemRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  metricName: string;
+  valueLabel: string;
+  trendLabel: string;
+  note: string;
+  cashImpact: number;
+  urgentItems: number;
+  closeReadiness: number;
+  satStatus: "controlled" | "watch" | "critical";
+  updatedAt: string;
+};
+
+type FinanceRiskRecord = {
+  id: string;
+  ledgerId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -114,6 +139,8 @@ export type PlatformRepository = {
   listProcurementRisks(companyId: string): Promise<ProcurementRiskRecord[]>;
   listInventoryLocations(companyId: string): Promise<InventoryLocationRecord[]>;
   listInventoryRisks(companyId: string): Promise<InventoryRiskRecord[]>;
+  listFinanceItems(companyId: string): Promise<FinanceLedgerItemRecord[]>;
+  listFinanceRisks(companyId: string): Promise<FinanceRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -508,6 +535,95 @@ function createSeedState() {
     }
   ];
 
+  const financeItems: FinanceLedgerItemRecord[] = [
+    {
+      id: "fin_cash_demo",
+      companyId: "cmp_arcont_demo",
+      code: "FIN-CASH-01",
+      metricName: "Cash position",
+      valueLabel: "MXN 18.4M",
+      trendLabel: "Forecast +6%",
+      note: "Within policy and enough to absorb current construction cycle.",
+      cashImpact: 18400000,
+      urgentItems: 0,
+      closeReadiness: 92,
+      satStatus: "controlled",
+      updatedAt: "2026-07-11T18:10:00.000Z"
+    },
+    {
+      id: "fin_ap_demo",
+      companyId: "cmp_arcont_demo",
+      code: "FIN-AP-02",
+      metricName: "Accounts payable",
+      valueLabel: "MXN 6.7M",
+      trendLabel: "12 urgent",
+      note: "Two blocked invoices tied to incomplete receiving evidence.",
+      cashImpact: -6700000,
+      urgentItems: 12,
+      closeReadiness: 86,
+      satStatus: "watch",
+      updatedAt: "2026-07-11T17:40:00.000Z"
+    },
+    {
+      id: "fin_rev_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "FIN-REV-07",
+      metricName: "Revenue recognition",
+      valueLabel: "MXN 42.1M",
+      trendLabel: "92% posted",
+      note: "Recognition pace aligned to supervision and work estimates.",
+      cashImpact: 42100000,
+      urgentItems: 4,
+      closeReadiness: 90,
+      satStatus: "controlled",
+      updatedAt: "2026-07-11T16:55:00.000Z"
+    },
+    {
+      id: "fin_tax_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "FIN-TAX-09",
+      metricName: "SAT posture",
+      valueLabel: "Watch",
+      trendLabel: "2 CFDI exceptions",
+      note: "Exceptions linked to supplier complement mismatches.",
+      cashImpact: -350000,
+      urgentItems: 2,
+      closeReadiness: 81,
+      satStatus: "watch",
+      updatedAt: "2026-07-11T15:50:00.000Z"
+    }
+  ];
+
+  const financeRisks: FinanceRiskRecord[] = [
+    {
+      id: "frk_ap_blocked",
+      ledgerId: "fin_ap_demo",
+      title: "Blocked invoices delay next payment run",
+      category: "Accounts payable",
+      severity: "warning",
+      owner: "Treasury lead",
+      status: "Waiting for warehouse evidence"
+    },
+    {
+      id: "frk_tax_cfdi",
+      ledgerId: "fin_tax_gov",
+      title: "CFDI complement mismatches need correction",
+      category: "Fiscal compliance",
+      severity: "critical",
+      owner: "Tax analyst",
+      status: "Supplier correction requested"
+    },
+    {
+      id: "frk_rev_estimate",
+      ledgerId: "fin_rev_gov",
+      title: "Estimate approval must close before recognition cutoff",
+      category: "Close",
+      severity: "warning",
+      owner: "Controller",
+      status: "Pending final supervision signature"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -541,6 +657,8 @@ function createSeedState() {
       procurementRisks,
       inventoryLocations,
       inventoryRisks,
+      financeItems,
+      financeRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -586,6 +704,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.inventoryLocations.filter((location) => location.companyId === companyId).map((location) => location.id)
       );
       return state.inventoryRisks.filter((risk) => locationIds.has(risk.locationId));
+    },
+    async listFinanceItems(companyId: string) {
+      return state.financeItems.filter((item) => item.companyId === companyId);
+    },
+    async listFinanceRisks(companyId: string) {
+      const itemIds = new Set(
+        state.financeItems.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.financeRisks.filter((risk) => itemIds.has(risk.ledgerId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -1031,6 +1158,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listInventoryRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listFinanceItems(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listFinanceRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;

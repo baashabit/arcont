@@ -230,6 +230,43 @@ export const InventoryOverviewSchema = z.object({
   focusLocation: InventoryLocationSchema.nullable()
 });
 
+export const FinanceRiskSchema = z.object({
+  id: z.string(),
+  ledgerId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const FinanceLedgerItemSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  metricName: z.string(),
+  valueLabel: z.string(),
+  trendLabel: z.string(),
+  note: z.string(),
+  cashImpact: z.number(),
+  urgentItems: z.number().int().nonnegative(),
+  closeReadiness: z.number().min(0).max(100),
+  satStatus: z.enum(["controlled", "watch", "critical"]),
+  updatedAt: z.string()
+});
+
+export const FinanceOverviewSchema = z.object({
+  summary: z.object({
+    cashPosition: z.number(),
+    urgentPayables: z.number().int().nonnegative(),
+    closeReadiness: z.number().min(0).max(100),
+    satStatus: z.enum(["controlled", "watch", "critical"])
+  }),
+  items: z.array(FinanceLedgerItemSchema),
+  risks: z.array(FinanceRiskSchema),
+  focusItem: FinanceLedgerItemSchema.nullable()
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -380,6 +417,9 @@ export type ProcurementOverviewContract = z.infer<typeof ProcurementOverviewSche
 export type InventoryRiskContract = z.infer<typeof InventoryRiskSchema>;
 export type InventoryLocationContract = z.infer<typeof InventoryLocationSchema>;
 export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;
+export type FinanceRiskContract = z.infer<typeof FinanceRiskSchema>;
+export type FinanceLedgerItemContract = z.infer<typeof FinanceLedgerItemSchema>;
+export type FinanceOverviewContract = z.infer<typeof FinanceOverviewSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;

@@ -6,6 +6,7 @@ import {
   CompanySchema,
   CreatePlatformUserRequestSchema,
   CreatePlatformUserResponseSchema,
+  FinanceOverviewSchema,
   InventoryOverviewSchema,
   ModuleSchema,
   PlatformApiErrorSchema,
@@ -29,6 +30,7 @@ import {
   type CompanyContract,
   type CreatePlatformUserRequestContract,
   type CreatePlatformUserResponseContract,
+  type FinanceOverviewContract,
   type InventoryOverviewContract,
   type ModuleContract,
   type PlatformApiErrorContract,
@@ -298,6 +300,15 @@ export async function fetchInventoryOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/inventory/overview${query}`, options);
   return response ? InventoryOverviewSchema.parse(response) : null;
+}
+
+export async function fetchFinanceOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<FinanceOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/finance/overview${query}`, options);
+  return response ? FinanceOverviewSchema.parse(response) : null;
 }
 
 export async function fetchUserDetail(
