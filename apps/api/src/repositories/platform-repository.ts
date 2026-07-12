@@ -213,6 +213,12 @@ type ComplianceRiskRecord = {
   status: string;
 };
 
+type UpdateComplianceCaseInput = {
+  caseId: string;
+  status: "monitoring" | "in_progress" | "at_risk" | "blocked" | "closed";
+  nextAction: string;
+};
+
 type IntegrationStreamRecord = {
   id: string;
   companyId: string;
@@ -358,6 +364,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
   updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
@@ -1790,6 +1797,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       user.status = input.status;
       return user;
     },
+    async updateComplianceCase(input) {
+      const complianceCase = state.complianceCases.find((item) => item.id === input.caseId);
+      if (!complianceCase) {
+        throw new Error("Compliance case not found in repository");
+      }
+
+      complianceCase.status = input.status;
+      complianceCase.nextAction = input.nextAction;
+      complianceCase.updatedAt = new Date().toISOString();
+      return complianceCase;
+    },
     async updateDocumentControlItem(input) {
       const item = state.documentControlItems.find((candidate) => candidate.id === input.itemId);
       if (!item) {
@@ -2648,6 +2666,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }
 
       return mapUserRow(result.rows[0]);
+    },
+    async updateComplianceCase(input) {
+      void input;
+      throw new Error("Compliance case updates are not implemented for the postgres repository yet");
     },
     async updateDocumentControlItem(input) {
       void input;

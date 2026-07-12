@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { ComplianceCaseContract, ComplianceOverviewContract } from "@/lib/contracts";
-import { fetchComplianceOverview } from "@/lib/platform-api";
+import { fetchComplianceOverview, updateComplianceCase } from "@/lib/platform-api";
 
 function healthTone(health: ComplianceCaseContract["health"]) {
   switch (health) {
@@ -24,12 +24,80 @@ function healthTone(health: ComplianceCaseContract["health"]) {
   }
 }
 
+function complianceActionOptions(complianceCase: ComplianceCaseContract) {
+  switch (complianceCase.status) {
+    case "blocked":
+      return [
+        {
+          label: "Resume case",
+          status: "in_progress" as const,
+          nextAction: "Resume case handling and close the current blocker with the responsible team"
+        }
+      ];
+    case "monitoring":
+      return [
+        {
+          label: "Start handling",
+          status: "in_progress" as const,
+          nextAction: "Activate the case owner and gather the required evidence package"
+        },
+        {
+          label: "Escalate risk",
+          status: "at_risk" as const,
+          nextAction: "Escalate the case because SLA or documentation risk is increasing"
+        }
+      ];
+    case "in_progress":
+      return [
+        {
+          label: "Mark at risk",
+          status: "at_risk" as const,
+          nextAction: "Escalate due to findings, documents or SLA pressure"
+        },
+        {
+          label: "Block case",
+          status: "blocked" as const,
+          nextAction: "Pause the case and document the external blocker"
+        },
+        {
+          label: "Close case",
+          status: "closed" as const,
+          nextAction: "Archive closure evidence and confirm all obligations are complete"
+        }
+      ];
+    case "at_risk":
+      return [
+        {
+          label: "Resume execution",
+          status: "in_progress" as const,
+          nextAction: "Stabilize the case and execute the recovery plan"
+        },
+        {
+          label: "Block case",
+          status: "blocked" as const,
+          nextAction: "Stop progress and escalate the unresolved blocker"
+        },
+        {
+          label: "Close case",
+          status: "closed" as const,
+          nextAction: "Finalize the case and archive the compliance evidence"
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function CompliancePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<ComplianceOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [nextActionDraft, setNextActionDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +146,78 @@ export default function CompliancePage() {
     () => overview?.risks.filter((risk) => risk.caseId === selectedCase?.id) ?? [],
     [overview, selectedCase]
   );
+
+  const actionOptions = useMemo(() => (selectedCase ? complianceActionOptions(selectedCase) : []), [selectedCase]);
+
+  useEffect(() => {
+    setNextActionDraft(selectedCase?.nextAction ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedCaseId, selectedCase?.id, selectedCase?.nextAction]);
+
+  async function handleCaseAction(status: ComplianceCaseContract["status"], suggestedNextAction: string) {
+    if (!selectedCase || !session.accessToken) {
+      return;
+    }
+
+    const nextAction = nextActionDraft.trim() || suggestedNextAction;
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before updating the case.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateComplianceCase(
+      selectedCase.id,
+      activeCompany.id,
+      {
+        status,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Compliance case update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const cases = current.cases.map((item) => (item.id === response.data?.id ? response.data : item));
+      const activeCases = cases.filter((item) => item.status !== "closed").length;
+      const atRiskCases = cases.filter((item) => item.health !== "healthy").length;
+      const averageDocumentCompletion =
+        cases.length > 0 ? Number((cases.reduce((sum, item) => sum + item.documentCompletion, 0) / cases.length).toFixed(1)) : 0;
+      const openFindings = cases.reduce((sum, item) => sum + item.openFindings, 0);
+
+      return {
+        ...current,
+        summary: {
+          activeCases,
+          atRiskCases,
+          averageDocumentCompletion,
+          openFindings
+        },
+        cases,
+        focusCase: current.focusCase?.id === response.data?.id ? response.data : current.focusCase
+      };
+    });
+
+    setNextActionDraft(response.data.nextAction);
+    setActionMessage(`Case moved to ${response.data.status}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -197,11 +337,45 @@ export default function CompliancePage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>
-                      <div>{selectedCase.nextAction}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextActionDraft}
+                          onChange={(event) => setNextActionDraft(event.target.value)}
+                          placeholder="Describe the next compliance, handover or post-sale move"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedCase.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Closure requires zero open findings.</span>
+                        <span className="tableCellMuted">Closure also requires at least 95% document completion and no breached SLA.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.status === "blocked" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleCaseAction(option.status, option.nextAction)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

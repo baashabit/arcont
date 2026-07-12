@@ -1,6 +1,7 @@
 import {
   AuditEventSchema,
   AuthSessionSchema,
+  ComplianceCaseSchema,
   ComplianceOverviewSchema,
   CrmOverviewSchema,
   CompanyDetailSchema,
@@ -26,6 +27,7 @@ import {
   QualityOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
+  UpdateComplianceCaseRequestSchema,
   UpdateDocumentControlItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
@@ -37,6 +39,7 @@ import {
   type AuditEventContract,
   type AuthLoginRequestContract,
   type AuthSessionContract,
+  type ComplianceCaseContract,
   type ComplianceOverviewContract,
   type CrmOverviewContract,
   type CompanyDetailContract,
@@ -62,6 +65,7 @@ import {
   type QualityOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
+  type UpdateComplianceCaseRequestContract,
   type UpdateDocumentControlItemRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
@@ -380,6 +384,35 @@ export async function fetchComplianceOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/compliance/overview${query}`, options);
   return response ? ComplianceOverviewSchema.parse(response) : null;
+}
+
+export async function updateComplianceCase(
+  caseId: string,
+  companyId: string | undefined,
+  input: UpdateComplianceCaseRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ComplianceCaseContract>> {
+  const payload = UpdateComplianceCaseRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/compliance/cases/${caseId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ComplianceCaseSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchIntegrationOverview(

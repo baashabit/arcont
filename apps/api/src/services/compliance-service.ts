@@ -1,5 +1,16 @@
-import { notFound } from "../lib/domain-error.js";
+import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
+
+const allowedStatusTransitions: Record<
+  "monitoring" | "in_progress" | "at_risk" | "blocked" | "closed",
+  Array<"monitoring" | "in_progress" | "at_risk" | "blocked" | "closed">
+> = {
+  monitoring: ["in_progress", "at_risk", "blocked"],
+  in_progress: ["at_risk", "blocked", "closed"],
+  at_risk: ["in_progress", "blocked", "closed"],
+  blocked: ["in_progress", "at_risk"],
+  closed: []
+};
 
 export function createComplianceService(repository: PlatformRepository) {
   return {
@@ -46,6 +57,86 @@ export function createComplianceService(repository: PlatformRepository) {
         risks,
         focusCase
       };
+    },
+    async updateCase(input: {
+      companyId: string;
+      caseId: string;
+      status: "monitoring" | "in_progress" | "at_risk" | "blocked" | "closed";
+      nextAction: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("COMPLIANCE_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const cases = await repository.listComplianceCases(input.companyId);
+      const complianceCase = cases.find((item) => item.id === input.caseId);
+      if (!complianceCase) {
+        throw notFound("COMPLIANCE_CASE_NOT_FOUND", "Compliance case not found", {
+          companyId: input.companyId,
+          caseId: input.caseId
+        });
+      }
+
+      if (complianceCase.status === input.status && complianceCase.nextAction === input.nextAction) {
+        return complianceCase;
+      }
+
+      if (complianceCase.status !== input.status) {
+        const allowedTransitions = allowedStatusTransitions[complianceCase.status];
+        if (!allowedTransitions.includes(input.status)) {
+          throw validationError("COMPLIANCE_INVALID_STATUS_TRANSITION", "Compliance case status transition is not allowed", {
+            caseId: complianceCase.id,
+            currentStatus: complianceCase.status,
+            nextStatus: input.status
+          });
+        }
+      }
+
+      if (input.status === "closed") {
+        if (complianceCase.openFindings > 0) {
+          throw validationError("COMPLIANCE_OPEN_FINDINGS", "Compliance case cannot be closed while findings remain open", {
+            caseId: complianceCase.id,
+            openFindings: complianceCase.openFindings
+          });
+        }
+
+        if (complianceCase.documentCompletion < 95) {
+          throw validationError("COMPLIANCE_DOCUMENTS_INCOMPLETE", "Compliance case requires at least 95% document completion before closure", {
+            caseId: complianceCase.id,
+            documentCompletion: complianceCase.documentCompletion
+          });
+        }
+
+        if (complianceCase.slaHoursRemaining < 0) {
+          throw validationError("COMPLIANCE_SLA_BREACHED", "Compliance case must be revalidated before closure after SLA breach", {
+            caseId: complianceCase.id,
+            slaHoursRemaining: complianceCase.slaHoursRemaining
+          });
+        }
+      }
+
+      const updatedCase = await repository.updateComplianceCase({
+        caseId: input.caseId,
+        status: input.status,
+        nextAction: input.nextAction
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "compliance_case",
+        aggregateId: updatedCase.id,
+        action: "compliance.case.updated",
+        metadata: {
+          status: updatedCase.status,
+          nextAction: updatedCase.nextAction
+        }
+      });
+
+      return updatedCase;
     }
   };
 }

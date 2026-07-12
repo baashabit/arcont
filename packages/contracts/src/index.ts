@@ -387,6 +387,11 @@ export const ComplianceOverviewSchema = z.object({
   focusCase: ComplianceCaseSchema.nullable()
 });
 
+export const UpdateComplianceCaseRequestSchema = z.object({
+  status: z.enum(["monitoring", "in_progress", "at_risk", "blocked", "closed"]),
+  nextAction: z.string().min(8)
+});
+
 export const IntegrationRiskSchema = z.object({
   id: z.string(),
   streamId: z.string(),
@@ -676,6 +681,7 @@ export type HrOverviewContract = z.infer<typeof HrOverviewSchema>;
 export type ComplianceRiskContract = z.infer<typeof ComplianceRiskSchema>;
 export type ComplianceCaseContract = z.infer<typeof ComplianceCaseSchema>;
 export type ComplianceOverviewContract = z.infer<typeof ComplianceOverviewSchema>;
+export type UpdateComplianceCaseRequestContract = z.infer<typeof UpdateComplianceCaseRequestSchema>;
 export type IntegrationRiskContract = z.infer<typeof IntegrationRiskSchema>;
 export type IntegrationStreamContract = z.infer<typeof IntegrationStreamSchema>;
 export type IntegrationOverviewContract = z.infer<typeof IntegrationOverviewSchema>;
