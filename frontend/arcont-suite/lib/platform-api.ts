@@ -25,6 +25,8 @@ import {
   PlatformBootstrapSchema,
   PlatformDashboardSummarySchema,
   PlatformSettingsSchema,
+  ProvisionCompanyRequestSchema,
+  ProvisionCompanyResponseSchema,
   ProcurementOverviewSchema,
   ProcurementPackageSchema,
   ProjectPortfolioItemSchema,
@@ -75,6 +77,8 @@ import {
   type PlatformBootstrapContract,
   type PlatformDashboardSummaryContract,
   type PlatformSettingsContract,
+  type ProvisionCompanyRequestContract,
+  type ProvisionCompanyResponseContract,
   type ProcurementOverviewContract,
   type ProcurementPackageContract,
   type ProjectPortfolioItemContract,
@@ -217,6 +221,32 @@ export async function fetchCompanyDetail(
 ): Promise<CompanyDetailContract | null> {
   const response = await requestJson(`/platform/companies/${companyId}`, options);
   return response ? CompanyDetailSchema.parse(response) : null;
+}
+
+export async function provisionCompany(
+  input: ProvisionCompanyRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProvisionCompanyResponseContract>> {
+  const payload = ProvisionCompanyRequestSchema.parse(input);
+  const response = await requestResult("/platform/provision-company", options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProvisionCompanyResponseSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchModules(options: RequestOptions): Promise<ModuleContract[] | null> {

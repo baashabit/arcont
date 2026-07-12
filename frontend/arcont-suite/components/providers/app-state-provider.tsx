@@ -21,6 +21,8 @@ import type {
   PlatformDashboardSummaryContract,
   PlatformSettingsContract,
   PlatformUserDetailContract,
+  ProvisionCompanyRequestContract,
+  ProvisionCompanyResponseContract,
   RoleContract,
   UpdatePlatformUserRoleRequestContract,
   UpdatePlatformUserStatusRequestContract,
@@ -45,6 +47,7 @@ import {
   fetchUserDetail,
   fetchUsers,
   loginWithApi,
+  provisionCompany,
   updatePlatformUserRole,
   updatePlatformUserStatus,
   updateCompanyModules,
@@ -62,6 +65,11 @@ type UserMutationResult = {
   error: PlatformApiErrorContract["error"] | null;
 };
 
+type CompanyProvisionResult = {
+  data: ProvisionCompanyResponseContract | null;
+  error: PlatformApiErrorContract["error"] | null;
+};
+
 type AppStateContextValue = AppData & {
   activeCompany: CompanyContract;
   activeSettings: PlatformSettingsContract | undefined;
@@ -76,6 +84,7 @@ type AppStateContextValue = AppData & {
   isSavingSettings: boolean;
   isSavingModules: boolean;
   isSavingUsers: boolean;
+  isProvisioningCompany: boolean;
   setActiveCompanyId: (companyId: string) => void;
   signIn: (credentials: AuthLoginRequestContract) => Promise<SignInResult>;
   signOut: () => void;
@@ -85,6 +94,7 @@ type AppStateContextValue = AppData & {
   refreshDashboard: (companyId?: string) => Promise<PlatformDashboardSummaryContract | null>;
   refreshAuditTrail: (companyId?: string, limit?: number) => Promise<AuditEventContract[]>;
   createUser: (input: CreatePlatformUserRequestContract) => Promise<UserMutationResult>;
+  createCompany: (input: ProvisionCompanyRequestContract) => Promise<CompanyProvisionResult>;
   changeUserRole: (
     userId: string,
     input: UpdatePlatformUserRoleRequestContract
@@ -170,6 +180,7 @@ export function AppStateProvider({
   const [isSavingSettings, setSavingSettings] = useState(false);
   const [isSavingModules, setSavingModules] = useState(false);
   const [isSavingUsers, setSavingUsers] = useState(false);
+  const [isProvisioningCompany, setProvisioningCompany] = useState(false);
 
   const apiOptions = useMemo(
     () => ({
@@ -494,6 +505,7 @@ export function AppStateProvider({
     isSavingSettings,
     isSavingModules,
     isSavingUsers,
+    isProvisioningCompany,
     session: {
       ...session,
       companyId: activeCompany.id,
@@ -633,6 +645,58 @@ export function AppStateProvider({
         };
       } finally {
         setSavingUsers(false);
+      }
+    },
+    async createCompany(input) {
+      setProvisioningCompany(true);
+
+      try {
+        const result = await provisionCompany(input, apiOptions);
+        if (!result.data) {
+          return {
+            data: null,
+            error: result.error
+          };
+        }
+
+        const created = result.data;
+
+        setData((current) => ({
+          ...current,
+          source: "api",
+          companies: mergeUniqueCompanies(current.companies, created.company),
+          users: mergeUsersByCompany(current.users, [created.adminUser], created.company.id),
+          settings: {
+            ...current.settings,
+            [created.company.id]: created.settings
+          },
+          companyModules: {
+            ...current.companyModules,
+            [created.company.id]: created.companyModules
+          }
+        }));
+        setCompanyDetails((current) => ({
+          ...current,
+          [created.company.id]: {
+            company: created.company,
+            settings: created.settings,
+            companyModules: created.companyModules,
+            users: [created.adminUser],
+            stats: {
+              totalUsers: 1,
+              activeUsers: created.adminUser.status === "active" ? 1 : 0,
+              enabledModuleCount: created.companyModules.filter((entry) => entry.enabled).length,
+              disabledModuleCount: created.companyModules.filter((entry) => !entry.enabled).length
+            }
+          }
+        }));
+
+        return {
+          data: created,
+          error: null
+        };
+      } finally {
+        setProvisioningCompany(false);
       }
     },
     async changeUserRole(userId, input) {
