@@ -20,11 +20,13 @@ import {
   PlatformSettingsSchema,
   ProcurementOverviewSchema,
   ProjectPortfolioOverviewSchema,
+  QualityInspectionSchema,
   QualityOverviewSchema,
   PlatformUserDetailSchema,
   RoleSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
+  UpdateQualityInspectionRequestSchema,
   UpdateCompanyModulesRequestSchema,
   UpdatePlatformSettingsRequestSchema,
   UserSchema,
@@ -50,11 +52,13 @@ import {
   type PlatformSettingsContract,
   type ProcurementOverviewContract,
   type ProjectPortfolioOverviewContract,
+  type QualityInspectionContract,
   type QualityOverviewContract,
   type PlatformUserDetailContract,
   type RoleContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
+  type UpdateQualityInspectionRequestContract,
   type UpdateCompanyModulesRequestContract,
   type UpdatePlatformSettingsRequestContract,
   type UserContract
@@ -366,6 +370,35 @@ export async function fetchQualityOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/quality/overview${query}`, options);
   return response ? QualityOverviewSchema.parse(response) : null;
+}
+
+export async function updateQualityInspection(
+  inspectionId: string,
+  companyId: string | undefined,
+  input: UpdateQualityInspectionRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<QualityInspectionContract>> {
+  const payload = UpdateQualityInspectionRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/quality/inspections/${inspectionId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: QualityInspectionSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchHrOverview(

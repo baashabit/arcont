@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { QualityInspectionContract, QualityOverviewContract } from "@/lib/contracts";
-import { fetchQualityOverview } from "@/lib/platform-api";
+import { fetchQualityOverview, updateQualityInspection } from "@/lib/platform-api";
 
 function severityTone(severity: QualityInspectionContract["severity"]) {
   switch (severity) {
@@ -24,12 +24,70 @@ function severityTone(severity: QualityInspectionContract["severity"]) {
   }
 }
 
+function qualityActionOptions(inspection: QualityInspectionContract) {
+  switch (inspection.status) {
+    case "blocked":
+      return [
+        {
+          label: "Resume work",
+          status: "in_progress" as const,
+          nextAction: "Resume correction crew and capture fresh evidence from the field"
+        },
+        {
+          label: "Move to release review",
+          status: "pending_release" as const,
+          nextAction: "Confirm remaining punch items and schedule release walkthrough"
+        }
+      ];
+    case "in_progress":
+      return [
+        {
+          label: "Send to release review",
+          status: "pending_release" as const,
+          nextAction: "Validate evidence package and prepare release walkthrough"
+        },
+        {
+          label: "Block inspection",
+          status: "blocked" as const,
+          nextAction: "Escalate blocker and hold release until field correction is confirmed"
+        }
+      ];
+    case "pending_release":
+      return [
+        {
+          label: "Reopen correction",
+          status: "in_progress" as const,
+          nextAction: "Return punch list to field team and update closeout evidence"
+        },
+        {
+          label: "Block release",
+          status: "blocked" as const,
+          nextAction: "Pause release and document the blocker before the next walkthrough"
+        }
+      ];
+    case "scheduled":
+      return [
+        {
+          label: "Start inspection",
+          status: "in_progress" as const,
+          nextAction: "Start the checklist in field and upload the first evidence batch"
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function QualityPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<QualityOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null);
+  const [nextActionDraft, setNextActionDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +136,88 @@ export default function QualityPage() {
     () => overview?.risks.filter((risk) => risk.inspectionId === selectedInspection?.id) ?? [],
     [overview, selectedInspection]
   );
+
+  const actionOptions = useMemo(
+    () => (selectedInspection ? qualityActionOptions(selectedInspection) : []),
+    [selectedInspection]
+  );
+
+  useEffect(() => {
+    setNextActionDraft(selectedInspection?.nextAction ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedInspectionId, selectedInspection?.id, selectedInspection?.nextAction]);
+
+  async function handleInspectionAction(status: QualityInspectionContract["status"], suggestedNextAction: string) {
+    if (!selectedInspection || !session.accessToken) {
+      return;
+    }
+
+    const nextAction = nextActionDraft.trim() || suggestedNextAction;
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before updating the inspection.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateQualityInspection(
+      selectedInspection.id,
+      activeCompany.id,
+      {
+        status,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Inspection update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const inspectionsBoard = current.inspectionsBoard.map((inspection) =>
+        inspection.id === response.data?.id ? response.data : inspection
+      );
+      const openFindings = inspectionsBoard.reduce((sum, inspection) => sum + inspection.openFindings, 0);
+      const releaseReadiness =
+        inspectionsBoard.length > 0
+          ? Number(
+              (inspectionsBoard.reduce((sum, inspection) => sum + inspection.releaseReadiness, 0) / inspectionsBoard.length).toFixed(1)
+            )
+          : 0;
+      const averageReworkRate =
+        inspectionsBoard.length > 0
+          ? Number((inspectionsBoard.reduce((sum, inspection) => sum + inspection.reworkRate, 0) / inspectionsBoard.length).toFixed(1))
+          : 0;
+
+      return {
+        ...current,
+        summary: {
+          inspections: inspectionsBoard.length,
+          openFindings,
+          releaseReadiness,
+          averageReworkRate
+        },
+        inspectionsBoard,
+        focusInspection: current.focusInspection?.id === response.data?.id ? response.data : current.focusInspection
+      };
+    });
+    setNextActionDraft(response.data.nextAction);
+    setActionMessage(`Inspection moved to ${response.data.status}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -195,11 +335,45 @@ export default function QualityPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>
-                      <div>{selectedInspection.nextAction}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextActionDraft}
+                          onChange={(event) => setNextActionDraft(event.target.value)}
+                          placeholder="Describe the field action required to unblock this inspection"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedInspection.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Release review requires at most 3 open findings and at least 85% evidence.</span>
+                        <span className="tableCellMuted">Final release requires 0 open findings and at least 90% release readiness.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.status === "blocked" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleInspectionAction(option.status, option.nextAction)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

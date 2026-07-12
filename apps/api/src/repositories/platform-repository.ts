@@ -287,6 +287,12 @@ type QualityRiskRecord = {
   status: string;
 };
 
+type UpdateQualityInspectionInput = {
+  inspectionId: string;
+  status: "scheduled" | "in_progress" | "pending_release" | "released" | "blocked";
+  nextAction: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -340,6 +346,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
   listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
 };
 
@@ -1769,6 +1776,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       user.status = input.status;
       return user;
     },
+    async updateQualityInspection(input) {
+      const inspection = state.qualityInspections.find((item) => item.id === input.inspectionId);
+      if (!inspection) {
+        throw new Error("Quality inspection not found in repository");
+      }
+
+      inspection.status = input.status;
+      inspection.nextAction = input.nextAction;
+      inspection.updatedAt = new Date().toISOString();
+      return inspection;
+    },
     async listAuditEvents(companyId?: string, limit = 50) {
       const items = companyId
         ? state.auditEvents.filter((event) => event.companyId === companyId)
@@ -2594,6 +2612,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }
 
       return mapUserRow(result.rows[0]);
+    },
+    async updateQualityInspection(input) {
+      void input;
+      throw new Error("Quality inspection updates are not implemented for the postgres repository yet");
     },
     async listAuditEvents(companyId?: string, limit = 50) {
       const result = companyId

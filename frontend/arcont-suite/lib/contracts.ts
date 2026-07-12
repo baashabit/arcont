@@ -44,6 +44,7 @@ import {
   ProvisionCompanyRequestSchema,
   ProvisionCompanyResponseSchema,
   RoleSchema,
+  UpdateQualityInspectionRequestSchema,
   UpdateCompanyModulesRequestSchema,
   UpdatePlatformSettingsRequestSchema,
   UserSchema,
@@ -99,6 +100,7 @@ export {
   ProvisionCompanyRequestSchema,
   ProvisionCompanyResponseSchema,
   RoleSchema,
+  UpdateQualityInspectionRequestSchema,
   UpdateCompanyModulesRequestSchema,
   UpdatePlatformSettingsRequestSchema,
   UserSchema,
@@ -193,6 +195,7 @@ export type {
   ProvisionCompanyRequestContract,
   ProvisionCompanyResponseContract,
   RoleContract,
+  UpdateQualityInspectionRequestContract,
   UpdateCompanyModulesRequestContract,
   UpdatePlatformSettingsRequestContract,
   UserContract

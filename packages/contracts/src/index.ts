@@ -498,6 +498,11 @@ export const QualityOverviewSchema = z.object({
   focusInspection: QualityInspectionSchema.nullable()
 });
 
+export const UpdateQualityInspectionRequestSchema = z.object({
+  status: z.enum(["scheduled", "in_progress", "pending_release", "released", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -669,6 +674,7 @@ export type DocumentControlOverviewContract = z.infer<typeof DocumentControlOver
 export type QualityRiskContract = z.infer<typeof QualityRiskSchema>;
 export type QualityInspectionContract = z.infer<typeof QualityInspectionSchema>;
 export type QualityOverviewContract = z.infer<typeof QualityOverviewSchema>;
+export type UpdateQualityInspectionRequestContract = z.infer<typeof UpdateQualityInspectionRequestSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;
