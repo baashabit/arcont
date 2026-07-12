@@ -56,6 +56,42 @@ type UpdateProjectPortfolioItemInput = {
   nextMilestone: string;
 };
 
+type DailyLogEntryRecord = {
+  id: string;
+  companyId: string;
+  projectName: string;
+  frontName: string;
+  supervisor: string;
+  logDate: string;
+  shift: "morning" | "mixed" | "night";
+  weather: "clear" | "windy" | "rain" | "storm";
+  status: "draft" | "submitted" | "approved" | "flagged";
+  progressPercent: number;
+  workforceCount: number;
+  incidentsCount: number;
+  blockersCount: number;
+  evidenceCount: number;
+  concretePourM3: number;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type DailyLogRiskRecord = {
+  id: string;
+  logId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type UpdateDailyLogEntryInput = {
+  entryId: string;
+  status: "draft" | "submitted" | "approved" | "flagged";
+  nextAction: string;
+};
+
 type ProcurementPackageRecord = {
   id: string;
   companyId: string;
@@ -118,6 +154,46 @@ type InventoryRiskRecord = {
 type UpdateInventoryLocationInput = {
   locationId: string;
   stockHealth: "healthy" | "watch" | "critical";
+  nextAction: string;
+};
+
+type MachineItemRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  machineName: string;
+  machineType: string;
+  projectName: string;
+  frontName: string;
+  status: "available" | "maintenance" | "down";
+  health: "healthy" | "watch" | "critical";
+  availabilityPercent: number;
+  utilizationPercent: number;
+  hourMeter: number;
+  nextMaintenanceHours: number;
+  maintenanceDueDate: string;
+  maintenanceBacklog: number;
+  openFailures: number;
+  criticalOpenFailures: number;
+  lastServiceAt: string;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type MachineRiskRecord = {
+  id: string;
+  machineId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type UpdateMachineItemInput = {
+  machineId: string;
+  status: "available" | "maintenance" | "down";
+  health: "healthy" | "watch" | "critical";
   nextAction: string;
 };
 
@@ -390,10 +466,14 @@ export type PlatformRepository = {
   listUsers(companyId?: string): Promise<UserRecord[]>;
   listProjects(companyId: string): Promise<ProjectPortfolioItemRecord[]>;
   listProjectRisks(companyId: string): Promise<ProjectRiskRecord[]>;
+  listDailyLogEntries(companyId: string): Promise<DailyLogEntryRecord[]>;
+  listDailyLogRisks(companyId: string): Promise<DailyLogRiskRecord[]>;
   listProcurementPackages(companyId: string): Promise<ProcurementPackageRecord[]>;
   listProcurementRisks(companyId: string): Promise<ProcurementRiskRecord[]>;
   listInventoryLocations(companyId: string): Promise<InventoryLocationRecord[]>;
   listInventoryRisks(companyId: string): Promise<InventoryRiskRecord[]>;
+  listMachines(companyId: string): Promise<MachineItemRecord[]>;
+  listMachineRisks(companyId: string): Promise<MachineRiskRecord[]>;
   listFinanceItems(companyId: string): Promise<FinanceLedgerItemRecord[]>;
   listFinanceRisks(companyId: string): Promise<FinanceRiskRecord[]>;
   listCrmLeadBuckets(companyId: string): Promise<CrmLeadBucketRecord[]>;
@@ -439,6 +519,7 @@ export type PlatformRepository = {
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
   updateProjectPortfolioItem(input: UpdateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
+  updateDailyLogEntry(input: UpdateDailyLogEntryInput): Promise<DailyLogEntryRecord>;
   updateCrmLeadBucket(input: UpdateCrmLeadBucketInput): Promise<CrmLeadBucketRecord>;
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
@@ -447,6 +528,7 @@ export type PlatformRepository = {
   updateIntegrationStream(input: UpdateIntegrationStreamInput): Promise<IntegrationStreamRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   updateInventoryLocation(input: UpdateInventoryLocationInput): Promise<InventoryLocationRecord>;
+  updateMachineItem(input: UpdateMachineItemInput): Promise<MachineItemRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
   updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
   listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
@@ -466,8 +548,10 @@ function createSeedState() {
         "platform.identity",
         "sales.crm",
         "projects.control",
+        "projects.daily-log",
         "procurement.purchasing",
         "inventory.warehouse",
+        "inventory.equipment",
         "finance.accounting",
         "hr.workforce",
         "compliance.postsale",
@@ -485,8 +569,10 @@ function createSeedState() {
         "platform.companies",
         "platform.identity",
         "projects.control",
+        "projects.daily-log",
         "procurement.purchasing",
         "inventory.warehouse",
+        "inventory.equipment",
         "hr.workforce",
         "integrations.field-data"
       ]
@@ -625,6 +711,115 @@ function createSeedState() {
       severity: "warning",
       owner: "Quality lead",
       status: "Crew retraining scheduled"
+    }
+  ];
+
+  const dailyLogEntries: DailyLogEntryRecord[] = [
+    {
+      id: "dlg_torre_b_0712",
+      companyId: "cmp_arcont_demo",
+      projectName: "Torre B Residencial",
+      frontName: "Tower core",
+      supervisor: "Ramon Cetz",
+      logDate: "2026-07-12",
+      shift: "morning",
+      weather: "clear",
+      status: "submitted",
+      progressPercent: 62,
+      workforceCount: 46,
+      incidentsCount: 0,
+      blockersCount: 0,
+      evidenceCount: 28,
+      concretePourM3: 84,
+      nextAction: "Validate pour evidence and approve the tower core daily log before the evening shift.",
+      updatedAt: "2026-07-12T18:10:00.000Z"
+    },
+    {
+      id: "dlg_etapa2_0712",
+      companyId: "cmp_arcont_demo",
+      projectName: "Etapa 2 Urbanizacion",
+      frontName: "Storm drain trench",
+      supervisor: "Nora Pacheco",
+      logDate: "2026-07-12",
+      shift: "mixed",
+      weather: "rain",
+      status: "flagged",
+      progressPercent: 38,
+      workforceCount: 31,
+      incidentsCount: 1,
+      blockersCount: 2,
+      evidenceCount: 6,
+      concretePourM3: 0,
+      nextAction: "Document rainfall impact, close the utility crossing blocker, and upload missing trench evidence.",
+      updatedAt: "2026-07-12T17:25:00.000Z"
+    },
+    {
+      id: "dlg_vial_0712",
+      companyId: "cmp_bienestar_gov",
+      projectName: "Infraestructura Vial y Vivienda",
+      frontName: "Subgrade preparation",
+      supervisor: "Cesar Chan",
+      logDate: "2026-07-12",
+      shift: "morning",
+      weather: "windy",
+      status: "approved",
+      progressPercent: 71,
+      workforceCount: 52,
+      incidentsCount: 0,
+      blockersCount: 0,
+      evidenceCount: 34,
+      concretePourM3: 0,
+      nextAction: "Release next front and keep compaction evidence attached to the approved log.",
+      updatedAt: "2026-07-12T16:45:00.000Z"
+    },
+    {
+      id: "dlg_bn_0712",
+      companyId: "cmp_bienestar_gov",
+      projectName: "Paquete Bienestar Norte",
+      frontName: "Pilot housing pad",
+      supervisor: "Lucia Herrera",
+      logDate: "2026-07-12",
+      shift: "night",
+      weather: "storm",
+      status: "draft",
+      progressPercent: 24,
+      workforceCount: 18,
+      incidentsCount: 0,
+      blockersCount: 1,
+      evidenceCount: 2,
+      concretePourM3: 18,
+      nextAction: "Complete the pending night-shift evidence pack before routing this log for review.",
+      updatedAt: "2026-07-12T15:50:00.000Z"
+    }
+  ];
+
+  const dailyLogRisks: DailyLogRiskRecord[] = [
+    {
+      id: "dlr_etapa2_rain",
+      logId: "dlg_etapa2_0712",
+      title: "Rain event interrupted trench productivity and left evidence gaps",
+      category: "Weather",
+      severity: "warning",
+      owner: "Field coordinator",
+      status: "Pending recovery sequence"
+    },
+    {
+      id: "dlr_etapa2_utility",
+      logId: "dlg_etapa2_0712",
+      title: "Utility crossing approval still blocks the next trench segment",
+      category: "Permits",
+      severity: "critical",
+      owner: "Construction manager",
+      status: "Escalated with utility representative"
+    },
+    {
+      id: "dlr_bn_evidence",
+      logId: "dlg_bn_0712",
+      title: "Night shift log still missing core evidence pack",
+      category: "Documentation",
+      severity: "warning",
+      owner: "Site engineer",
+      status: "Waiting for upload from field tablet"
     }
   ];
 
@@ -815,6 +1010,136 @@ function createSeedState() {
       severity: "info",
       owner: "Inventory analyst",
       status: "Scheduled for next count window"
+    }
+  ];
+
+  const machines: MachineItemRecord[] = [
+    {
+      id: "eq_exc_demo",
+      companyId: "cmp_arcont_demo",
+      code: "EQ-EXC-01",
+      machineName: "Excavadora 320GC",
+      machineType: "Excavadora",
+      projectName: "Etapa 2 Urbanizacion",
+      frontName: "Plataforma norte",
+      status: "available",
+      health: "watch",
+      availabilityPercent: 92,
+      utilizationPercent: 74,
+      hourMeter: 1840,
+      nextMaintenanceHours: 110,
+      maintenanceDueDate: "2026-07-18T18:00:00.000Z",
+      maintenanceBacklog: 0,
+      openFailures: 1,
+      criticalOpenFailures: 0,
+      lastServiceAt: "2026-06-28T15:00:00.000Z",
+      nextAction: "Inspect bucket pin wear before next excavation cycle",
+      updatedAt: "2026-07-11T17:25:00.000Z"
+    },
+    {
+      id: "eq_crane_demo",
+      companyId: "cmp_arcont_demo",
+      code: "EQ-CRN-04",
+      machineName: "Grua torre TC-8",
+      machineType: "Grua torre",
+      projectName: "Torre B Residencial",
+      frontName: "Nucleo vertical",
+      status: "maintenance",
+      health: "critical",
+      availabilityPercent: 64,
+      utilizationPercent: 58,
+      hourMeter: 4120,
+      nextMaintenanceHours: 0,
+      maintenanceDueDate: "2026-07-09T13:00:00.000Z",
+      maintenanceBacklog: 2,
+      openFailures: 2,
+      criticalOpenFailures: 1,
+      lastServiceAt: "2026-06-10T11:30:00.000Z",
+      nextAction: "Close slew brake failure and release signed maintenance ticket",
+      updatedAt: "2026-07-11T18:15:00.000Z"
+    },
+    {
+      id: "eq_gen_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "EQ-GEN-07",
+      machineName: "Generador 150 kVA",
+      machineType: "Generador",
+      projectName: "Infraestructura Vial y Vivienda",
+      frontName: "Campamento principal",
+      status: "down",
+      health: "critical",
+      availabilityPercent: 51,
+      utilizationPercent: 69,
+      hourMeter: 5280,
+      nextMaintenanceHours: 0,
+      maintenanceDueDate: "2026-07-08T20:00:00.000Z",
+      maintenanceBacklog: 1,
+      openFailures: 3,
+      criticalOpenFailures: 2,
+      lastServiceAt: "2026-06-22T09:00:00.000Z",
+      nextAction: "Replace alternator module and keep backup rental online",
+      updatedAt: "2026-07-11T14:40:00.000Z"
+    },
+    {
+      id: "eq_loader_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "EQ-LDR-11",
+      machineName: "Cargador frontal 938",
+      machineType: "Cargador",
+      projectName: "Paquete Bienestar Norte",
+      frontName: "Patio de prefabricados",
+      status: "available",
+      health: "healthy",
+      availabilityPercent: 96,
+      utilizationPercent: 66,
+      hourMeter: 2360,
+      nextMaintenanceHours: 160,
+      maintenanceDueDate: "2026-07-29T18:00:00.000Z",
+      maintenanceBacklog: 0,
+      openFailures: 0,
+      criticalOpenFailures: 0,
+      lastServiceAt: "2026-07-03T10:30:00.000Z",
+      nextAction: "Keep tire inspection in weekly operator checklist",
+      updatedAt: "2026-07-11T13:20:00.000Z"
+    }
+  ];
+
+  const machineRisks: MachineRiskRecord[] = [
+    {
+      id: "mrk_crane_brake",
+      machineId: "eq_crane_demo",
+      title: "Slew brake failure keeps tower crane out of safe release window",
+      category: "Critical failure",
+      severity: "critical",
+      owner: "Maintenance supervisor",
+      status: "Brake kit on site and technician assigned"
+    },
+    {
+      id: "mrk_exc_bucket",
+      machineId: "eq_exc_demo",
+      title: "Bucket pin wear may degrade trench precision this week",
+      category: "Condition watch",
+      severity: "warning",
+      owner: "Equipment lead",
+      status: "Inspection added to next shift handoff"
+    },
+    {
+      id: "mrk_gen_alternator",
+      machineId: "eq_gen_gov",
+      title: "Alternator fault leaves remote backbone dependent on rental backup",
+      category: "Power continuity",
+      severity: "critical",
+      owner: "Field infrastructure",
+      status: "Replacement module requested with emergency priority"
+    },
+    {
+      id: "mrk_loader_oil",
+      machineId: "eq_loader_gov",
+      title: "Hydraulic oil sample should be repeated after heavy yard sequence",
+      category: "Predictive maintenance",
+      severity: "info",
+      owner: "Workshop planner",
+      status: "Sample scheduled in next preventive cycle"
     }
   ];
 
@@ -1677,10 +2002,14 @@ function createSeedState() {
       users,
       projects,
       projectRisks,
+      dailyLogEntries,
+      dailyLogRisks,
       procurementPackages,
       procurementRisks,
       inventoryLocations,
       inventoryRisks,
+      machines,
+      machineRisks,
       financeItems,
       financeRisks,
       crmLeadBuckets,
@@ -1725,6 +2054,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       );
       return state.projectRisks.filter((risk) => projectIds.has(risk.projectId));
     },
+    async listDailyLogEntries(companyId: string) {
+      return state.dailyLogEntries.filter((entry) => entry.companyId === companyId);
+    },
+    async listDailyLogRisks(companyId: string) {
+      const logIds = new Set(
+        state.dailyLogEntries.filter((entry) => entry.companyId === companyId).map((entry) => entry.id)
+      );
+      return state.dailyLogRisks.filter((risk) => logIds.has(risk.logId));
+    },
     async listProcurementPackages(companyId: string) {
       return state.procurementPackages.filter((item) => item.companyId === companyId);
     },
@@ -1742,6 +2080,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.inventoryLocations.filter((location) => location.companyId === companyId).map((location) => location.id)
       );
       return state.inventoryRisks.filter((risk) => locationIds.has(risk.locationId));
+    },
+    async listMachines(companyId: string) {
+      return state.machines.filter((machine) => machine.companyId === companyId);
+    },
+    async listMachineRisks(companyId: string) {
+      const machineIds = new Set(
+        state.machines.filter((machine) => machine.companyId === companyId).map((machine) => machine.id)
+      );
+      return state.machineRisks.filter((risk) => machineIds.has(risk.machineId));
     },
     async listFinanceItems(companyId: string) {
       return state.financeItems.filter((item) => item.companyId === companyId);
@@ -2046,6 +2393,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       item.updatedAt = new Date().toISOString();
       return item;
     },
+    async updateDailyLogEntry(input) {
+      const entry = state.dailyLogEntries.find((candidate) => candidate.id === input.entryId);
+      if (!entry) {
+        throw new Error("Daily log entry not found in repository");
+      }
+
+      entry.status = input.status;
+      entry.nextAction = input.nextAction;
+      entry.updatedAt = new Date().toISOString();
+      return entry;
+    },
     async updateCrmLeadBucket(input) {
       const item = state.crmLeadBuckets.find((candidate) => candidate.id === input.leadBucketId);
       if (!item) {
@@ -2122,6 +2480,18 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       location.nextAction = input.nextAction;
       location.updatedAt = new Date().toISOString();
       return location;
+    },
+    async updateMachineItem(input) {
+      const machine = state.machines.find((item) => item.id === input.machineId);
+      if (!machine) {
+        throw new Error("Machine item not found in repository");
+      }
+
+      machine.status = input.status;
+      machine.health = input.health;
+      machine.nextAction = input.nextAction;
+      machine.updatedAt = new Date().toISOString();
+      return machine;
     },
     async updateDocumentControlItem(input) {
       const item = state.documentControlItems.find((candidate) => candidate.id === input.itemId);
@@ -2363,6 +2733,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
         status: String(row.status)
       }));
     },
+    async listDailyLogEntries(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listDailyLogRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
     async listProcurementPackages(companyId: string) {
       const items = await this.listCompanies();
       void items;
@@ -2380,6 +2762,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listInventoryRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listMachines(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listMachineRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;
@@ -2998,6 +3392,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       void input;
       throw new Error("Project portfolio updates are not implemented for the postgres repository yet");
     },
+    async updateDailyLogEntry(input) {
+      void input;
+      throw new Error("Daily log updates are not implemented for the postgres repository yet");
+    },
     async updateCrmLeadBucket(input) {
       void input;
       throw new Error("CRM lead bucket updates are not implemented for the postgres repository yet");
@@ -3025,6 +3423,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     async updateInventoryLocation(input) {
       void input;
       throw new Error("Inventory location updates are not implemented for the postgres repository yet");
+    },
+    async updateMachineItem(input) {
+      void input;
+      throw new Error("Machine item updates are not implemented for the postgres repository yet");
     },
     async updateDocumentControlItem(input) {
       void input;

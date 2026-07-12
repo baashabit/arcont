@@ -158,6 +158,55 @@ export const UpdateProjectPortfolioItemRequestSchema = z.object({
   nextMilestone: z.string().min(8)
 });
 
+export const DailyLogRiskSchema = z.object({
+  id: z.string(),
+  logId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const DailyLogEntrySchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  projectName: z.string(),
+  frontName: z.string(),
+  supervisor: z.string(),
+  logDate: z.string(),
+  shift: z.enum(["morning", "mixed", "night"]),
+  weather: z.enum(["clear", "windy", "rain", "storm"]),
+  status: z.enum(["draft", "submitted", "approved", "flagged"]),
+  progressPercent: z.number().min(0).max(100),
+  workforceCount: z.number().int().nonnegative(),
+  incidentsCount: z.number().int().nonnegative(),
+  blockersCount: z.number().int().nonnegative(),
+  evidenceCount: z.number().int().nonnegative(),
+  concretePourM3: z.number().nonnegative(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const DailyLogOverviewSchema = z.object({
+  summary: z.object({
+    submittedToday: z.number().int().nonnegative(),
+    approvedLogs: z.number().int().nonnegative(),
+    flaggedLogs: z.number().int().nonnegative(),
+    totalWorkforce: z.number().int().nonnegative(),
+    pendingEvidence: z.number().int().nonnegative(),
+    averageProgress: z.number().min(0).max(100)
+  }),
+  entries: z.array(DailyLogEntrySchema),
+  risks: z.array(DailyLogRiskSchema),
+  focusEntry: DailyLogEntrySchema.nullable()
+});
+
+export const UpdateDailyLogEntryRequestSchema = z.object({
+  status: z.enum(["draft", "submitted", "approved", "flagged"]),
+  nextAction: z.string().min(8)
+});
+
 export const ProcurementRiskSchema = z.object({
   id: z.string(),
   packageId: z.string(),
@@ -299,6 +348,59 @@ export const UpdateInventoryLocationRequestSchema = z.object({
   nextAction: z.string().min(8)
 });
 
+export const MachineRiskSchema = z.object({
+  id: z.string(),
+  machineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const MachineItemSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  machineName: z.string(),
+  machineType: z.string(),
+  projectName: z.string(),
+  frontName: z.string(),
+  status: z.enum(["available", "maintenance", "down"]),
+  health: z.enum(["healthy", "watch", "critical"]),
+  availabilityPercent: z.number().min(0).max(100),
+  utilizationPercent: z.number().min(0).max(100),
+  hourMeter: z.number().nonnegative(),
+  nextMaintenanceHours: z.number().nonnegative(),
+  maintenanceDueDate: z.string(),
+  maintenanceBacklog: z.number().int().nonnegative(),
+  openFailures: z.number().int().nonnegative(),
+  criticalOpenFailures: z.number().int().nonnegative(),
+  lastServiceAt: z.string(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const EquipmentOverviewSchema = z.object({
+  summary: z.object({
+    trackedMachines: z.number().int().nonnegative(),
+    availableMachines: z.number().int().nonnegative(),
+    machinesInMaintenance: z.number().int().nonnegative(),
+    overdueMaintenance: z.number().int().nonnegative(),
+    criticalOpenFailures: z.number().int().nonnegative(),
+    averageAvailability: z.number().min(0).max(100)
+  }),
+  machines: z.array(MachineItemSchema),
+  risks: z.array(MachineRiskSchema),
+  focusMachine: MachineItemSchema.nullable()
+});
+
+export const UpdateMachineItemRequestSchema = z.object({
+  status: z.enum(["available", "maintenance", "down"]),
+  health: z.enum(["healthy", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const FinanceRiskSchema = z.object({
   id: z.string(),
   ledgerId: z.string(),
@@ -393,6 +495,202 @@ export const EstimationCollectionOverviewSchema = z.object({
 
 export const UpdateEstimationCollectionLineRequestSchema = z.object({
   collectionHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
+export const BudgetBookRiskSchema = z.object({
+  id: z.string(),
+  lineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const BudgetBookLineSchema = z.object({
+  id: z.string(),
+  packageId: z.string(),
+  companyId: z.string(),
+  projectId: z.string().nullable(),
+  code: z.string(),
+  conceptCode: z.string(),
+  projectName: z.string(),
+  packageName: z.string(),
+  buyer: z.string(),
+  unit: z.string(),
+  quantity: z.number().positive(),
+  unitCost: z.number().nonnegative(),
+  budgetAmount: z.number().nonnegative(),
+  executedQuantity: z.number().nonnegative(),
+  estimatedQuantity: z.number().nonnegative(),
+  pendingQuantity: z.number().nonnegative(),
+  progressPercent: z.number().min(0).max(100),
+  evidenceCount: z.number().int().nonnegative(),
+  changeOrders: z.number().int().nonnegative(),
+  generatorHealth: z.enum(["controlled", "watch", "critical"]),
+  procurementStatus: z.enum(["draft", "sourcing", "awaiting_approval", "awarded", "blocked"]),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const BudgetBookOverviewSchema = z.object({
+  summary: z.object({
+    activeConcepts: z.number().int().nonnegative(),
+    baselineBudget: z.number().nonnegative(),
+    executedBudget: z.number().nonnegative(),
+    estimatedBudget: z.number().nonnegative(),
+    pendingBudget: z.number().nonnegative(),
+    criticalConcepts: z.number().int().nonnegative()
+  }),
+  lines: z.array(BudgetBookLineSchema),
+  risks: z.array(BudgetBookRiskSchema),
+  focusLine: BudgetBookLineSchema.nullable()
+});
+
+export const UpdateBudgetBookLineRequestSchema = z.object({
+  procurementStatus: z.enum(["draft", "sourcing", "awaiting_approval", "awarded", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
+export const CashFlowRiskSchema = z.object({
+  id: z.string(),
+  lineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const CashFlowLineSchema = z.object({
+  id: z.string(),
+  ledgerId: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  streamName: z.string(),
+  sourceType: z.enum(["cash", "payables", "collections", "tax", "close"]),
+  health: z.enum(["controlled", "watch", "critical"]),
+  startingCash: z.number(),
+  projectedInflows: z.number().nonnegative(),
+  projectedOutflows: z.number().nonnegative(),
+  weeklyNet: z.number(),
+  liquidityCoverageWeeks: z.number().min(0),
+  openPressureItems: z.number().int().nonnegative(),
+  confidencePercent: z.number().min(0).max(100),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const CashFlowOverviewSchema = z.object({
+  summary: z.object({
+    trackedStreams: z.number().int().nonnegative(),
+    projectedInflows: z.number().nonnegative(),
+    projectedOutflows: z.number().nonnegative(),
+    weeklyNet: z.number(),
+    criticalStreams: z.number().int().nonnegative(),
+    averageConfidence: z.number().min(0).max(100)
+  }),
+  lines: z.array(CashFlowLineSchema),
+  risks: z.array(CashFlowRiskSchema),
+  focusLine: CashFlowLineSchema.nullable()
+});
+
+export const UpdateCashFlowLineRequestSchema = z.object({
+  health: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
+export const CloseControlRiskSchema = z.object({
+  id: z.string(),
+  lineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const CloseControlLineSchema = z.object({
+  id: z.string(),
+  sourceId: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  streamName: z.string(),
+  streamType: z.enum(["finance", "compliance", "document_control"]),
+  closeHealth: z.enum(["controlled", "watch", "critical"]),
+  closeReadiness: z.number().min(0).max(100),
+  blockingItems: z.number().int().nonnegative(),
+  slaHoursRemaining: z.number(),
+  evidenceCompletion: z.number().min(0).max(100),
+  fiscalExposure: z.number().nonnegative(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const CloseControlOverviewSchema = z.object({
+  summary: z.object({
+    trackedStreams: z.number().int().nonnegative(),
+    averageCloseReadiness: z.number().min(0).max(100),
+    criticalStreams: z.number().int().nonnegative(),
+    blockedItems: z.number().int().nonnegative(),
+    fiscalExposure: z.number().nonnegative(),
+    overdueStreams: z.number().int().nonnegative()
+  }),
+  lines: z.array(CloseControlLineSchema),
+  risks: z.array(CloseControlRiskSchema),
+  focusLine: CloseControlLineSchema.nullable()
+});
+
+export const UpdateCloseControlLineRequestSchema = z.object({
+  closeHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
+export const SupplierControlRiskSchema = z.object({
+  id: z.string(),
+  lineId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const SupplierControlLineSchema = z.object({
+  id: z.string(),
+  supplierId: z.string(),
+  companyId: z.string(),
+  supplierName: z.string(),
+  owner: z.string(),
+  awardedPackages: z.number().int().nonnegative(),
+  activePackages: z.number().int().nonnegative(),
+  contractedAmount: z.number().nonnegative(),
+  concentrationPercent: z.number().min(0).max(100),
+  bidCoverage: z.number().min(0).max(10),
+  deliveryHealth: z.enum(["controlled", "watch", "critical"]),
+  approvalPressureHours: z.number().nonnegative(),
+  complianceAlerts: z.number().int().nonnegative(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const SupplierControlOverviewSchema = z.object({
+  summary: z.object({
+    trackedSuppliers: z.number().int().nonnegative(),
+    concentratedSuppliers: z.number().int().nonnegative(),
+    awardedVolume: z.number().nonnegative(),
+    averageBidCoverage: z.number().min(0).max(10),
+    criticalSuppliers: z.number().int().nonnegative(),
+    complianceAlerts: z.number().int().nonnegative()
+  }),
+  lines: z.array(SupplierControlLineSchema),
+  risks: z.array(SupplierControlRiskSchema),
+  focusLine: SupplierControlLineSchema.nullable()
+});
+
+export const UpdateSupplierControlLineRequestSchema = z.object({
+  deliveryHealth: z.enum(["controlled", "watch", "critical"]),
   nextAction: z.string().min(8)
 });
 
@@ -906,6 +1204,10 @@ export type ProjectRiskContract = z.infer<typeof ProjectRiskSchema>;
 export type ProjectPortfolioItemContract = z.infer<typeof ProjectPortfolioItemSchema>;
 export type ProjectPortfolioOverviewContract = z.infer<typeof ProjectPortfolioOverviewSchema>;
 export type UpdateProjectPortfolioItemRequestContract = z.infer<typeof UpdateProjectPortfolioItemRequestSchema>;
+export type DailyLogRiskContract = z.infer<typeof DailyLogRiskSchema>;
+export type DailyLogEntryContract = z.infer<typeof DailyLogEntrySchema>;
+export type DailyLogOverviewContract = z.infer<typeof DailyLogOverviewSchema>;
+export type UpdateDailyLogEntryRequestContract = z.infer<typeof UpdateDailyLogEntryRequestSchema>;
 export type ProcurementRiskContract = z.infer<typeof ProcurementRiskSchema>;
 export type ProcurementPackageContract = z.infer<typeof ProcurementPackageSchema>;
 export type ProcurementOverviewContract = z.infer<typeof ProcurementOverviewSchema>;
@@ -918,6 +1220,10 @@ export type InventoryRiskContract = z.infer<typeof InventoryRiskSchema>;
 export type InventoryLocationContract = z.infer<typeof InventoryLocationSchema>;
 export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;
 export type UpdateInventoryLocationRequestContract = z.infer<typeof UpdateInventoryLocationRequestSchema>;
+export type MachineRiskContract = z.infer<typeof MachineRiskSchema>;
+export type MachineItemContract = z.infer<typeof MachineItemSchema>;
+export type EquipmentOverviewContract = z.infer<typeof EquipmentOverviewSchema>;
+export type UpdateMachineItemRequestContract = z.infer<typeof UpdateMachineItemRequestSchema>;
 export type FinanceRiskContract = z.infer<typeof FinanceRiskSchema>;
 export type FinanceLedgerItemContract = z.infer<typeof FinanceLedgerItemSchema>;
 export type FinanceOverviewContract = z.infer<typeof FinanceOverviewSchema>;
@@ -926,6 +1232,22 @@ export type EstimationCollectionExceptionContract = z.infer<typeof EstimationCol
 export type EstimationCollectionLineContract = z.infer<typeof EstimationCollectionLineSchema>;
 export type EstimationCollectionOverviewContract = z.infer<typeof EstimationCollectionOverviewSchema>;
 export type UpdateEstimationCollectionLineRequestContract = z.infer<typeof UpdateEstimationCollectionLineRequestSchema>;
+export type BudgetBookRiskContract = z.infer<typeof BudgetBookRiskSchema>;
+export type BudgetBookLineContract = z.infer<typeof BudgetBookLineSchema>;
+export type BudgetBookOverviewContract = z.infer<typeof BudgetBookOverviewSchema>;
+export type UpdateBudgetBookLineRequestContract = z.infer<typeof UpdateBudgetBookLineRequestSchema>;
+export type CashFlowRiskContract = z.infer<typeof CashFlowRiskSchema>;
+export type CashFlowLineContract = z.infer<typeof CashFlowLineSchema>;
+export type CashFlowOverviewContract = z.infer<typeof CashFlowOverviewSchema>;
+export type UpdateCashFlowLineRequestContract = z.infer<typeof UpdateCashFlowLineRequestSchema>;
+export type CloseControlRiskContract = z.infer<typeof CloseControlRiskSchema>;
+export type CloseControlLineContract = z.infer<typeof CloseControlLineSchema>;
+export type CloseControlOverviewContract = z.infer<typeof CloseControlOverviewSchema>;
+export type UpdateCloseControlLineRequestContract = z.infer<typeof UpdateCloseControlLineRequestSchema>;
+export type SupplierControlRiskContract = z.infer<typeof SupplierControlRiskSchema>;
+export type SupplierControlLineContract = z.infer<typeof SupplierControlLineSchema>;
+export type SupplierControlOverviewContract = z.infer<typeof SupplierControlOverviewSchema>;
+export type UpdateSupplierControlLineRequestContract = z.infer<typeof UpdateSupplierControlLineRequestSchema>;
 export type CrmRiskContract = z.infer<typeof CrmRiskSchema>;
 export type CrmLeadBucketContract = z.infer<typeof CrmLeadBucketSchema>;
 export type CrmOverviewContract = z.infer<typeof CrmOverviewSchema>;
@@ -1007,6 +1329,14 @@ export const moduleCatalog: ModuleContract[] = [
     enabledByDefault: false
   },
   {
+    key: "projects.daily-log",
+    name: "Daily Log",
+    area: "projects",
+    scope: "operations",
+    description: "Daily field diary, crew capture, blockers, and evidence discipline.",
+    enabledByDefault: false
+  },
+  {
     key: "procurement.purchasing",
     name: "Procurement",
     area: "procurement",
@@ -1020,6 +1350,14 @@ export const moduleCatalog: ModuleContract[] = [
     area: "inventory",
     scope: "operations",
     description: "Stock, movements, cost traceability, and field supply.",
+    enabledByDefault: false
+  },
+  {
+    key: "inventory.equipment",
+    name: "Equipment and Maintenance",
+    area: "inventory",
+    scope: "operations",
+    description: "Machinery availability, maintenance, failures, and operating criticality.",
     enabledByDefault: false
   },
   {

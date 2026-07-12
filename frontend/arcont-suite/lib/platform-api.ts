@@ -1,6 +1,14 @@
 import {
   AuditEventSchema,
   AuthSessionSchema,
+  BudgetBookLineSchema,
+  BudgetBookOverviewSchema,
+  CashFlowLineSchema,
+  CashFlowOverviewSchema,
+  CloseControlLineSchema,
+  CloseControlOverviewSchema,
+  SupplierControlLineSchema,
+  SupplierControlOverviewSchema,
   ComplianceCaseSchema,
   ComplianceOverviewSchema,
   CostControlLineSchema,
@@ -12,8 +20,11 @@ import {
   CompanySchema,
   CreatePlatformUserRequestSchema,
   CreatePlatformUserResponseSchema,
+  DailyLogEntrySchema,
+  DailyLogOverviewSchema,
   DocumentControlItemSchema,
   DocumentControlOverviewSchema,
+  EquipmentOverviewSchema,
   EstimationCollectionLineSchema,
   EstimationCollectionOverviewSchema,
   FinanceOverviewSchema,
@@ -24,6 +35,7 @@ import {
   IntegrationStreamSchema,
   InventoryLocationSchema,
   InventoryOverviewSchema,
+  MachineItemSchema,
   ModuleSchema,
   PostSaleCaseSchema,
   PostSaleOverviewSchema,
@@ -53,11 +65,17 @@ import {
   UpdateHrWorkforceItemRequestSchema,
   UpdateIntegrationStreamRequestSchema,
   UpdateInventoryLocationRequestSchema,
+  UpdateMachineItemRequestSchema,
   UpdatePostSaleCaseRequestSchema,
   UpdateProjectPortfolioItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
+  UpdateBudgetBookLineRequestSchema,
+  UpdateCashFlowLineRequestSchema,
+  UpdateCloseControlLineRequestSchema,
+  UpdateSupplierControlLineRequestSchema,
+  UpdateDailyLogEntryRequestSchema,
   UpdateQualityInspectionRequestSchema,
   UpdateCompanyModulesRequestSchema,
   UpdatePlatformSettingsRequestSchema,
@@ -65,6 +83,14 @@ import {
   type AuditEventContract,
   type AuthLoginRequestContract,
   type AuthSessionContract,
+  type BudgetBookLineContract,
+  type BudgetBookOverviewContract,
+  type CashFlowLineContract,
+  type CashFlowOverviewContract,
+  type CloseControlLineContract,
+  type CloseControlOverviewContract,
+  type SupplierControlLineContract,
+  type SupplierControlOverviewContract,
   type ComplianceCaseContract,
   type ComplianceOverviewContract,
   type CostControlLineContract,
@@ -76,8 +102,11 @@ import {
   type CompanyContract,
   type CreatePlatformUserRequestContract,
   type CreatePlatformUserResponseContract,
+  type DailyLogEntryContract,
+  type DailyLogOverviewContract,
   type DocumentControlItemContract,
   type DocumentControlOverviewContract,
+  type EquipmentOverviewContract,
   type EstimationCollectionLineContract,
   type EstimationCollectionOverviewContract,
   type FinanceLedgerItemContract,
@@ -88,6 +117,7 @@ import {
   type IntegrationStreamContract,
   type InventoryLocationContract,
   type InventoryOverviewContract,
+  type MachineItemContract,
   type ModuleContract,
   type PostSaleCaseContract,
   type PostSaleOverviewContract,
@@ -116,11 +146,17 @@ import {
   type UpdateHrWorkforceItemRequestContract,
   type UpdateIntegrationStreamRequestContract,
   type UpdateInventoryLocationRequestContract,
+  type UpdateMachineItemRequestContract,
   type UpdatePostSaleCaseRequestContract,
   type UpdateProjectPortfolioItemRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
+  type UpdateBudgetBookLineRequestContract,
+  type UpdateCashFlowLineRequestContract,
+  type UpdateCloseControlLineRequestContract,
+  type UpdateSupplierControlLineRequestContract,
+  type UpdateDailyLogEntryRequestContract,
   type UpdateQualityInspectionRequestContract,
   type UpdateCompanyModulesRequestContract,
   type UpdatePlatformSettingsRequestContract,
@@ -457,6 +493,158 @@ export async function updateProcurementPackage(
   };
 }
 
+export async function fetchBudgetBookOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<BudgetBookOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/budget-book/overview${query}`, options);
+  return response ? BudgetBookOverviewSchema.parse(response) : null;
+}
+
+export async function updateBudgetBookLine(
+  lineId: string,
+  companyId: string | undefined,
+  input: UpdateBudgetBookLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<BudgetBookLineContract>> {
+  const payload = UpdateBudgetBookLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/budget-book/lines/${lineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: BudgetBookLineSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchCashFlowOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<CashFlowOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/cash-flow/overview${query}`, options);
+  return response ? CashFlowOverviewSchema.parse(response) : null;
+}
+
+export async function updateCashFlowLine(
+  lineId: string,
+  companyId: string | undefined,
+  input: UpdateCashFlowLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CashFlowLineContract>> {
+  const payload = UpdateCashFlowLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/cash-flow/lines/${lineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CashFlowLineSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchCloseControlOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<CloseControlOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/close-control/overview${query}`, options);
+  return response ? CloseControlOverviewSchema.parse(response) : null;
+}
+
+export async function updateCloseControlLine(
+  lineId: string,
+  companyId: string | undefined,
+  input: UpdateCloseControlLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CloseControlLineContract>> {
+  const payload = UpdateCloseControlLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/close-control/lines/${lineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CloseControlLineSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchSupplierControlOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<SupplierControlOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/supplier-control/overview${query}`, options);
+  return response ? SupplierControlOverviewSchema.parse(response) : null;
+}
+
+export async function updateSupplierControlLine(
+  lineId: string,
+  companyId: string | undefined,
+  input: UpdateSupplierControlLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<SupplierControlLineContract>> {
+  const payload = UpdateSupplierControlLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/supplier-control/lines/${lineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: SupplierControlLineSchema.parse(response.data),
+    error: null
+  };
+}
+
 export async function fetchCostControlOverview(
   companyId: string | undefined,
   options: RequestOptions
@@ -529,6 +717,82 @@ export async function updateInventoryLocation(
 
   return {
     data: InventoryLocationSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchEquipmentOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<EquipmentOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/equipment/overview${query}`, options);
+  return response ? EquipmentOverviewSchema.parse(response) : null;
+}
+
+export async function updateMachineItem(
+  machineId: string,
+  companyId: string | undefined,
+  input: UpdateMachineItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<MachineItemContract>> {
+  const payload = UpdateMachineItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/equipment/machines/${machineId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: MachineItemSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchDailyLogOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<DailyLogOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/daily-log/overview${query}`, options);
+  return response ? DailyLogOverviewSchema.parse(response) : null;
+}
+
+export async function updateDailyLogEntry(
+  entryId: string,
+  companyId: string | undefined,
+  input: UpdateDailyLogEntryRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<DailyLogEntryContract>> {
+  const payload = UpdateDailyLogEntryRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/daily-log/entries/${entryId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: DailyLogEntrySchema.parse(response.data),
     error: null
   };
 }

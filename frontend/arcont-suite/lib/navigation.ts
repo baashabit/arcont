@@ -105,6 +105,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["projects:*"]
   },
   {
+    href: "/daily-log",
+    label: "Daily Log",
+    description: "Site diary and crews",
+    domain: "projects",
+    moduleKeys: ["projects.daily-log"],
+    requiredPermissions: ["projects:*"]
+  },
+  {
     href: "/copilot",
     label: "AI Copilot",
     description: "Context-aware assistant",
@@ -116,6 +124,22 @@ export const navigationItems: NavigationItem[] = [
     href: "/procurement",
     label: "Procurement",
     description: "Requests and sourcing",
+    domain: "procurement",
+    moduleKeys: ["procurement.purchasing"],
+    requiredPermissions: ["procurement:*"]
+  },
+  {
+    href: "/budget-book",
+    label: "Budget Book",
+    description: "Catalog and generators",
+    domain: "procurement",
+    moduleKeys: ["procurement.purchasing"],
+    requiredPermissions: ["procurement:*"]
+  },
+  {
+    href: "/supplier-control",
+    label: "Supplier Control",
+    description: "Vendor health and concentration",
     domain: "procurement",
     moduleKeys: ["procurement.purchasing"],
     requiredPermissions: ["procurement:*"]
@@ -137,9 +161,33 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["inventory:*"]
   },
   {
+    href: "/equipment",
+    label: "Equipment",
+    description: "Machinery and maintenance",
+    domain: "inventory",
+    moduleKeys: ["inventory.equipment"],
+    requiredPermissions: ["inventory:*"]
+  },
+  {
     href: "/finance",
     label: "Finance",
     description: "Treasury and close",
+    domain: "finance",
+    moduleKeys: ["finance.accounting"],
+    requiredPermissions: ["finance:*", "finance:read"]
+  },
+  {
+    href: "/cash-flow",
+    label: "Cash Flow",
+    description: "Inflow and outflow control",
+    domain: "finance",
+    moduleKeys: ["finance.accounting"],
+    requiredPermissions: ["finance:*", "finance:read"]
+  },
+  {
+    href: "/close-control",
+    label: "Close Control",
+    description: "Close and SAT blockers",
     domain: "finance",
     moduleKeys: ["finance.accounting"],
     requiredPermissions: ["finance:*", "finance:read"]
