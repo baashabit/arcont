@@ -50,6 +50,12 @@ type ProjectRiskRecord = {
   status: string;
 };
 
+type UpdateProjectPortfolioItemInput = {
+  projectId: string;
+  status: "planning" | "active" | "at_risk" | "blocked" | "closed";
+  nextMilestone: string;
+};
+
 type ProcurementPackageRecord = {
   id: string;
   companyId: string;
@@ -388,6 +394,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  updateProjectPortfolioItem(input: UpdateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
   updateCrmLeadBucket(input: UpdateCrmLeadBucketInput): Promise<CrmLeadBucketRecord>;
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
@@ -1825,6 +1832,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       user.status = input.status;
       return user;
     },
+    async updateProjectPortfolioItem(input) {
+      const item = state.projects.find((candidate) => candidate.id === input.projectId);
+      if (!item) {
+        throw new Error("Project portfolio item not found in repository");
+      }
+
+      item.status = input.status;
+      item.nextMilestone = input.nextMilestone;
+      item.updatedAt = new Date().toISOString();
+      return item;
+    },
     async updateCrmLeadBucket(input) {
       const item = state.crmLeadBuckets.find((candidate) => candidate.id === input.leadBucketId);
       if (!item) {
@@ -2738,6 +2756,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }
 
       return mapUserRow(result.rows[0]);
+    },
+    async updateProjectPortfolioItem(input) {
+      void input;
+      throw new Error("Project portfolio updates are not implemented for the postgres repository yet");
     },
     async updateCrmLeadBucket(input) {
       void input;

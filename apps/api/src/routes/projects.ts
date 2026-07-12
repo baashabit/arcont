@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { UpdateProjectPortfolioItemRequestSchema } from "@arcont/contracts";
 import { authError } from "../lib/domain-error.js";
 
 function getBearerToken(authorization?: string) {
@@ -26,4 +27,26 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
 
     return app.container.projectsService.getPortfolioOverview(companyId);
   });
+
+  app.patch<{ Params: { projectId: string }; Body: unknown; Querystring: { companyId?: string } }>(
+    "/projects/items/:projectId",
+    async (request) => {
+      const accessToken = getBearerToken(request.headers.authorization);
+      const session = await app.container.authService.authorize(accessToken, {
+        requiredPermissions: ["projects:*"],
+        companyId: request.query.companyId
+      });
+      const input = UpdateProjectPortfolioItemRequestSchema.parse(request.body);
+
+      const companyId =
+        session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
+
+      return app.container.projectsService.updateProject({
+        companyId,
+        projectId: request.params.projectId,
+        status: input.status,
+        nextMilestone: input.nextMilestone
+      });
+    }
+  );
 }

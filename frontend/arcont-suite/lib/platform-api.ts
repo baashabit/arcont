@@ -26,6 +26,7 @@ import {
   PlatformSettingsSchema,
   ProcurementOverviewSchema,
   ProcurementPackageSchema,
+  ProjectPortfolioItemSchema,
   ProjectPortfolioOverviewSchema,
   QualityInspectionSchema,
   QualityOverviewSchema,
@@ -37,6 +38,7 @@ import {
   UpdateFinanceLedgerItemRequestSchema,
   UpdateHrWorkforceItemRequestSchema,
   UpdateInventoryLocationRequestSchema,
+  UpdateProjectPortfolioItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
@@ -72,6 +74,7 @@ import {
   type PlatformSettingsContract,
   type ProcurementOverviewContract,
   type ProcurementPackageContract,
+  type ProjectPortfolioItemContract,
   type ProjectPortfolioOverviewContract,
   type QualityInspectionContract,
   type QualityOverviewContract,
@@ -83,6 +86,7 @@ import {
   type UpdateFinanceLedgerItemRequestContract,
   type UpdateHrWorkforceItemRequestContract,
   type UpdateInventoryLocationRequestContract,
+  type UpdateProjectPortfolioItemRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
@@ -326,6 +330,35 @@ export async function fetchProjectsOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/projects/overview${query}`, options);
   return response ? ProjectPortfolioOverviewSchema.parse(response) : null;
+}
+
+export async function updateProjectPortfolioItem(
+  projectId: string,
+  companyId: string | undefined,
+  input: UpdateProjectPortfolioItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProjectPortfolioItemContract>> {
+  const payload = UpdateProjectPortfolioItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/projects/items/${projectId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProjectPortfolioItemSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchProcurementOverview(

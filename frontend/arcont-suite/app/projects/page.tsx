@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { ProjectPortfolioItemContract, ProjectPortfolioOverviewContract } from "@/lib/contracts";
-import { fetchProjectsOverview } from "@/lib/platform-api";
+import { fetchProjectsOverview, updateProjectPortfolioItem } from "@/lib/platform-api";
 
 function statusTone(status: ProjectPortfolioItemContract["status"]) {
   switch (status) {
@@ -39,12 +39,75 @@ function budgetTone(budgetHealth: ProjectPortfolioItemContract["budgetHealth"]) 
   }
 }
 
+function projectActionOptions(project: ProjectPortfolioItemContract) {
+  switch (project.status) {
+    case "planning":
+      return [
+        {
+          label: "Start project",
+          status: "active" as const,
+          nextMilestone: "Mobilization and first production front release"
+        }
+      ];
+    case "active":
+      return [
+        {
+          label: "Mark at risk",
+          status: "at_risk" as const,
+          nextMilestone: "Recovery plan review with PMO and supervision"
+        },
+        {
+          label: "Block project",
+          status: "blocked" as const,
+          nextMilestone: "Escalate blocker and freeze affected fronts"
+        },
+        {
+          label: "Close project",
+          status: "closed" as const,
+          nextMilestone: "Administrative closeout and final handover"
+        }
+      ];
+    case "at_risk":
+      return [
+        {
+          label: "Recover to active",
+          status: "active" as const,
+          nextMilestone: "Resume baseline production sequence"
+        },
+        {
+          label: "Block project",
+          status: "blocked" as const,
+          nextMilestone: "Escalate unresolved blocker to steering review"
+        }
+      ];
+    case "blocked":
+      return [
+        {
+          label: "Resume as active",
+          status: "active" as const,
+          nextMilestone: "Restart fronts after blocker release"
+        },
+        {
+          label: "Move to at risk",
+          status: "at_risk" as const,
+          nextMilestone: "Track controlled restart with recovery plan"
+        }
+      ];
+    default:
+      return [];
+  }
+}
+
 export default function ProjectsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<ProjectPortfolioOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [nextMilestoneDraft, setNextMilestoneDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -93,6 +156,79 @@ export default function ProjectsPage() {
     () => overview?.risks.filter((risk) => risk.projectId === selectedProject?.id) ?? [],
     [overview, selectedProject]
   );
+
+  const actionOptions = useMemo(() => (selectedProject ? projectActionOptions(selectedProject) : []), [selectedProject]);
+
+  useEffect(() => {
+    setNextMilestoneDraft(selectedProject?.nextMilestone ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedProjectId, selectedProject?.id, selectedProject?.nextMilestone]);
+
+  async function handleProjectAction(
+    status: ProjectPortfolioItemContract["status"],
+    suggestedMilestone: string
+  ) {
+    if (!selectedProject || !session.accessToken) {
+      return;
+    }
+
+    const nextMilestone = nextMilestoneDraft.trim() || suggestedMilestone;
+    if (nextMilestone.length < 8) {
+      setActionError("Next milestone must be more specific before updating the project.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateProjectPortfolioItem(
+      selectedProject.id,
+      activeCompany.id,
+      {
+        status,
+        nextMilestone
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Project update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const projects = current.projects.map((project) => (project.id === response.data?.id ? response.data : project));
+      const activeProjects = projects.filter((project) => ["active", "at_risk", "blocked"].includes(project.status));
+      const averageProgress =
+        activeProjects.length > 0 ? Number((activeProjects.reduce((sum, project) => sum + project.progress, 0) / activeProjects.length).toFixed(1)) : 0;
+
+      return {
+        ...current,
+        summary: {
+          activeProjects: activeProjects.length,
+          averageProgress,
+          qualityHolds: activeProjects.reduce((sum, project) => sum + project.qualityHolds, 0),
+          permitBlockers: activeProjects.reduce((sum, project) => sum + project.permitBlockers, 0)
+        },
+        projects,
+        focusProject: current.focusProject?.id === response.data?.id ? response.data : current.focusProject
+      };
+    });
+
+    setNextMilestoneDraft(response.data.nextMilestone);
+    setActionMessage(`Project moved to ${response.data.status}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -215,11 +351,45 @@ export default function ProjectsPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next milestone</div>
-                      <div>{selectedProject.nextMilestone}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextMilestoneDraft}
+                          onChange={(event) => setNextMilestoneDraft(event.target.value)}
+                          placeholder="Describe the next delivery, permit or site milestone"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedProject.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Active status is blocked when permit blockers are greater than 2.</span>
+                        <span className="tableCellMuted">Closed status requires zero quality holds and zero permit blockers.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.status === "blocked" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleProjectAction(option.status, option.nextMilestone)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

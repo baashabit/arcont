@@ -153,6 +153,11 @@ export const ProjectPortfolioOverviewSchema = z.object({
   focusProject: ProjectPortfolioItemSchema.nullable()
 });
 
+export const UpdateProjectPortfolioItemRequestSchema = z.object({
+  status: z.enum(projectStatuses),
+  nextMilestone: z.string().min(8)
+});
+
 export const ProcurementRiskSchema = z.object({
   id: z.string(),
   packageId: z.string(),
@@ -682,6 +687,7 @@ export type AuthSessionActivitiesContract = z.infer<typeof AuthSessionActivities
 export type ProjectRiskContract = z.infer<typeof ProjectRiskSchema>;
 export type ProjectPortfolioItemContract = z.infer<typeof ProjectPortfolioItemSchema>;
 export type ProjectPortfolioOverviewContract = z.infer<typeof ProjectPortfolioOverviewSchema>;
+export type UpdateProjectPortfolioItemRequestContract = z.infer<typeof UpdateProjectPortfolioItemRequestSchema>;
 export type ProcurementRiskContract = z.infer<typeof ProcurementRiskSchema>;
 export type ProcurementPackageContract = z.infer<typeof ProcurementPackageSchema>;
 export type ProcurementOverviewContract = z.infer<typeof ProcurementOverviewSchema>;

@@ -1,4 +1,4 @@
-import { notFound } from "../lib/domain-error.js";
+import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
 
 export function createProjectsService(repository: PlatformRepository) {
@@ -43,6 +43,75 @@ export function createProjectsService(repository: PlatformRepository) {
         risks,
         focusProject
       };
+    },
+    async updateProject(input: {
+      companyId: string;
+      projectId: string;
+      status: "planning" | "active" | "at_risk" | "blocked" | "closed";
+      nextMilestone: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("PROJECTS_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const projects = await repository.listProjects(input.companyId);
+      const project = projects.find((candidate) => candidate.id === input.projectId);
+      if (!project) {
+        throw notFound("PROJECTS_PROJECT_NOT_FOUND", "Project not found", {
+          companyId: input.companyId,
+          projectId: input.projectId
+        });
+      }
+
+      if (project.status === input.status && project.nextMilestone === input.nextMilestone) {
+        return project;
+      }
+
+      if (input.status === "active" && project.permitBlockers > 2) {
+        throw validationError("PROJECTS_PERMIT_BLOCKERS", "Project cannot move to active while permit blockers remain too high", {
+          projectId: project.id,
+          permitBlockers: project.permitBlockers
+        });
+      }
+
+      if (input.status === "closed") {
+        if (project.qualityHolds > 0) {
+          throw validationError("PROJECTS_QUALITY_HOLDS", "Project cannot close while quality holds remain open", {
+            projectId: project.id,
+            qualityHolds: project.qualityHolds
+          });
+        }
+
+        if (project.permitBlockers > 0) {
+          throw validationError("PROJECTS_OPEN_PERMITS", "Project cannot close while permit blockers remain", {
+            projectId: project.id,
+            permitBlockers: project.permitBlockers
+          });
+        }
+      }
+
+      const updatedProject = await repository.updateProjectPortfolioItem({
+        projectId: input.projectId,
+        status: input.status,
+        nextMilestone: input.nextMilestone
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "project_portfolio_item",
+        aggregateId: updatedProject.id,
+        action: "projects.portfolio_item.updated",
+        metadata: {
+          status: updatedProject.status,
+          nextMilestone: updatedProject.nextMilestone
+        }
+      });
+
+      return updatedProject;
     }
   };
 }
