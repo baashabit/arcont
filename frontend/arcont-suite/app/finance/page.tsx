@@ -14,7 +14,11 @@ export default function FinancePage() {
       eyebrow="Execution domain"
       description="Cash posture, payable pressure and close-readiness with room to absorb real accounting workflows later."
     >
-      <ModuleGate moduleKeys={["finance.accounting"]} title="Finance">
+      <ModuleGate
+        moduleKeys={["finance.accounting"]}
+        requiredPermissions={["finance:*", "finance:read"]}
+        title="Finance"
+      >
         <section className="grid cols4">
           <KpiCard label="Cash position" value="MXN 18.4M" footnote="Executive finance readout integrated into the same shell as operations." />
           <KpiCard label="Urgent payables" value="12" footnote="A signal that can later map to approval queues and ERP integrations." />

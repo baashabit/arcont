@@ -71,9 +71,51 @@ export const AuthLoginRequestSchema = z.object({
 export const AuthSessionSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
+  tokenType: z.literal("Bearer"),
+  expiresInSeconds: z.number().int().positive(),
   company: CompanySchema,
   user: UserSchema,
   permissions: z.array(z.string())
+});
+
+export const CompanyModuleStateSchema = z.object({
+  companyId: z.string(),
+  module: ModuleSchema,
+  enabled: z.boolean()
+});
+
+export const PlatformBootstrapSchema = z.object({
+  company: CompanySchema,
+  settings: PlatformSettingsSchema,
+  user: UserSchema,
+  roles: z.array(RoleSchema),
+  companyUsers: z.array(UserSchema),
+  availableModules: z.array(ModuleSchema),
+  companyModules: z.array(CompanyModuleStateSchema),
+  permissions: z.array(z.string())
+});
+
+export const ProvisionCompanyRequestSchema = z.object({
+  legalName: z.string().min(3),
+  tradeName: z.string().min(2),
+  taxId: z.string().min(6),
+  countryCode: z.string().length(2).default("MX"),
+  timezone: z.string().default("America/Mexico_City"),
+  locale: z.string().default("es-MX"),
+  currency: z.string().length(3).default("MXN"),
+  fiscalCountry: z.string().length(2).default("MX"),
+  fiscalRegime: z.string().default("601"),
+  adminFullName: z.string().min(3),
+  adminEmail: z.string().email(),
+  enabledModules: z.array(z.string()).default(["platform.companies", "platform.identity"])
+});
+
+export const ProvisionCompanyResponseSchema = z.object({
+  company: CompanySchema,
+  adminUser: UserSchema,
+  settings: PlatformSettingsSchema,
+  companyModules: z.array(CompanyModuleStateSchema),
+  temporaryPassword: z.string()
 });
 
 export type ModuleContract = z.infer<typeof ModuleSchema>;
@@ -83,6 +125,10 @@ export type UserContract = z.infer<typeof UserSchema>;
 export type PlatformSettingsContract = z.infer<typeof PlatformSettingsSchema>;
 export type AuthLoginRequestContract = z.infer<typeof AuthLoginRequestSchema>;
 export type AuthSessionContract = z.infer<typeof AuthSessionSchema>;
+export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
+export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
+export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;
+export type ProvisionCompanyResponseContract = z.infer<typeof ProvisionCompanyResponseSchema>;
 
 export const moduleCatalog: ModuleContract[] = [
   {

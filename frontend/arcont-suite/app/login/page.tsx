@@ -1,11 +1,43 @@
+"use client";
+
 import Link from "next/link";
-import { loadAppData } from "@/lib/app-data";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { LogoMark } from "@/components/logo-mark";
+import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
 
-export default async function LoginPage() {
-  const data = await loadAppData();
-  const companies = data.companies.slice(0, 3);
+export default function LoginPage() {
+  const router = useRouter();
+  const { companies, session, signIn, source, isHydratingSession } = useAppState();
+  const [email, setEmail] = useState(session.user.email);
+  const [password, setPassword] = useState("password123");
+  const [companyId, setCompanyId] = useState(session.companyId);
+  const [error, setError] = useState<string | null>(null);
+  const [resultSource, setResultSource] = useState<"api" | "mock" | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+
+    startTransition(async () => {
+      const result = await signIn({
+        email,
+        password,
+        companyId
+      });
+
+      setResultSource(result.source);
+
+      if (!result.ok) {
+        setError(result.error ?? "Unable to sign in.");
+        return;
+      }
+
+      router.push("/dashboard");
+    });
+  };
 
   return (
     <main className="loginPage">
@@ -20,10 +52,10 @@ export default async function LoginPage() {
           </div>
 
           <div className="loginLead">
-            <h1>Control the platform before you scale the operation.</h1>
+            <h1>Sign into a real tenant context, not just a visual prototype.</h1>
             <p>
-              This foundation already separates tenant governance from operational domains, aligns with shared
-              contracts and keeps a graceful path between API mode and local development.
+              This login now tries the backend first through `POST /auth/login`, then keeps a development-safe
+              fallback so the web shell remains usable even when the API is offline.
             </p>
           </div>
         </div>
@@ -31,11 +63,11 @@ export default async function LoginPage() {
         <div className="grid cols2">
           <div className="heroMetric">
             <strong>{companies.length} tenants</strong>
-            <span>Ready for multi-company switching and module entitlements.</span>
+            <span>Company switching is now prepared to reload bootstrap context per tenant.</span>
           </div>
           <div className="heroMetric">
-            <strong>{data.modules.length} modules</strong>
-            <span>Catalogued from shared contracts for platform and operations.</span>
+            <strong>{source}</strong>
+            <span>Initial load can come from API or local fallback depending on environment readiness.</span>
           </div>
         </div>
       </section>
@@ -43,53 +75,70 @@ export default async function LoginPage() {
       <section className="loginPanel">
         <div className="loginCard">
           <div className="tagRow">
-            <Badge tone={data.source === "api" ? "success" : "warning"}>{data.source}</Badge>
-            <Badge tone="gold">tenant-aware</Badge>
-            <Badge tone="info">module-gated</Badge>
+            <Badge tone={source === "api" ? "success" : "warning"}>{source}</Badge>
+            <Badge tone="gold">bootstrap-ready</Badge>
+            <Badge tone="info">jwt-session</Badge>
           </div>
 
           <h2 className="sectionTitle" style={{ marginTop: 18 }}>
-            Sign in to the web foundation
+            Enter the enterprise shell
           </h2>
           <p className="sectionText">
-            Demo access is represented here without wiring a full auth flow yet. The platform pages already
-            consume real contracts and can read from the API when it is available locally.
+            Demo backend credentials from the in-memory driver include `admin@arcont.local / password123` and
+            `obra@arcont.local / password123`.
           </p>
 
-          <div className="loginGrid">
-            <input className="field" aria-label="Email" defaultValue={data.session.user.email} />
-            <input className="field" aria-label="Password" defaultValue="********" />
-            <select className="selectField" defaultValue={data.session.companyId}>
+          <form className="loginGrid" onSubmit={handleSubmit}>
+            <input
+              className="field"
+              aria-label="Email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+            <input
+              className="field"
+              aria-label="Password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <select
+              className="selectField"
+              value={companyId}
+              onChange={(event) => setCompanyId(event.target.value)}
+            >
               {companies.map((company) => (
                 <option key={company.id} value={company.id}>
                   {company.tradeName}
                 </option>
               ))}
             </select>
-          </div>
 
-          <div className="emptyActions">
-            <Link className="button" href="/dashboard">
-              Enter dashboard
-            </Link>
-            <Link className="buttonGhost" href="/platform/companies">
-              Review platform
-            </Link>
-          </div>
+            {error ? <p className="sectionText" style={{ color: "var(--danger)" }}>{error}</p> : null}
+
+            <div className="emptyActions">
+              <button className="button" type="submit" disabled={isPending || isHydratingSession}>
+                {isPending || isHydratingSession ? "Signing in..." : "Sign in"}
+              </button>
+              <Link className="buttonGhost" href="/dashboard">
+                Continue to dashboard
+              </Link>
+            </div>
+          </form>
 
           <div style={{ marginTop: 24 }}>
-            <h3 className="sectionTitle">Bootstrap notes</h3>
+            <h3 className="sectionTitle">Integration notes</h3>
             <div className="list">
               <div className="listItem">
                 <div>
-                  <strong>Current API base</strong>
-                  <p className="mono">{data.apiBaseUrl}</p>
+                  <strong>Result source</strong>
+                  <p>{resultSource ? `Last sign-in used ${resultSource}.` : "No sign-in attempted in this session."}</p>
                 </div>
               </div>
               <div className="listItem">
                 <div>
-                  <strong>Example tenants</strong>
-                  <p>{companies.map((company) => company.tradeName).join(", ")}</p>
+                  <strong>Post-login bootstrap</strong>
+                  <p>After successful auth, the app reloads tenant modules, users, roles, permissions and settings through `/platform/bootstrap`.</p>
                 </div>
               </div>
             </div>

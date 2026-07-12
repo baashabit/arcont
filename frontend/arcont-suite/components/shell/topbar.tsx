@@ -18,7 +18,7 @@ export function Topbar({
   onOpenSidebar: () => void;
 }) {
   const pathname = usePathname();
-  const { session, activeCompany, activeRole } = useAppState();
+  const { session, activeCompany, activeRole, signOut } = useAppState();
 
   return (
     <header className="topbar">
@@ -38,11 +38,19 @@ export function Topbar({
 
       <div className="topbarAside">
         <div className="topbarActions">
+          <Badge tone={session.authenticated ? "success" : "warning"}>
+            {session.authenticated ? "authenticated" : "fallback"}
+          </Badge>
           <Badge tone="gold">{activeCompany.countryCode}</Badge>
           <Badge tone="neutral">{activeRole?.name ?? "Role pending"}</Badge>
           <Badge tone="info">{session.user.fullName}</Badge>
         </div>
-        {actions}
+        <div className="topbarActions">
+          {actions}
+          <button className="buttonGhost" type="button" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </div>
     </header>
   );

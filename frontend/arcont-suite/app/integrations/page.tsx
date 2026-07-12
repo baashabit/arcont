@@ -13,7 +13,11 @@ export default function IntegrationsPage() {
       eyebrow="Connected operations"
       description="External systems, field telemetry and future intelligence layers represented inside the platform shell."
     >
-      <ModuleGate moduleKeys={["integrations.field-data"]} title="Integrations">
+      <ModuleGate
+        moduleKeys={["integrations.field-data"]}
+        requiredPermissions={["integrations:*"]}
+        title="Integrations"
+      >
         <Card title="Connected stack" description="A useful integration route starts by exposing source health and business confidence.">
           <DataTable
             rows={integrationRows}

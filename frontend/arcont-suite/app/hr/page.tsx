@@ -13,7 +13,7 @@ export default function HrPage() {
       eyebrow="Workforce domain"
       description="Crew readiness, attendance and compliance cues for labor-intensive operations."
     >
-      <ModuleGate moduleKeys={["hr.workforce"]} title="HR">
+      <ModuleGate moduleKeys={["hr.workforce"]} requiredPermissions={["hr:*"]} title="HR">
         <Card title="Workforce posture" description="A meaningful placeholder would not be enough here, so this route shows operational workforce concerns.">
           <DataTable
             rows={hrRows}

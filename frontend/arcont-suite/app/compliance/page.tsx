@@ -13,7 +13,11 @@ export default function CompliancePage() {
       eyebrow="Customer continuity"
       description="Warranty, legal folders and operational compliance routed through the same enterprise shell."
     >
-      <ModuleGate moduleKeys={["compliance.postsale"]} title="Compliance">
+      <ModuleGate
+        moduleKeys={["compliance.postsale"]}
+        requiredPermissions={["compliance:*", "postsale:*"]}
+        title="Compliance"
+      >
         <Card title="Case pressure" description="This route demonstrates how post-sale and compliance can coexist without becoming an afterthought.">
           <DataTable
             rows={complianceRows}

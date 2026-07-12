@@ -1,10 +1,11 @@
-import "server-only";
-
 import {
   defaultRoles,
   moduleCatalog,
+  type AuthSessionContract,
   type CompanyContract,
+  type CompanyModuleStateContract,
   type ModuleContract,
+  type PlatformBootstrapContract,
   type PlatformSettingsContract,
   type RoleContract,
   type UserContract
@@ -13,6 +14,11 @@ import {
 export type AppDataSource = "api" | "mock";
 
 export type AppSession = {
+  accessToken?: string;
+  refreshToken?: string;
+  tokenType?: string;
+  expiresInSeconds?: number;
+  authenticated: boolean;
   companyId: string;
   user: UserContract;
   permissions: string[];
@@ -26,6 +32,7 @@ export type AppData = {
   roles: RoleContract[];
   users: UserContract[];
   settings: Record<string, PlatformSettingsContract>;
+  companyModules: Record<string, CompanyModuleStateContract[]>;
   session: AppSession;
 };
 
@@ -144,8 +151,34 @@ const mockSettingsList: PlatformSettingsContract[] = [
   }
 ];
 
+export const mockCredentials = [
+  {
+    email: "admin@arcont.local",
+    password: "password123",
+    companyId: "cmp_arcont_demo"
+  },
+  {
+    email: "obra@arcont.local",
+    password: "password123",
+    companyId: "cmp_bienestar_gov"
+  }
+] as const;
+
 function buildSettingsMap(items: PlatformSettingsContract[]) {
   return Object.fromEntries(items.map((item) => [item.companyId, item]));
+}
+
+function buildCompanyModules(companies: CompanyContract[], modules: ModuleContract[]) {
+  return Object.fromEntries(
+    companies.map((company) => [
+      company.id,
+      modules.map((module) => ({
+        companyId: company.id,
+        module,
+        enabled: company.enabledModules.includes(module.key)
+      }))
+    ])
+  );
 }
 
 async function requestJson<T>(path: string): Promise<T | null> {
@@ -164,27 +197,87 @@ async function requestJson<T>(path: string): Promise<T | null> {
   }
 }
 
-function getRolePermissions(roleKey: string) {
-  return defaultRoles.find((role) => role.key === roleKey)?.permissions ?? [];
+function getRolePermissions(roles: RoleContract[], roleKey: string) {
+  return roles.find((role) => role.key === roleKey)?.permissions ?? [];
 }
 
-function buildMockData(): AppData {
+export function authSessionToAppSession(session: AuthSessionContract): AppSession {
+  return {
+    accessToken: session.accessToken,
+    refreshToken: session.refreshToken,
+    tokenType: session.tokenType,
+    expiresInSeconds: session.expiresInSeconds,
+    authenticated: true,
+    companyId: session.company.id,
+    user: session.user,
+    permissions: session.permissions
+  };
+}
+
+export function bootstrapToPartialAppData(bootstrap: PlatformBootstrapContract) {
+  return {
+    company: bootstrap.company,
+    settings: bootstrap.settings,
+    roles: bootstrap.roles,
+    users: bootstrap.companyUsers,
+    modules: bootstrap.availableModules,
+    companyModules: bootstrap.companyModules,
+    session: {
+      companyId: bootstrap.company.id,
+      user: bootstrap.user,
+      permissions: bootstrap.permissions
+    }
+  };
+}
+
+export function buildMockData(): AppData {
   const company = mockCompanies[0];
   const user = mockUsers.find((item) => item.companyId === company.id) ?? mockUsers[0];
+  const roles = defaultRoles;
 
   return {
     source: "mock",
     apiBaseUrl,
     companies: mockCompanies,
     modules: moduleCatalog,
-    roles: defaultRoles,
+    roles,
     users: mockUsers,
     settings: buildSettingsMap(mockSettingsList),
+    companyModules: buildCompanyModules(mockCompanies, moduleCatalog),
     session: {
+      authenticated: false,
       companyId: company.id,
       user,
-      permissions: getRolePermissions(user.roleKey)
+      permissions: getRolePermissions(roles, user.roleKey)
     }
+  };
+}
+
+export function getMockSession(email: string, password: string, companyId?: string): AuthSessionContract | null {
+  const matched = mockCredentials.find(
+    (credential) =>
+      credential.email === email &&
+      credential.password === password &&
+      (companyId ? credential.companyId === companyId : true)
+  );
+
+  if (!matched) {
+    return null;
+  }
+
+  const company =
+    mockCompanies.find((item) => item.id === (companyId ?? matched.companyId)) ?? mockCompanies[0];
+  const user = mockUsers.find((item) => item.email === email) ?? mockUsers[0];
+  const permissions = getRolePermissions(defaultRoles, user.roleKey);
+
+  return {
+    accessToken: `mock-access-${user.id}`,
+    refreshToken: `mock-refresh-${user.id}`,
+    tokenType: "Bearer",
+    expiresInSeconds: 3600,
+    company,
+    user,
+    permissions
   };
 }
 
@@ -201,6 +294,8 @@ export async function loadAppData(): Promise<AppData> {
   }
 
   const companies = companiesResponse.items;
+  const modules = modulesResponse.items;
+  const roles = rolesResponse.items;
   const settingsEntries = await Promise.all(
     companies.map(async (company) => {
       const settings = await requestJson<PlatformSettingsContract>(`/platform/settings/${company.id}`);
@@ -220,16 +315,18 @@ export async function loadAppData(): Promise<AppData> {
     source: "api",
     apiBaseUrl,
     companies,
-    modules: modulesResponse.items,
-    roles: rolesResponse.items,
+    modules,
+    roles,
     users,
     settings: Object.fromEntries(
       settingsEntries.filter((entry): entry is [string, PlatformSettingsContract] => Boolean(entry))
     ),
+    companyModules: buildCompanyModules(companies, modules),
     session: {
+      authenticated: false,
       companyId: firstCompany.id,
       user: currentUser,
-      permissions: getRolePermissions(currentUser.roleKey)
+      permissions: getRolePermissions(roles, currentUser.roleKey)
     }
   };
 }

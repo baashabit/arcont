@@ -6,12 +6,30 @@ import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 
 export default function PlatformUsersPage() {
-  const { activeCompany, activeUsers, roles } = useAppState();
+  const { activeCompany, activeUsers, roles, isRouteVisible, source, session } = useAppState();
   const [query, setQuery] = useState("");
+
+  if (!isRouteVisible({ moduleKeys: ["platform.identity"], requiredPermissions: ["users:*", "users:read"] })) {
+    return (
+      <AppShell
+        title="Identity and users"
+        eyebrow="Platform identity"
+        description="Company-aware users, roles and lifecycle states ready to connect with richer access-control flows."
+      >
+        <EmptyState
+          title="User administration is not available for this session"
+          description="The route is gated by platform identity module visibility and user management permissions."
+          primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
+          secondaryAction={{ label: "Review login", href: "/login" }}
+        />
+      </AppShell>
+    );
+  }
 
   const visibleUsers = activeUsers.filter((user) =>
     [user.fullName, user.email, user.roleKey].join(" ").toLowerCase().includes(query.toLowerCase())
@@ -32,6 +50,9 @@ export default function PlatformUsersPage() {
 
       <Card title="Tenant user roster" description="Filtering and role lookup are already wired at the shell level.">
         <FilterBar summary={`${visibleUsers.length} users match the current search`}>
+          <Badge tone={source === "api" && session.authenticated ? "success" : "warning"}>
+            {source === "api" && session.authenticated ? "bootstrap users" : "fallback users"}
+          </Badge>
           <input className="field" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by name, email or role" />
         </FilterBar>
         <DataTable

@@ -4,10 +4,28 @@ import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
 
 export default function PlatformSettingsPage() {
-  const { activeCompany, activeSettings } = useAppState();
+  const { activeCompany, activeSettings, isRouteVisible, source, session } = useAppState();
+
+  if (!isRouteVisible({ moduleKeys: ["platform.identity"], requiredPermissions: ["settings:*", "settings:read"] })) {
+    return (
+      <AppShell
+        title="Company settings"
+        eyebrow="Governance controls"
+        description="Operational defaults, fiscal posture and localization for the active tenant."
+      >
+        <EmptyState
+          title="Settings access is not available for this session"
+          description="This route is controlled by company settings permissions and the active tenant identity module."
+          primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
+          secondaryAction={{ label: "Review login", href: "/login" }}
+        />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell
@@ -23,7 +41,18 @@ export default function PlatformSettingsPage() {
       </section>
 
       <section className="grid cols2">
-        <Card title="Configuration detail" description={`Settings aligned to ${activeCompany.tradeName}.`} aside={<Badge tone="gold">{activeCompany.countryCode}</Badge>}>
+        <Card
+          title="Configuration detail"
+          description={`Settings aligned to ${activeCompany.tradeName}.`}
+          aside={
+            <div className="tagRow">
+              <Badge tone={source === "api" && session.authenticated ? "success" : "warning"}>
+                {source === "api" && session.authenticated ? "bootstrap settings" : "fallback settings"}
+              </Badge>
+              <Badge tone="gold">{activeCompany.countryCode}</Badge>
+            </div>
+          }
+        >
           <div className="detailGrid">
             <div className="detailRow">
               <div className="detailLabel">Legal entity</div>

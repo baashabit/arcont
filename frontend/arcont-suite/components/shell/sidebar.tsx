@@ -15,7 +15,7 @@ export function Sidebar({
   onClose: () => void;
 }) {
   const pathname = usePathname();
-  const { activeCompany, companies, setActiveCompanyId, source, isModuleEnabled } = useAppState();
+  const { activeCompany, companies, setActiveCompanyId, source, isRouteVisible } = useAppState();
 
   return (
     <div className={`sidebarWrap ${isOpen ? "sidebarWrapOpen" : ""}`}>
@@ -61,7 +61,10 @@ export function Sidebar({
               {navigationItems
                 .filter((item) => item.domain === group.key)
                 .map((item) => {
-                  const enabled = isModuleEnabled(item.moduleKeys);
+                  const enabled = isRouteVisible({
+                    moduleKeys: item.moduleKeys,
+                    requiredPermissions: item.requiredPermissions
+                  });
                   const active = pathname === item.href;
                   return (
                     <Link

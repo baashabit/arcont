@@ -28,5 +28,30 @@ This frontend is the enterprise base for the ARCONT web suite inside `frontend/a
 ### Current behavior
 
 - Tenant switcher changes visible modules and route posture at the frontend level.
-- Platform routes show governance information with tenant-aware state.
+- Login uses `POST /auth/login` first and falls back to local mock credentials when the backend is unavailable.
+- Platform routes prefer API-backed bootstrap data for tenant context, permissions, modules, users and settings.
 - Operational routes demonstrate useful domain views instead of empty placeholders.
+
+### API-backed routes today
+
+- `POST /auth/login`
+  - consumed by `/login`
+- `GET /platform/bootstrap/:companyId?userEmail=...`
+  - consumed after login and when switching tenant for `/dashboard`, `/platform/modules`, `/platform/users`, `/platform/settings`
+- `GET /platform/companies`
+- `GET /platform/modules`
+- `GET /platform/roles`
+- `GET /platform/users`
+- `GET /platform/settings/:companyId`
+  - consumed during initial app load, with fallback to local typed mocks
+
+### Still mock-first
+
+- `crm`
+- `projects`
+- `procurement`
+- `inventory`
+- `finance`
+- `hr`
+- `compliance`
+- `integrations`

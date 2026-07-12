@@ -5,11 +5,29 @@ import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 
 export default function PlatformCompaniesPage() {
-  const { companies, modules } = useAppState();
+  const { companies, modules, isRouteVisible, source, session } = useAppState();
+
+  if (!isRouteVisible({ moduleKeys: ["platform.companies"], requiredPermissions: ["companies:*"] })) {
+    return (
+      <AppShell
+        title="Platform companies"
+        eyebrow="Tenant governance"
+        description="Tenant inventory, activation posture and enabled modules for a modular ARCONT rollout."
+      >
+        <EmptyState
+          title="Company governance is not available for this session"
+          description="This route is controlled by platform-level permissions and the active tenant modules."
+          primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
+          secondaryAction={{ label: "Review login", href: "/login" }}
+        />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell
@@ -26,6 +44,9 @@ export default function PlatformCompaniesPage() {
 
       <Card title="Tenant portfolio" description="Each company carries its own module entitlements, settings and user base.">
         <FilterBar summary={`${companies.length} tenants under platform governance`}>
+          <Badge tone={source === "api" && session.authenticated ? "success" : "warning"}>
+            {source === "api" && session.authenticated ? "api list" : "fallback list"}
+          </Badge>
           <Badge tone="gold">multi-tenant</Badge>
           <Badge tone="info">enterprise ready</Badge>
         </FilterBar>

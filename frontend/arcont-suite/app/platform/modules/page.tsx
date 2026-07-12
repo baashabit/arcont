@@ -5,13 +5,32 @@ import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ModuleBadge } from "@/components/ui/module-badge";
 
 export default function PlatformModulesPage() {
-  const { activeCompany, modules } = useAppState();
+  const { activeCompany, modules, getCompanyModules, source, session, isRouteVisible } = useAppState();
   const [scope, setScope] = useState("all");
+  const companyModules = getCompanyModules(activeCompany.id);
+
+  if (!isRouteVisible({ moduleKeys: ["platform.companies"], requiredPermissions: ["modules:*", "company:*"] })) {
+    return (
+      <AppShell
+        title="Module control"
+        eyebrow="Visibility matrix"
+        description="Shared-contract module catalog with tenant-aware activation and clear platform versus operations scope."
+      >
+        <EmptyState
+          title="Module governance is not available for this session"
+          description="The frontend can already hide modules by tenant and permission. This route requires platform or company governance access."
+          primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
+          secondaryAction={{ label: "Review login", href: "/login" }}
+        />
+      </AppShell>
+    );
+  }
 
   const filteredModules = modules.filter((module) => (scope === "all" ? true : module.scope === scope));
 
@@ -30,6 +49,9 @@ export default function PlatformModulesPage() {
 
       <Card title="Catalog by tenant" description="This is the control point for frontend module visibility and future entitlement APIs.">
         <FilterBar summary={`${filteredModules.length} modules in the current view`}>
+          <Badge tone={source === "api" && session.authenticated ? "success" : "warning"}>
+            {source === "api" && session.authenticated ? "bootstrap api" : "derived fallback"}
+          </Badge>
           <select className="selectField" value={scope} onChange={(event) => setScope(event.target.value)}>
             <option value="all">All scopes</option>
             <option value="platform">Platform</option>
@@ -39,7 +61,9 @@ export default function PlatformModulesPage() {
 
         <div className="moduleGrid">
           {filteredModules.map((module) => {
-            const enabled = activeCompany.enabledModules.includes(module.key);
+            const enabled =
+              companyModules.find((entry) => entry.module.key === module.key)?.enabled ??
+              activeCompany.enabledModules.includes(module.key);
             return (
               <div className="moduleCard" key={module.key}>
                 <div className="moduleMeta">

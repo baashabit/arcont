@@ -14,7 +14,7 @@ export default function CrmPage() {
       eyebrow="Customer operations"
       description="Lead pressure, conversion and unit demand in a structure meant to grow into a full commercial cockpit."
     >
-      <ModuleGate moduleKeys={["sales.crm"]} title="Sales / CRM">
+      <ModuleGate moduleKeys={["sales.crm"]} requiredPermissions={["sales:*"]} title="Sales / CRM">
         <section className="grid cols4">
           <KpiCard label="Qualified leads" value="188" footnote="Highest-priority opportunities ready for advisor action." />
           <KpiCard label="Visit conversion" value="24%" footnote="Structured as a reusable KPI pattern for the rest of the suite." />

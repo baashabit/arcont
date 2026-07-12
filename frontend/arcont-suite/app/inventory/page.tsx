@@ -14,7 +14,7 @@ export default function InventoryPage() {
       eyebrow="Execution domain"
       description="Traceable stock posture for central warehouses, jobsites and replenishment decisions."
     >
-      <ModuleGate moduleKeys={["inventory.warehouse"]} title="Inventory">
+      <ModuleGate moduleKeys={["inventory.warehouse"]} requiredPermissions={["inventory:*"]} title="Inventory">
         <section className="grid cols4">
           <KpiCard label="Tracked SKUs" value="6,040" footnote="Multi-location stock structure grounded in operational language." />
           <KpiCard label="Accuracy" value="97.2%" footnote="Supports future cycle-count and variance analysis." />

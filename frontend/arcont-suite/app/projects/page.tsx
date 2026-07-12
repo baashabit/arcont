@@ -14,7 +14,7 @@ export default function ProjectsPage() {
       eyebrow="Execution domain"
       description="Construction progress, constraints and operational traceability in a shell designed for supervision-heavy teams."
     >
-      <ModuleGate moduleKeys={["projects.control"]} title="Projects">
+      <ModuleGate moduleKeys={["projects.control"]} requiredPermissions={["projects:*"]} title="Projects">
         <section className="grid cols4">
           <KpiCard label="Active fronts" value="7" footnote="Cross-project visibility to support portfolio supervision." />
           <KpiCard label="Average progress" value="73%" footnote="Surface-level KPI ready to connect to schedule sources later." />

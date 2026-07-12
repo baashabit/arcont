@@ -4,16 +4,18 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 export function ModuleGate({
   moduleKeys,
+  requiredPermissions,
   title,
   children
 }: {
   moduleKeys: string[];
+  requiredPermissions?: string[];
   title: string;
   children: ReactNode;
 }) {
-  const { activeCompany, isModuleEnabled } = useAppState();
+  const { activeCompany, isRouteVisible } = useAppState();
 
-  if (isModuleEnabled(moduleKeys)) {
+  if (isRouteVisible({ moduleKeys, requiredPermissions })) {
     return <>{children}</>;
   }
 
