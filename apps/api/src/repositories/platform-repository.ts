@@ -109,6 +109,12 @@ type InventoryRiskRecord = {
   status: string;
 };
 
+type UpdateInventoryLocationInput = {
+  locationId: string;
+  stockHealth: "healthy" | "watch" | "critical";
+  nextAction: string;
+};
+
 type FinanceLedgerItemRecord = {
   id: string;
   companyId: string;
@@ -380,6 +386,7 @@ export type PlatformRepository = {
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
   updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
+  updateInventoryLocation(input: UpdateInventoryLocationInput): Promise<InventoryLocationRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
   updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
   listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
@@ -1844,6 +1851,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       complianceCase.updatedAt = new Date().toISOString();
       return complianceCase;
     },
+    async updateInventoryLocation(input) {
+      const location = state.inventoryLocations.find((item) => item.id === input.locationId);
+      if (!location) {
+        throw new Error("Inventory location not found in repository");
+      }
+
+      location.stockHealth = input.stockHealth;
+      location.nextAction = input.nextAction;
+      location.updatedAt = new Date().toISOString();
+      return location;
+    },
     async updateDocumentControlItem(input) {
       const item = state.documentControlItems.find((candidate) => candidate.id === input.itemId);
       if (!item) {
@@ -2714,6 +2732,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     async updateComplianceCase(input) {
       void input;
       throw new Error("Compliance case updates are not implemented for the postgres repository yet");
+    },
+    async updateInventoryLocation(input) {
+      void input;
+      throw new Error("Inventory location updates are not implemented for the postgres repository yet");
     },
     async updateDocumentControlItem(input) {
       void input;

@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { InventoryLocationContract, InventoryOverviewContract } from "@/lib/contracts";
-import { fetchInventoryOverview } from "@/lib/platform-api";
+import { fetchInventoryOverview, updateInventoryLocation } from "@/lib/platform-api";
 
 function stockTone(stockHealth: InventoryLocationContract["stockHealth"]) {
   switch (stockHealth) {
@@ -30,6 +30,10 @@ export default function InventoryPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [nextActionDraft, setNextActionDraft] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -78,6 +82,130 @@ export default function InventoryPage() {
     () => overview?.risks.filter((risk) => risk.locationId === selectedLocation?.id) ?? [],
     [overview, selectedLocation]
   );
+
+  const actionOptions = useMemo(() => {
+    if (!selectedLocation) {
+      return [];
+    }
+
+    switch (selectedLocation.stockHealth) {
+      case "healthy":
+        return [
+          {
+            label: "Move to watch",
+            stockHealth: "watch" as const,
+            nextAction: "Investigate the emerging stock issue and align a corrective inventory action"
+          }
+        ];
+      case "watch":
+        return [
+          {
+            label: "Recover healthy",
+            stockHealth: "healthy" as const,
+            nextAction: "Confirm the location is clear of variances and urgent replenishments"
+          },
+          {
+            label: "Escalate critical",
+            stockHealth: "critical" as const,
+            nextAction: "Escalate the location and protect execution from the stock disruption"
+          }
+        ];
+      default:
+        return [
+          {
+            label: "Stabilize to watch",
+            stockHealth: "watch" as const,
+            nextAction: "Stabilize stock pressure and keep corrective actions in motion"
+          }
+        ];
+    }
+  }, [selectedLocation]);
+
+  useEffect(() => {
+    setNextActionDraft(selectedLocation?.nextAction ?? "");
+    setActionError(null);
+    setActionMessage(null);
+  }, [selectedLocationId, selectedLocation?.id, selectedLocation?.nextAction]);
+
+  async function handleLocationAction(
+    stockHealth: InventoryLocationContract["stockHealth"],
+    suggestedNextAction: string
+  ) {
+    if (!selectedLocation || !session.accessToken) {
+      return;
+    }
+
+    const nextAction = nextActionDraft.trim() || suggestedNextAction;
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before updating the location.");
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    const response = await updateInventoryLocation(
+      selectedLocation.id,
+      activeCompany.id,
+      {
+        stockHealth,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Inventory location update failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const locations = current.locations.map((item) => (item.id === response.data?.id ? response.data : item));
+      const accuracy =
+        locations.length > 0
+          ? Number((locations.reduce((sum, item) => sum + item.accuracy, 0) / locations.length).toFixed(1))
+          : 0;
+      const focusLocation =
+        locations
+          .slice()
+          .sort((left, right) => {
+            if (left.stockHealth === "critical" && right.stockHealth !== "critical") {
+              return -1;
+            }
+
+            if (left.stockHealth !== "critical" && right.stockHealth === "critical") {
+              return 1;
+            }
+
+            return right.urgentReplenishments - left.urgentReplenishments;
+          })[0] ?? null;
+
+      return {
+        ...current,
+        summary: {
+          trackedSkus: locations.reduce((sum, item) => sum + item.trackedSkus, 0),
+          accuracy,
+          openVariances: locations.reduce((sum, item) => sum + item.openVariances, 0),
+          urgentReplenishments: locations.reduce((sum, item) => sum + item.urgentReplenishments, 0)
+        },
+        locations,
+        focusLocation
+      };
+    });
+
+    setNextActionDraft(response.data.nextAction);
+    setActionMessage(`Location moved to ${response.data.stockHealth}.`);
+    setIsSaving(false);
+  }
 
   return (
     <AppShell
@@ -193,11 +321,46 @@ export default function InventoryPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>
-                      <div>{selectedLocation.nextAction}</div>
+                      <div>
+                        <input
+                          className="field"
+                          value={nextActionDraft}
+                          onChange={(event) => setNextActionDraft(event.target.value)}
+                          placeholder="Describe the next replenishment or variance action"
+                        />
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedLocation.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Business rules</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">Healthy is blocked while open variances remain.</span>
+                        <span className="tableCellMuted">Healthy is also blocked while urgent replenishments remain.</span>
+                        <span className="tableCellMuted">Stock health transitions move one step at a time.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="tableCellStack">
+                        <div className="emptyActions">
+                          {actionOptions.map((option) => (
+                            <button
+                              key={option.label}
+                              className={option.stockHealth === "critical" ? "buttonGhost" : "button"}
+                              type="button"
+                              disabled={isSaving}
+                              onClick={() => void handleLocationAction(option.stockHealth, option.nextAction)}
+                            >
+                              {isSaving ? "Saving..." : option.label}
+                            </button>
+                          ))}
+                        </div>
+                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
+                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                      </div>
                     </div>
                   </div>
                 ) : (

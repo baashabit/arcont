@@ -16,6 +16,7 @@ import {
   HrWorkforceItemSchema,
   HrOverviewSchema,
   IntegrationOverviewSchema,
+  InventoryLocationSchema,
   InventoryOverviewSchema,
   ModuleSchema,
   PlatformApiErrorSchema,
@@ -33,6 +34,7 @@ import {
   UpdateDocumentControlItemRequestSchema,
   UpdateFinanceLedgerItemRequestSchema,
   UpdateHrWorkforceItemRequestSchema,
+  UpdateInventoryLocationRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
@@ -58,6 +60,7 @@ import {
   type HrWorkforceItemContract,
   type HrOverviewContract,
   type IntegrationOverviewContract,
+  type InventoryLocationContract,
   type InventoryOverviewContract,
   type ModuleContract,
   type PlatformApiErrorContract,
@@ -75,6 +78,7 @@ import {
   type UpdateDocumentControlItemRequestContract,
   type UpdateFinanceLedgerItemRequestContract,
   type UpdateHrWorkforceItemRequestContract,
+  type UpdateInventoryLocationRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
@@ -365,6 +369,35 @@ export async function fetchInventoryOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/inventory/overview${query}`, options);
   return response ? InventoryOverviewSchema.parse(response) : null;
+}
+
+export async function updateInventoryLocation(
+  locationId: string,
+  companyId: string | undefined,
+  input: UpdateInventoryLocationRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<InventoryLocationContract>> {
+  const payload = UpdateInventoryLocationRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/inventory/locations/${locationId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: InventoryLocationSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function fetchFinanceOverview(

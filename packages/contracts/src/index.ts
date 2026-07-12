@@ -235,6 +235,11 @@ export const InventoryOverviewSchema = z.object({
   focusLocation: InventoryLocationSchema.nullable()
 });
 
+export const UpdateInventoryLocationRequestSchema = z.object({
+  stockHealth: z.enum(["healthy", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const FinanceRiskSchema = z.object({
   id: z.string(),
   ledgerId: z.string(),
@@ -679,6 +684,7 @@ export type UpdateProcurementPackageRequestContract = z.infer<typeof UpdateProcu
 export type InventoryRiskContract = z.infer<typeof InventoryRiskSchema>;
 export type InventoryLocationContract = z.infer<typeof InventoryLocationSchema>;
 export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;
+export type UpdateInventoryLocationRequestContract = z.infer<typeof UpdateInventoryLocationRequestSchema>;
 export type FinanceRiskContract = z.infer<typeof FinanceRiskSchema>;
 export type FinanceLedgerItemContract = z.infer<typeof FinanceLedgerItemSchema>;
 export type FinanceOverviewContract = z.infer<typeof FinanceOverviewSchema>;
