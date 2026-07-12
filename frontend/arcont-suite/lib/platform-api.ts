@@ -4,11 +4,17 @@ import {
   CompanyDetailSchema,
   CompanyModuleStateSchema,
   CompanySchema,
+  CreatePlatformUserRequestSchema,
+  CreatePlatformUserResponseSchema,
   ModuleSchema,
+  PlatformApiErrorSchema,
   PlatformBootstrapSchema,
   PlatformDashboardSummarySchema,
   PlatformSettingsSchema,
+  PlatformUserDetailSchema,
   RoleSchema,
+  UpdatePlatformUserRoleRequestSchema,
+  UpdatePlatformUserStatusRequestSchema,
   UpdateCompanyModulesRequestSchema,
   UpdatePlatformSettingsRequestSchema,
   UserSchema,
@@ -18,11 +24,17 @@ import {
   type CompanyDetailContract,
   type CompanyModuleStateContract,
   type CompanyContract,
+  type CreatePlatformUserRequestContract,
+  type CreatePlatformUserResponseContract,
   type ModuleContract,
+  type PlatformApiErrorContract,
   type PlatformBootstrapContract,
   type PlatformDashboardSummaryContract,
   type PlatformSettingsContract,
+  type PlatformUserDetailContract,
   type RoleContract,
+  type UpdatePlatformUserRoleRequestContract,
+  type UpdatePlatformUserStatusRequestContract,
   type UpdateCompanyModulesRequestContract,
   type UpdatePlatformSettingsRequestContract,
   type UserContract
@@ -31,6 +43,11 @@ import {
 type RequestOptions = {
   apiBaseUrl: string;
   accessToken?: string;
+};
+
+export type ApiResult<T> = {
+  data: T | null;
+  error: PlatformApiErrorContract["error"] | null;
 };
 
 async function requestJson<T>(
@@ -54,6 +71,50 @@ async function requestJson<T>(
     return (await response.json()) as T;
   } catch {
     return null;
+  }
+}
+
+async function requestResult<T>(
+  path: string,
+  { apiBaseUrl, accessToken }: RequestOptions,
+  init?: RequestInit
+): Promise<ApiResult<T>> {
+  try {
+    const response = await fetch(`${apiBaseUrl}${path}`, {
+      ...init,
+      headers: {
+        ...(init?.headers ?? {}),
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+      }
+    });
+
+    const json = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const parsedError = PlatformApiErrorSchema.safeParse(json);
+      return {
+        data: null,
+        error: parsedError.success
+          ? parsedError.data.error
+          : {
+              code: "PLATFORM_REQUEST_FAILED",
+              message: "The platform request failed."
+            }
+      };
+    }
+
+    return {
+      data: json as T,
+      error: null
+    };
+  } catch {
+    return {
+      data: null,
+      error: {
+        code: "PLATFORM_NETWORK_UNAVAILABLE",
+        message: "The platform backend is unavailable right now."
+      }
+    };
   }
 }
 
@@ -204,4 +265,103 @@ export async function fetchAuditEvents(
   );
 
   return response ? AuditEventSchema.array().parse(response.items) : null;
+}
+
+export async function fetchUserDetail(
+  userId: string,
+  options: RequestOptions
+): Promise<ApiResult<PlatformUserDetailContract>> {
+  const response = await requestResult(`/platform/users/${userId}`, options);
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: PlatformUserDetailSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function createPlatformUser(
+  input: CreatePlatformUserRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CreatePlatformUserResponseContract>> {
+  const payload = CreatePlatformUserRequestSchema.parse(input);
+  const response = await requestResult("/platform/users", options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CreatePlatformUserResponseSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function updatePlatformUserRole(
+  userId: string,
+  input: UpdatePlatformUserRoleRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CreatePlatformUserResponseContract>> {
+  const payload = UpdatePlatformUserRoleRequestSchema.parse(input);
+  const response = await requestResult(`/platform/users/${userId}/role`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CreatePlatformUserResponseSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function updatePlatformUserStatus(
+  userId: string,
+  input: UpdatePlatformUserStatusRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CreatePlatformUserResponseContract>> {
+  const payload = UpdatePlatformUserStatusRequestSchema.parse(input);
+  const response = await requestResult(`/platform/users/${userId}/status`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CreatePlatformUserResponseSchema.parse(response.data),
+    error: null
+  };
 }

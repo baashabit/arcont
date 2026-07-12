@@ -14,10 +14,16 @@ import type {
   CompanyContract,
   CompanyDetailContract,
   CompanyModuleStateContract,
+  CreatePlatformUserRequestContract,
+  CreatePlatformUserResponseContract,
   ModuleContract,
+  PlatformApiErrorContract,
   PlatformDashboardSummaryContract,
   PlatformSettingsContract,
+  PlatformUserDetailContract,
   RoleContract,
+  UpdatePlatformUserRoleRequestContract,
+  UpdatePlatformUserStatusRequestContract,
   UpdatePlatformSettingsRequestContract,
   UserContract
 } from "@/lib/contracts";
@@ -30,12 +36,17 @@ import {
   type AppSession
 } from "@/lib/app-data";
 import {
+  createPlatformUser,
   fetchAuditEvents,
   fetchBootstrap,
   fetchCompanyDetail,
   fetchCompanyModules,
   fetchDashboardSummary,
+  fetchUserDetail,
+  fetchUsers,
   loginWithApi,
+  updatePlatformUserRole,
+  updatePlatformUserStatus,
   updateCompanyModules,
   updateSettings
 } from "@/lib/platform-api";
@@ -46,24 +57,42 @@ type SignInResult = {
   error?: string;
 };
 
+type UserMutationResult = {
+  data: CreatePlatformUserResponseContract | PlatformUserDetailContract | null;
+  error: PlatformApiErrorContract["error"] | null;
+};
+
 type AppStateContextValue = AppData & {
   activeCompany: CompanyContract;
   activeSettings: PlatformSettingsContract | undefined;
   activeUsers: UserContract[];
   activeRole: RoleContract | undefined;
   companyDetails: Record<string, CompanyDetailContract>;
+  userDetails: Record<string, PlatformUserDetailContract>;
   dashboardSummary: PlatformDashboardSummaryContract | null;
   auditEvents: AuditEventContract[];
   isHydratingSession: boolean;
   isRefreshingPlatform: boolean;
   isSavingSettings: boolean;
   isSavingModules: boolean;
+  isSavingUsers: boolean;
   setActiveCompanyId: (companyId: string) => void;
   signIn: (credentials: AuthLoginRequestContract) => Promise<SignInResult>;
   signOut: () => void;
   refreshCompanyDetail: (companyId?: string) => Promise<CompanyDetailContract | null>;
+  refreshUsers: (companyId?: string) => Promise<UserContract[]>;
+  refreshUserDetail: (userId: string) => Promise<PlatformUserDetailContract | null>;
   refreshDashboard: (companyId?: string) => Promise<PlatformDashboardSummaryContract | null>;
   refreshAuditTrail: (companyId?: string, limit?: number) => Promise<AuditEventContract[]>;
+  createUser: (input: CreatePlatformUserRequestContract) => Promise<UserMutationResult>;
+  changeUserRole: (
+    userId: string,
+    input: UpdatePlatformUserRoleRequestContract
+  ) => Promise<UserMutationResult>;
+  changeUserStatus: (
+    userId: string,
+    input: UpdatePlatformUserStatusRequestContract
+  ) => Promise<UserMutationResult>;
   saveSettings: (
     companyId: string,
     input: UpdatePlatformSettingsRequestContract
@@ -129,12 +158,14 @@ export function AppStateProvider({
   const [session, setSession] = useState<AppSession>(initialData.session);
   const [activeCompanyId, setActiveCompanyIdState] = useState(initialData.session.companyId);
   const [companyDetails, setCompanyDetails] = useState<Record<string, CompanyDetailContract>>({});
+  const [userDetails, setUserDetails] = useState<Record<string, PlatformUserDetailContract>>({});
   const [dashboardSummary, setDashboardSummary] = useState<PlatformDashboardSummaryContract | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEventContract[]>([]);
   const [isHydratingSession, setHydratingSession] = useState(false);
   const [isRefreshingPlatform, setRefreshingPlatform] = useState(false);
   const [isSavingSettings, setSavingSettings] = useState(false);
   const [isSavingModules, setSavingModules] = useState(false);
+  const [isSavingUsers, setSavingUsers] = useState(false);
 
   const apiOptions = useMemo(
     () => ({
@@ -186,6 +217,62 @@ export function AppStateProvider({
       return summary;
     },
     [activeCompanyId, apiOptions]
+  );
+
+  const refreshUsers = useCallback(
+    async (companyId = activeCompanyId) => {
+      const users = await fetchUsers(companyId, apiOptions);
+      if (!users) {
+        return [];
+      }
+
+      setData((current) => ({
+        ...current,
+        source: "api",
+        users: mergeUsersByCompany(current.users, users, companyId)
+      }));
+      setCompanyDetails((current) => {
+        const detail = current[companyId];
+        if (!detail) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [companyId]: {
+            ...detail,
+            users,
+            stats: {
+              ...detail.stats,
+              totalUsers: users.length,
+              activeUsers: users.filter((user) => user.status === "active").length
+            }
+          }
+        };
+      });
+
+      return users;
+    },
+    [activeCompanyId, apiOptions]
+  );
+
+  const refreshUserDetail = useCallback(
+    async (userId: string) => {
+      const result = await fetchUserDetail(userId, apiOptions);
+      if (!result.data) {
+        return null;
+      }
+
+      const detail = result.data;
+
+      setUserDetails((current) => ({
+        ...current,
+        [userId]: detail
+      }));
+
+      return detail;
+    },
+    [apiOptions]
   );
 
   const refreshAuditTrail = useCallback(
@@ -395,12 +482,14 @@ export function AppStateProvider({
     activeUsers,
     activeRole,
     companyDetails,
+    userDetails,
     dashboardSummary,
     auditEvents,
     isHydratingSession,
     isRefreshingPlatform,
     isSavingSettings,
     isSavingModules,
+    isSavingUsers,
     session: {
       ...session,
       companyId: activeCompany.id,
@@ -463,6 +552,7 @@ export function AppStateProvider({
         session: nextSession
       });
       setCompanyDetails({});
+      setUserDetails({});
       setDashboardSummary(null);
       setAuditEvents([]);
       setSession(nextSession);
@@ -483,6 +573,7 @@ export function AppStateProvider({
         source: data.source === "api" ? "api" : "mock"
       });
       setCompanyDetails({});
+      setUserDetails({});
       setDashboardSummary(null);
       setAuditEvents([]);
       setSession(fallback.session);
@@ -493,11 +584,124 @@ export function AppStateProvider({
     async refreshCompanyDetail(companyId) {
       return refreshCompanyDetail(companyId);
     },
+    async refreshUsers(companyId) {
+      return refreshUsers(companyId);
+    },
+    async refreshUserDetail(userId) {
+      return refreshUserDetail(userId);
+    },
     async refreshDashboard(companyId) {
       return refreshDashboard(companyId);
     },
     async refreshAuditTrail(companyId, limit) {
       return refreshAuditTrail(companyId, limit);
+    },
+    async createUser(input) {
+      setSavingUsers(true);
+
+      try {
+        const result = await createPlatformUser(input, apiOptions);
+        if (!result.data) {
+          return {
+            data: null,
+            error: result.error
+          };
+        }
+
+        const created = result.data;
+
+        const detail = await refreshCompanyDetail(created.user.companyId);
+        if (detail) {
+          setUserDetails((current) => ({
+            ...current,
+            [created.user.id]: {
+              user: created.user,
+              company: detail.company,
+              role: created.role,
+              permissions: created.permissions
+            }
+          }));
+        }
+
+        return {
+          data: created,
+          error: null
+        };
+      } finally {
+        setSavingUsers(false);
+      }
+    },
+    async changeUserRole(userId, input) {
+      setSavingUsers(true);
+
+      try {
+        const result = await updatePlatformUserRole(userId, input, apiOptions);
+        if (!result.data) {
+          return {
+            data: null,
+            error: result.error
+          };
+        }
+
+        const updated = result.data;
+        await refreshCompanyDetail(updated.user.companyId);
+        setUserDetails((current) => {
+          const previous = current[userId];
+
+          return {
+            ...current,
+            [userId]: {
+              user: updated.user,
+              company: previous?.company ?? activeCompany,
+              role: updated.role,
+              permissions: updated.permissions
+            }
+          };
+        });
+
+        return {
+          data: updated,
+          error: null
+        };
+      } finally {
+        setSavingUsers(false);
+      }
+    },
+    async changeUserStatus(userId, input) {
+      setSavingUsers(true);
+
+      try {
+        const result = await updatePlatformUserStatus(userId, input, apiOptions);
+        if (!result.data) {
+          return {
+            data: null,
+            error: result.error
+          };
+        }
+
+        const updated = result.data;
+        await refreshCompanyDetail(updated.user.companyId);
+        setUserDetails((current) => {
+          const previous = current[userId];
+
+          return {
+            ...current,
+            [userId]: {
+              user: updated.user,
+              company: previous?.company ?? activeCompany,
+              role: updated.role,
+              permissions: updated.permissions
+            }
+          };
+        });
+
+        return {
+          data: updated,
+          error: null
+        };
+      } finally {
+        setSavingUsers(false);
+      }
     },
     async saveSettings(companyId, input) {
       setSavingSettings(true);
