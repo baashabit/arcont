@@ -180,6 +180,33 @@ type HrRiskRecord = {
   status: string;
 };
 
+type ComplianceCaseRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  queueName: string;
+  subject: string;
+  unitOrContract: string;
+  owner: string;
+  status: "monitoring" | "in_progress" | "at_risk" | "blocked" | "closed";
+  documentCompletion: number;
+  slaHoursRemaining: number;
+  openFindings: number;
+  health: "healthy" | "watch" | "critical";
+  nextAction: string;
+  updatedAt: string;
+};
+
+type ComplianceRiskRecord = {
+  id: string;
+  caseId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -197,6 +224,8 @@ export type PlatformRepository = {
   listCrmRisks(companyId: string): Promise<CrmRiskRecord[]>;
   listHrWorkforces(companyId: string): Promise<HrWorkforceItemRecord[]>;
   listHrRisks(companyId: string): Promise<HrRiskRecord[]>;
+  listComplianceCases(companyId: string): Promise<ComplianceCaseRecord[]>;
+  listComplianceRisks(companyId: string): Promise<ComplianceRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
   getUserById(userId: string): Promise<UserRecord | undefined>;
   getUserByEmail(email: string): Promise<UserRecord | undefined>;
@@ -244,7 +273,9 @@ function createSeedState() {
         "projects.control",
         "procurement.purchasing",
         "inventory.warehouse",
-        "finance.accounting"
+        "finance.accounting",
+        "hr.workforce",
+        "compliance.postsale"
       ]
     },
     {
@@ -866,6 +897,128 @@ function createSeedState() {
     }
   ];
 
+  const complianceCases: ComplianceCaseRecord[] = [
+    {
+      id: "cmpc_urbanizacion_addendum",
+      companyId: "cmp_arcont_demo",
+      code: "CMP-401",
+      queueName: "Legal contracts",
+      subject: "Urbanizacion etapa 2 addendum",
+      unitOrContract: "Contrato URB-E2-14",
+      owner: "Legal interno",
+      status: "blocked",
+      documentCompletion: 82,
+      slaHoursRemaining: -6,
+      openFindings: 2,
+      health: "critical",
+      nextAction: "Collect signed addendum and update approved contract version",
+      updatedAt: "2026-07-11T11:15:00.000Z"
+    },
+    {
+      id: "cmpc_promesas_homologacion",
+      companyId: "cmp_arcont_demo",
+      code: "CMP-417",
+      queueName: "Sales closing",
+      subject: "Promesas con clausula legacy",
+      unitOrContract: "9 promesas pendientes",
+      owner: "Sales ops",
+      status: "at_risk",
+      documentCompletion: 91,
+      slaHoursRemaining: 18,
+      openFindings: 3,
+      health: "watch",
+      nextAction: "Homologate templates before next signing wave",
+      updatedAt: "2026-07-11T10:10:00.000Z"
+    },
+    {
+      id: "cmpc_postventa_filtracion",
+      companyId: "cmp_arcont_demo",
+      code: "PST-1208",
+      queueName: "Warranty",
+      subject: "Filtracion menor en unidad B-1406",
+      unitOrContract: "Unidad B-1406",
+      owner: "Brigada Postventa 2",
+      status: "in_progress",
+      documentCompletion: 96,
+      slaHoursRemaining: 18,
+      openFindings: 1,
+      health: "watch",
+      nextAction: "Complete visit evidence and capture customer sign-off",
+      updatedAt: "2026-07-11T09:30:00.000Z"
+    },
+    {
+      id: "cmpc_handover_torre_b",
+      companyId: "cmp_arcont_demo",
+      code: "HND-088",
+      queueName: "Handover",
+      subject: "Entrega Torre B nivel 14",
+      unitOrContract: "14 unidades",
+      owner: "Customer care",
+      status: "monitoring",
+      documentCompletion: 94,
+      slaHoursRemaining: 36,
+      openFindings: 1,
+      health: "healthy",
+      nextAction: "Close remaining legal signatures before final handover pack",
+      updatedAt: "2026-07-11T08:40:00.000Z"
+    },
+    {
+      id: "cmpc_bienestar_evidence",
+      companyId: "cmp_bienestar_gov",
+      code: "GOV-224",
+      queueName: "Government compliance",
+      subject: "Expediente federal de evidencia",
+      unitOrContract: "Paquete Bienestar Sur",
+      owner: "Regional PMO",
+      status: "at_risk",
+      documentCompletion: 76,
+      slaHoursRemaining: 10,
+      openFindings: 4,
+      health: "critical",
+      nextAction: "Upload missing evidence and validate federal checklist",
+      updatedAt: "2026-07-11T12:00:00.000Z"
+    }
+  ];
+
+  const complianceRisks: ComplianceRiskRecord[] = [
+    {
+      id: "cmpr_addendum_version",
+      caseId: "cmpc_urbanizacion_addendum",
+      title: "Approved contract version is still missing in the legal folder",
+      category: "versioning",
+      severity: "critical",
+      owner: "Legal interno",
+      status: "Waiting for final signature and folder replacement"
+    },
+    {
+      id: "cmpr_promesa_clause",
+      caseId: "cmpc_promesas_homologacion",
+      title: "Legacy clause exposure remains open across pending sales promises",
+      category: "contract risk",
+      severity: "warning",
+      owner: "Sales ops",
+      status: "Template update in progress before new signatures"
+    },
+    {
+      id: "cmpr_postventa_signoff",
+      caseId: "cmpc_postventa_filtracion",
+      title: "Warranty case needs signed closure evidence from customer",
+      category: "post-sale",
+      severity: "info",
+      owner: "Brigada Postventa 2",
+      status: "Visit scheduled and closeout evidence pending"
+    },
+    {
+      id: "cmpr_gov_checklist",
+      caseId: "cmpc_bienestar_evidence",
+      title: "Federal evidence checklist has missing support files",
+      category: "government compliance",
+      severity: "critical",
+      owner: "Regional PMO",
+      status: "Escalated for same-day evidence upload"
+    }
+  ];
+
   const settings: SettingsRecord[] = [
     {
       companyId: "cmp_arcont_demo",
@@ -905,6 +1058,8 @@ function createSeedState() {
       crmRisks,
       hrWorkforces,
       hrRisks,
+      complianceCases,
+      complianceRisks,
       settings,
       refreshTokens,
       auditEvents
@@ -977,6 +1132,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.hrWorkforces.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.hrRisks.filter((risk) => workforceIds.has(risk.workforceId));
+    },
+    async listComplianceCases(companyId: string) {
+      return state.complianceCases.filter((item) => item.companyId === companyId);
+    },
+    async listComplianceRisks(companyId: string) {
+      const caseIds = new Set(
+        state.complianceCases.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.complianceRisks.filter((risk) => caseIds.has(risk.caseId));
     },
     async listUsers(companyId?: string) {
       if (!companyId) {
@@ -1458,6 +1622,18 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listHrRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listComplianceCases(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listComplianceRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;

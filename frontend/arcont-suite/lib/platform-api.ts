@@ -1,6 +1,7 @@
 import {
   AuditEventSchema,
   AuthSessionSchema,
+  ComplianceOverviewSchema,
   CrmOverviewSchema,
   CompanyDetailSchema,
   CompanyModuleStateSchema,
@@ -27,6 +28,7 @@ import {
   type AuditEventContract,
   type AuthLoginRequestContract,
   type AuthSessionContract,
+  type ComplianceOverviewContract,
   type CrmOverviewContract,
   type CompanyDetailContract,
   type CompanyModuleStateContract,
@@ -322,6 +324,15 @@ export async function fetchCrmOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/crm/overview${query}`, options);
   return response ? CrmOverviewSchema.parse(response) : null;
+}
+
+export async function fetchComplianceOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<ComplianceOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/compliance/overview${query}`, options);
+  return response ? ComplianceOverviewSchema.parse(response) : null;
 }
 
 export async function fetchHrOverview(

@@ -6,6 +6,7 @@ import {
 } from "./repositories/platform-repository.js";
 import { createAuthService } from "./services/auth-service.js";
 import { createCrmService } from "./services/crm-service.js";
+import { createComplianceService } from "./services/compliance-service.js";
 import { createFinanceService } from "./services/finance-service.js";
 import { createHrService } from "./services/hr-service.js";
 import { createInventoryService } from "./services/inventory-service.js";
@@ -25,6 +26,7 @@ export function createContainer() {
   const inventoryService = createInventoryService(platformRepository);
   const financeService = createFinanceService(platformRepository);
   const crmService = createCrmService(platformRepository);
+  const complianceService = createComplianceService(platformRepository);
   const hrService = createHrService(platformRepository);
 
   return {
@@ -36,6 +38,7 @@ export function createContainer() {
     inventoryService,
     financeService,
     crmService,
+    complianceService,
     hrService
   };
 }

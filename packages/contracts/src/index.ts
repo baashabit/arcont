@@ -343,6 +343,45 @@ export const HrOverviewSchema = z.object({
   focusWorkforce: HrWorkforceItemSchema.nullable()
 });
 
+export const ComplianceRiskSchema = z.object({
+  id: z.string(),
+  caseId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const ComplianceCaseSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  queueName: z.string(),
+  subject: z.string(),
+  unitOrContract: z.string(),
+  owner: z.string(),
+  status: z.enum(["monitoring", "in_progress", "at_risk", "blocked", "closed"]),
+  documentCompletion: z.number().min(0).max(100),
+  slaHoursRemaining: z.number(),
+  openFindings: z.number().int().nonnegative(),
+  health: z.enum(["healthy", "watch", "critical"]),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const ComplianceOverviewSchema = z.object({
+  summary: z.object({
+    activeCases: z.number().int().nonnegative(),
+    atRiskCases: z.number().int().nonnegative(),
+    averageDocumentCompletion: z.number().min(0).max(100),
+    openFindings: z.number().int().nonnegative()
+  }),
+  cases: z.array(ComplianceCaseSchema),
+  risks: z.array(ComplianceRiskSchema),
+  focusCase: ComplianceCaseSchema.nullable()
+});
+
 export const CompanyModuleStateSchema = z.object({
   companyId: z.string(),
   module: ModuleSchema,
@@ -502,6 +541,9 @@ export type CrmOverviewContract = z.infer<typeof CrmOverviewSchema>;
 export type HrRiskContract = z.infer<typeof HrRiskSchema>;
 export type HrWorkforceItemContract = z.infer<typeof HrWorkforceItemSchema>;
 export type HrOverviewContract = z.infer<typeof HrOverviewSchema>;
+export type ComplianceRiskContract = z.infer<typeof ComplianceRiskSchema>;
+export type ComplianceCaseContract = z.infer<typeof ComplianceCaseSchema>;
+export type ComplianceOverviewContract = z.infer<typeof ComplianceOverviewSchema>;
 export type CompanyModuleStateContract = z.infer<typeof CompanyModuleStateSchema>;
 export type PlatformBootstrapContract = z.infer<typeof PlatformBootstrapSchema>;
 export type ProvisionCompanyRequestContract = z.infer<typeof ProvisionCompanyRequestSchema>;
