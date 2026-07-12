@@ -1,16 +1,25 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
-  AuthSessionSchema,
-  PlatformBootstrapSchema,
-  type AuthLoginRequestContract,
-  type AuthSessionContract,
-  type CompanyContract,
-  type CompanyModuleStateContract,
-  type ModuleContract,
-  type RoleContract,
-  type UserContract
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+import type {
+  AuditEventContract,
+  AuthLoginRequestContract,
+  CompanyContract,
+  CompanyDetailContract,
+  CompanyModuleStateContract,
+  ModuleContract,
+  PlatformDashboardSummaryContract,
+  PlatformSettingsContract,
+  RoleContract,
+  UpdatePlatformSettingsRequestContract,
+  UserContract
 } from "@/lib/contracts";
 import {
   authSessionToAppSession,
@@ -20,6 +29,16 @@ import {
   type AppData,
   type AppSession
 } from "@/lib/app-data";
+import {
+  fetchAuditEvents,
+  fetchBootstrap,
+  fetchCompanyDetail,
+  fetchCompanyModules,
+  fetchDashboardSummary,
+  loginWithApi,
+  updateCompanyModules,
+  updateSettings
+} from "@/lib/platform-api";
 
 type SignInResult = {
   ok: boolean;
@@ -29,13 +48,30 @@ type SignInResult = {
 
 type AppStateContextValue = AppData & {
   activeCompany: CompanyContract;
-  activeSettings: AppData["settings"][string] | undefined;
+  activeSettings: PlatformSettingsContract | undefined;
   activeUsers: UserContract[];
   activeRole: RoleContract | undefined;
+  companyDetails: Record<string, CompanyDetailContract>;
+  dashboardSummary: PlatformDashboardSummaryContract | null;
+  auditEvents: AuditEventContract[];
   isHydratingSession: boolean;
+  isRefreshingPlatform: boolean;
+  isSavingSettings: boolean;
+  isSavingModules: boolean;
   setActiveCompanyId: (companyId: string) => void;
   signIn: (credentials: AuthLoginRequestContract) => Promise<SignInResult>;
   signOut: () => void;
+  refreshCompanyDetail: (companyId?: string) => Promise<CompanyDetailContract | null>;
+  refreshDashboard: (companyId?: string) => Promise<PlatformDashboardSummaryContract | null>;
+  refreshAuditTrail: (companyId?: string, limit?: number) => Promise<AuditEventContract[]>;
+  saveSettings: (
+    companyId: string,
+    input: UpdatePlatformSettingsRequestContract
+  ) => Promise<PlatformSettingsContract | null>;
+  saveCompanyModules: (
+    companyId: string,
+    enabledModules: string[]
+  ) => Promise<CompanyModuleStateContract[] | null>;
   isModuleEnabled: (moduleKeys?: string[]) => boolean;
   canAccess: (requiredPermissions?: string[]) => boolean;
   isRouteVisible: (input?: { moduleKeys?: string[]; requiredPermissions?: string[] }) => boolean;
@@ -68,17 +104,18 @@ function matchesPermission(grantedPermission: string, requiredPermission: string
   return false;
 }
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T | null> {
-  try {
-    const response = await fetch(url, init);
-    if (!response.ok) {
-      return null;
-    }
+function buildCompaniesFromModules(
+  companies: CompanyContract[],
+  companyId: string,
+  companyModules: CompanyModuleStateContract[]
+) {
+  const enabledModules = companyModules
+    .filter((entry) => entry.enabled)
+    .map((entry) => entry.module.key);
 
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  }
+  return companies.map((company) =>
+    company.id === companyId ? { ...company, enabledModules } : company
+  );
 }
 
 export function AppStateProvider({
@@ -91,26 +128,134 @@ export function AppStateProvider({
   const [data, setData] = useState(initialData);
   const [session, setSession] = useState<AppSession>(initialData.session);
   const [activeCompanyId, setActiveCompanyIdState] = useState(initialData.session.companyId);
+  const [companyDetails, setCompanyDetails] = useState<Record<string, CompanyDetailContract>>({});
+  const [dashboardSummary, setDashboardSummary] = useState<PlatformDashboardSummaryContract | null>(null);
+  const [auditEvents, setAuditEvents] = useState<AuditEventContract[]>([]);
   const [isHydratingSession, setHydratingSession] = useState(false);
+  const [isRefreshingPlatform, setRefreshingPlatform] = useState(false);
+  const [isSavingSettings, setSavingSettings] = useState(false);
+  const [isSavingModules, setSavingModules] = useState(false);
+
+  const apiOptions = useMemo(
+    () => ({
+      apiBaseUrl: data.apiBaseUrl,
+      accessToken: session.accessToken
+    }),
+    [data.apiBaseUrl, session.accessToken]
+  );
+
+  const refreshCompanyDetail = useCallback(
+    async (companyId = activeCompanyId) => {
+      const detail = await fetchCompanyDetail(companyId, apiOptions);
+      if (!detail) {
+        return null;
+      }
+
+      setCompanyDetails((current) => ({
+        ...current,
+        [companyId]: detail
+      }));
+      setData((current) => ({
+        ...current,
+        source: "api",
+        companies: mergeUniqueCompanies(current.companies, detail.company),
+        users: mergeUsersByCompany(current.users, detail.users, companyId),
+        settings: {
+          ...current.settings,
+          [companyId]: detail.settings
+        },
+        companyModules: {
+          ...current.companyModules,
+          [companyId]: detail.companyModules
+        }
+      }));
+
+      return detail;
+    },
+    [activeCompanyId, apiOptions]
+  );
+
+  const refreshDashboard = useCallback(
+    async (companyId = activeCompanyId) => {
+      const summary = await fetchDashboardSummary(companyId, apiOptions);
+      if (!summary) {
+        return null;
+      }
+
+      setDashboardSummary(summary);
+      return summary;
+    },
+    [activeCompanyId, apiOptions]
+  );
+
+  const refreshAuditTrail = useCallback(
+    async (companyId = activeCompanyId, limit = 8) => {
+      const items = await fetchAuditEvents(companyId, limit, apiOptions);
+      if (!items) {
+        return [];
+      }
+
+      setAuditEvents(items);
+      return items;
+    },
+    [activeCompanyId, apiOptions]
+  );
+
+  const refreshCompanyModulesState = useCallback(
+    async (companyId: string) => {
+      const items = await fetchCompanyModules(companyId, apiOptions);
+      if (!items) {
+        return null;
+      }
+
+      setData((current) => ({
+        ...current,
+        source: "api",
+        companies: buildCompaniesFromModules(current.companies, companyId, items),
+        companyModules: {
+          ...current.companyModules,
+          [companyId]: items
+        }
+      }));
+
+      return items;
+    },
+    [apiOptions]
+  );
+
+  const refreshPlatformState = useCallback(
+    async (companyId: string) => {
+      setRefreshingPlatform(true);
+
+      try {
+        await Promise.all([
+          refreshCompanyDetail(companyId),
+          refreshDashboard(companyId),
+          refreshAuditTrail(companyId, 8),
+          refreshCompanyModulesState(companyId)
+        ]);
+      } finally {
+        setRefreshingPlatform(false);
+      }
+    },
+    [refreshAuditTrail, refreshCompanyDetail, refreshCompanyModulesState, refreshDashboard]
+  );
 
   const hydrateFromBootstrap = useCallback(
     async (companyId: string, userEmail: string, baseSession?: AppSession) => {
       setHydratingSession(true);
 
       try {
-        const response = await requestJson(
-          `${data.apiBaseUrl}/platform/bootstrap/${companyId}?userEmail=${encodeURIComponent(userEmail)}`
-        );
-
-        if (!response) {
+        const bootstrap = await fetchBootstrap(companyId, userEmail, apiOptions);
+        if (!bootstrap) {
           return false;
         }
 
-        const bootstrap = PlatformBootstrapSchema.parse(response);
         const partial = bootstrapToPartialAppData(bootstrap);
+        const sessionSeed = baseSession ?? initialData.session;
         const nextSession: AppSession = {
-          ...(baseSession ?? session),
-          authenticated: (baseSession ?? session).authenticated,
+          ...sessionSeed,
+          authenticated: sessionSeed.authenticated,
           companyId: partial.session.companyId,
           user: partial.session.user,
           permissions: partial.session.permissions
@@ -138,12 +283,28 @@ export function AppStateProvider({
         window.localStorage.setItem(sessionStorageKey, JSON.stringify(nextSession));
         window.localStorage.setItem(companyStorageKey, partial.company.id);
 
+        setCompanyDetails((current) => ({
+          ...current,
+          [partial.company.id]: {
+            company: partial.company,
+            settings: partial.settings,
+            companyModules: partial.companyModules,
+            users: partial.users,
+            stats: {
+              totalUsers: partial.users.length,
+              activeUsers: partial.users.filter((user) => user.status === "active").length,
+              enabledModuleCount: partial.companyModules.filter((entry) => entry.enabled).length,
+              disabledModuleCount: partial.companyModules.filter((entry) => !entry.enabled).length
+            }
+          }
+        }));
+
         return true;
       } finally {
         setHydratingSession(false);
       }
     },
-    [data.apiBaseUrl, session]
+    [apiOptions, initialData.session]
   );
 
   useEffect(() => {
@@ -167,9 +328,21 @@ export function AppStateProvider({
     }
 
     if (resolvedSession.authenticated) {
-      void hydrateFromBootstrap(resolvedSession.companyId, resolvedSession.user.email, resolvedSession);
+      void (async () => {
+        const hydrated = await hydrateFromBootstrap(
+          resolvedSession.companyId,
+          resolvedSession.user.email,
+          resolvedSession
+        );
+
+        if (hydrated) {
+          await refreshPlatformState(resolvedSession.companyId);
+        }
+      })();
+    } else {
+      void refreshPlatformState(resolvedSession.companyId);
     }
-  }, [hydrateFromBootstrap, initialData]);
+  }, [hydrateFromBootstrap, initialData, refreshPlatformState]);
 
   useEffect(() => {
     window.localStorage.setItem(companyStorageKey, activeCompanyId);
@@ -184,7 +357,6 @@ export function AppStateProvider({
     activeUsers[0] ??
     session.user;
   const activeRole = data.roles.find((role) => role.key === activeUser.roleKey);
-
   const permissions = activeRole?.permissions ?? session.permissions;
 
   const helpers = useMemo(
@@ -222,7 +394,13 @@ export function AppStateProvider({
     activeSettings: data.settings[activeCompany.id],
     activeUsers,
     activeRole,
+    companyDetails,
+    dashboardSummary,
+    auditEvents,
     isHydratingSession,
+    isRefreshingPlatform,
+    isSavingSettings,
+    isSavingModules,
     session: {
       ...session,
       companyId: activeCompany.id,
@@ -231,37 +409,32 @@ export function AppStateProvider({
     },
     setActiveCompanyId(companyId) {
       setActiveCompanyIdState(companyId);
+      window.localStorage.setItem(companyStorageKey, companyId);
+
       if (session.authenticated) {
-        void hydrateFromBootstrap(companyId, session.user.email, {
-          ...session,
-          companyId
-        });
+        void (async () => {
+          await hydrateFromBootstrap(companyId, session.user.email, {
+            ...session,
+            companyId
+          });
+          await refreshPlatformState(companyId);
+        })();
+      } else {
+        void refreshPlatformState(companyId);
       }
     },
     async signIn(credentials) {
-      const payload = {
-        email: credentials.email,
-        password: credentials.password,
-        companyId: credentials.companyId
-      };
-
-      const apiResponse = await requestJson<AuthSessionContract>(`${data.apiBaseUrl}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
+      const apiResponse = await loginWithApi(credentials, apiOptions);
 
       if (apiResponse) {
-        const authSession = AuthSessionSchema.parse(apiResponse);
-        const nextSession = authSessionToAppSession(authSession);
+        const nextSession = authSessionToAppSession(apiResponse);
 
         setSession(nextSession);
         setActiveCompanyIdState(nextSession.companyId);
         window.localStorage.setItem(sessionStorageKey, JSON.stringify(nextSession));
         window.localStorage.setItem(companyStorageKey, nextSession.companyId);
         await hydrateFromBootstrap(nextSession.companyId, nextSession.user.email, nextSession);
+        await refreshPlatformState(nextSession.companyId);
 
         return {
           ok: true,
@@ -269,7 +442,11 @@ export function AppStateProvider({
         };
       }
 
-      const mockResponse = getMockSession(credentials.email, credentials.password, credentials.companyId);
+      const mockResponse = getMockSession(
+        credentials.email,
+        credentials.password,
+        credentials.companyId
+      );
       if (!mockResponse) {
         return {
           ok: false,
@@ -285,6 +462,9 @@ export function AppStateProvider({
         ...mockData,
         session: nextSession
       });
+      setCompanyDetails({});
+      setDashboardSummary(null);
+      setAuditEvents([]);
       setSession(nextSession);
       setActiveCompanyIdState(nextSession.companyId);
       window.localStorage.setItem(sessionStorageKey, JSON.stringify(nextSession));
@@ -302,10 +482,113 @@ export function AppStateProvider({
         ...fallback,
         source: data.source === "api" ? "api" : "mock"
       });
+      setCompanyDetails({});
+      setDashboardSummary(null);
+      setAuditEvents([]);
       setSession(fallback.session);
       setActiveCompanyIdState(fallback.session.companyId);
       window.localStorage.removeItem(sessionStorageKey);
       window.localStorage.setItem(companyStorageKey, fallback.session.companyId);
+    },
+    async refreshCompanyDetail(companyId) {
+      return refreshCompanyDetail(companyId);
+    },
+    async refreshDashboard(companyId) {
+      return refreshDashboard(companyId);
+    },
+    async refreshAuditTrail(companyId, limit) {
+      return refreshAuditTrail(companyId, limit);
+    },
+    async saveSettings(companyId, input) {
+      setSavingSettings(true);
+
+      try {
+        const updated = await updateSettings(companyId, input, apiOptions);
+        if (!updated) {
+          return null;
+        }
+
+        setData((current) => ({
+          ...current,
+          source: "api",
+          settings: {
+            ...current.settings,
+            [companyId]: updated
+          }
+        }));
+        setCompanyDetails((current) => {
+          const detail = current[companyId];
+          if (!detail) {
+            return current;
+          }
+
+          return {
+            ...current,
+            [companyId]: {
+              ...detail,
+              settings: updated
+            }
+          };
+        });
+
+        return updated;
+      } finally {
+        setSavingSettings(false);
+      }
+    },
+    async saveCompanyModules(companyId, enabledModules) {
+      setSavingModules(true);
+
+      try {
+        const updated = await updateCompanyModules(
+          companyId,
+          {
+            enabledModules
+          },
+          apiOptions
+        );
+
+        if (!updated) {
+          return null;
+        }
+
+        setData((current) => ({
+          ...current,
+          source: "api",
+          companies: buildCompaniesFromModules(current.companies, companyId, updated),
+          companyModules: {
+            ...current.companyModules,
+            [companyId]: updated
+          }
+        }));
+        setCompanyDetails((current) => {
+          const detail = current[companyId];
+          if (!detail) {
+            return current;
+          }
+
+          return {
+            ...current,
+            [companyId]: {
+              ...detail,
+              company: {
+                ...detail.company,
+                enabledModules
+              },
+              companyModules: updated,
+              stats: {
+                ...detail.stats,
+                enabledModuleCount: updated.filter((entry) => entry.enabled).length,
+                disabledModuleCount: updated.filter((entry) => !entry.enabled).length
+              }
+            }
+          };
+        });
+
+        return updated;
+      } finally {
+        setSavingModules(false);
+      }
     },
     isModuleEnabled: helpers.isModuleEnabled,
     canAccess: helpers.canAccess,

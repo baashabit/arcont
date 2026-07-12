@@ -1,92 +1,156 @@
 "use client";
 
+import { useEffect } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ModuleBadge } from "@/components/ui/module-badge";
-import { dashboardAlerts } from "@/lib/route-mocks";
+
+function formatAreaLabel(area: string) {
+  return area.replace(/_/g, " ");
+}
 
 export default function DashboardPage() {
-  const { activeCompany, activeSettings, modules, users, source } = useAppState();
-  const enabledModules = modules.filter((module) => activeCompany.enabledModules.includes(module.key));
+  const {
+    activeCompany,
+    activeSettings,
+    modules,
+    dashboardSummary,
+    auditEvents,
+    source,
+    isRefreshingPlatform,
+    refreshDashboard,
+    refreshAuditTrail,
+    getCompanyModules
+  } = useAppState();
+
+  useEffect(() => {
+    if (!dashboardSummary) {
+      void refreshDashboard(activeCompany.id);
+    }
+
+    if (auditEvents.length === 0) {
+      void refreshAuditTrail(activeCompany.id, 8);
+    }
+  }, [activeCompany.id, auditEvents.length, dashboardSummary, refreshAuditTrail, refreshDashboard]);
+
+  const companyModules = getCompanyModules(activeCompany.id);
+  const enabledModules = companyModules.length
+    ? companyModules.filter((entry) => entry.enabled).map((entry) => entry.module)
+    : modules.filter((module) => activeCompany.enabledModules.includes(module.key));
+
+  const totals = dashboardSummary?.totals;
+  const latestAuditEvents = auditEvents.length > 0 ? auditEvents : dashboardSummary?.latestAuditEvents ?? [];
 
   return (
     <AppShell
       title="Enterprise dashboard"
       eyebrow="Platform overview"
       description="Cross-domain control for tenant health, operational pressure and module readiness."
-      actions={<Badge tone={source === "api" ? "success" : "warning"}>{source} data source</Badge>}
+      actions={
+        <Badge tone={source === "api" ? "success" : "warning"}>
+          {isRefreshingPlatform ? "refreshing" : `${source} data source`}
+        </Badge>
+      }
     >
       <section className="heroPanel">
         <div>
-          <h2>ARCONT is ready to orchestrate platform governance and frontline execution.</h2>
+          <h2>ARCONT now surfaces live platform posture, not just static shell metrics.</h2>
           <p>
-            The shell now understands tenant context, module visibility, reusable enterprise patterns and API
-            fallback. Each route demonstrates a product capability instead of a placeholder screen.
+            Dashboard summary and audit events now prefer the real backend, while preserving the same visual
+            shell and a safe local fallback if the API is unavailable.
           </p>
           <div className="heroMetrics">
             <div className="heroMetric">
-              <strong>{enabledModules.length}</strong>
-              <span>Modules live for {activeCompany.tradeName}</span>
+              <strong>{totals?.companies ?? "--"}</strong>
+              <span>Total companies tracked by the current platform summary</span>
             </div>
             <div className="heroMetric">
-              <strong>{users.filter((user) => user.companyId === activeCompany.id).length}</strong>
-              <span>Users governed under the active tenant</span>
+              <strong>{totals?.activeUsers ?? "--"}</strong>
+              <span>Active users visible across the current operational snapshot</span>
             </div>
             <div className="heroMetric">
-              <strong>{activeSettings?.currency ?? "MXN"}</strong>
-              <span>Fiscal baseline and locale controls in place</span>
+              <strong>{totals?.auditEvents ?? "--"}</strong>
+              <span>Audit events counted by the backend dashboard endpoint</span>
             </div>
           </div>
         </div>
 
         <Card
-          title="Operating posture"
-          description="A compact readout of what matters first for the active tenant."
+          title="Active tenant focus"
+          description="The active company still drives route visibility, but platform-wide metrics now come from the real summary endpoint."
           aside={<Badge tone="gold">{activeCompany.status}</Badge>}
         >
           <div className="statStrip">
             <div className="statTile">
-              <strong>97.4%</strong>
-              <span>Control coverage across enabled domains</span>
+              <strong>{enabledModules.length}</strong>
+              <span>Enabled modules for {activeCompany.tradeName}</span>
             </div>
             <div className="statTile">
-              <strong>11</strong>
-              <span>Critical workflows mapped in the shell foundation</span>
+              <strong>{activeSettings?.currency ?? "MXN"}</strong>
+              <span>Tenant financial baseline and localization</span>
             </div>
           </div>
           <p className="sectionText">
-            Tenant switching and module gating are handled in the frontend state layer, so future auth and
-            bootstrap flows can plug into the same shell.
+            Focus company from the platform summary:
+            {" "}
+            {dashboardSummary?.focusCompany?.tradeName ?? activeCompany.tradeName}
           </p>
         </Card>
       </section>
 
       <section className="grid cols4">
-        <KpiCard label="Tenant status" value={activeCompany.tradeName} footnote="Company context drives all route visibility and platform settings." />
-        <KpiCard label="Modules enabled" value={String(enabledModules.length)} footnote="Catalogued from shared contracts, not hardcoded UI labels." />
-        <KpiCard label="Active locale" value={activeSettings?.locale ?? "es-MX"} footnote="Settings can already fall back safely when the API is not running." />
-        <KpiCard label="Role focus" value="Platform-first" footnote="Foundation supports governance and operations without splitting the UX into separate products." />
+        <KpiCard
+          label="Companies"
+          value={String(totals?.companies ?? enabledModules.length)}
+          footnote="Read from GET /platform/dashboard/summary when available."
+        />
+        <KpiCard
+          label="Active companies"
+          value={String(totals?.activeCompanies ?? 0)}
+          footnote="Platform-wide company activation posture."
+        />
+        <KpiCard
+          label="Users"
+          value={String(totals?.users ?? 0)}
+          footnote="User totals come from the dashboard summary, not local counting."
+        />
+        <KpiCard
+          label="Enabled modules"
+          value={String(totals?.enabledModules ?? enabledModules.length)}
+          footnote="Combined module activation read across companies."
+        />
       </section>
 
       <section className="grid cols2">
-        <Card title="Risk board" description="Signals that explain where leadership attention is needed.">
-          <div className="list">
-            {dashboardAlerts.map((alert) => (
-              <div className="listItem" key={alert.title}>
-                <div>
-                  <strong>{alert.title}</strong>
-                  <p>{alert.detail}</p>
+        <Card title="Module activation by area" description="A live rollup of how many companies have each domain enabled.">
+          {dashboardSummary?.byArea?.length ? (
+            <div className="moduleGrid">
+              {dashboardSummary.byArea.map((entry) => (
+                <div className="moduleCard" key={entry.area}>
+                  <div className="moduleMeta">
+                    <div>
+                      <h4>{formatAreaLabel(entry.area)}</h4>
+                      <p>Companies with this domain enabled in the current platform dataset.</p>
+                    </div>
+                    <Badge tone="info">{entry.enabledCompanies}</Badge>
+                  </div>
                 </div>
-                <Badge tone={alert.tone}>{alert.tone}</Badge>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No live platform summary available"
+              description="The dashboard keeps rendering with the same shell even when the summary endpoint is unavailable."
+              primaryAction={{ label: "Review companies", href: "/platform/companies" }}
+            />
+          )}
         </Card>
 
-        <Card title="Module portfolio" description="Enabled domains for the current tenant, mapped from shared contracts.">
+        <Card title="Tenant module portfolio" description="Current active-company modules, hydrated from bootstrap or company-modules endpoint.">
           <div className="moduleGrid">
             {enabledModules.map((module) => (
               <div key={module.key} className="moduleCard">
@@ -106,6 +170,38 @@ export default function DashboardPage() {
           </div>
         </Card>
       </section>
+
+      <Card title="Audit trail" description="Latest platform activity from GET /platform/audit-events and dashboard summary.">
+        {latestAuditEvents.length ? (
+          <div className="list">
+            {latestAuditEvents.map((event) => (
+              <div className="listItem" key={event.id}>
+                <div>
+                  <strong>{event.action}</strong>
+                  <p>
+                    {event.aggregateType}
+                    {" "}
+                    /
+                    {" "}
+                    {event.aggregateId}
+                    {" "}
+                    ·
+                    {" "}
+                    {new Date(event.createdAt).toLocaleString("es-MX")}
+                  </p>
+                </div>
+                <Badge tone="neutral">{event.companyId ?? "platform"}</Badge>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No audit events available"
+            description="The backend did not return audit activity, so the dashboard falls back cleanly without breaking the shell."
+            primaryAction={{ label: "Open users", href: "/platform/users" }}
+          />
+        )}
+      </Card>
     </AppShell>
   );
 }

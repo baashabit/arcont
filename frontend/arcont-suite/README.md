@@ -37,13 +37,19 @@ This frontend is the enterprise base for the ARCONT web suite inside `frontend/a
 - `POST /auth/login`
   - consumed by `/login`
 - `GET /platform/bootstrap/:companyId?userEmail=...`
-  - consumed after login and when switching tenant for `/dashboard`, `/platform/modules`, `/platform/users`, `/platform/settings`
+  - consumed after login and when switching tenant as the primary source for session, tenant context, permissions, modules, users and settings
 - `GET /platform/companies`
+- `GET /platform/companies/:companyId`
+- `GET /platform/companies/:companyId/modules`
+- `PUT /platform/companies/:companyId/modules`
 - `GET /platform/modules`
+- `GET /platform/dashboard/summary`
+- `GET /platform/audit-events`
 - `GET /platform/roles`
 - `GET /platform/users`
 - `GET /platform/settings/:companyId`
-  - consumed during initial app load, with fallback to local typed mocks
+- `PUT /platform/settings/:companyId`
+  - consumed across `/dashboard`, `/platform/companies`, `/platform/modules`, `/platform/settings`, `/platform/users`, plus initial app load with typed fallback
 
 ### Still mock-first
 
