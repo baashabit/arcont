@@ -16,6 +16,8 @@ import {
   fetchFinanceOverview,
   fetchHrOverview,
   fetchIntegrationOverview,
+  fetchInventoryMovementsOverview,
+  fetchInventoryReceivingOverview,
   fetchInventoryOverview,
   fetchProcurementOverview,
   fetchProjectsOverview
@@ -96,6 +98,8 @@ export default function OperationsPage() {
       fetchProjectsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchProcurementOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchInventoryReceivingOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchInventoryMovementsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchFinanceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchHrOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchComplianceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
@@ -111,6 +115,8 @@ export default function OperationsPage() {
           projectsResult,
           procurementResult,
           inventoryResult,
+          inventoryReceivingResult,
+          inventoryMovementsResult,
           financeResult,
           hrResult,
           complianceResult,
@@ -160,6 +166,36 @@ export default function OperationsPage() {
               owner: risk.owner,
               dueLabel: risk.status,
               domain: "Inventory",
+              severity: risk.severity
+            });
+          }
+        }
+
+        if (inventoryReceivingResult.status === "fulfilled" && inventoryReceivingResult.value) {
+          for (const risk of inventoryReceivingResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · inbound receiving`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Receiving",
+              severity: risk.severity
+            });
+          }
+        }
+
+        if (inventoryMovementsResult.status === "fulfilled" && inventoryMovementsResult.value) {
+          for (const risk of inventoryMovementsResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · stock movement`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Movements",
               severity: risk.severity
             });
           }

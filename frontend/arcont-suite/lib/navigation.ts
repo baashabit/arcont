@@ -161,6 +161,22 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["inventory:*"]
   },
   {
+    href: "/inventory/receiving",
+    label: "Receiving",
+    description: "Inbound receipts and variance",
+    domain: "inventory",
+    moduleKeys: ["inventory.receiving"],
+    requiredPermissions: ["inventory:*"]
+  },
+  {
+    href: "/inventory/movements",
+    label: "Movements",
+    description: "Transfers and returns",
+    domain: "inventory",
+    moduleKeys: ["inventory.movements"],
+    requiredPermissions: ["inventory:*"]
+  },
+  {
     href: "/equipment",
     label: "Equipment",
     description: "Machinery and maintenance",

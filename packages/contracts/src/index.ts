@@ -348,6 +348,102 @@ export const UpdateInventoryLocationRequestSchema = z.object({
   nextAction: z.string().min(8)
 });
 
+export const InventoryReceiptRiskSchema = z.object({
+  id: z.string(),
+  receiptId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const InventoryReceiptSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  supplierName: z.string(),
+  destinationName: z.string(),
+  destinationType: z.string(),
+  purchaseReference: z.string(),
+  etaDate: z.string(),
+  receivedDate: z.string().nullable(),
+  status: z.enum(["draft", "in_transit", "received", "blocked"]),
+  orderedUnits: z.number().nonnegative(),
+  receivedUnits: z.number().nonnegative(),
+  varianceUnits: z.number(),
+  variancePercent: z.number(),
+  pendingEvidence: z.number().int().nonnegative(),
+  rejectedUnits: z.number().int().nonnegative(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const InventoryReceivingOverviewSchema = z.object({
+  summary: z.object({
+    openReceipts: z.number().int().nonnegative(),
+    overdueEta: z.number().int().nonnegative(),
+    quantityVarianceUnits: z.number().nonnegative(),
+    pendingEvidence: z.number().int().nonnegative(),
+    blockedReceipts: z.number().int().nonnegative()
+  }),
+  receipts: z.array(InventoryReceiptSchema),
+  risks: z.array(InventoryReceiptRiskSchema),
+  focusReceipt: InventoryReceiptSchema.nullable()
+});
+
+export const UpdateInventoryReceiptRequestSchema = z.object({
+  status: z.enum(["draft", "in_transit", "received", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
+export const InventoryMovementRiskSchema = z.object({
+  id: z.string(),
+  movementId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const InventoryMovementSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  movementType: z.enum(["transfer", "issue", "return"]),
+  skuName: z.string(),
+  sourceName: z.string(),
+  destinationName: z.string(),
+  requestedBy: z.string(),
+  status: z.enum(["draft", "in_transit", "received", "blocked"]),
+  requestedUnits: z.number().nonnegative(),
+  movedUnits: z.number().nonnegative(),
+  varianceUnits: z.number(),
+  pendingEvidence: z.number().int().nonnegative(),
+  impactLevel: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const InventoryMovementsOverviewSchema = z.object({
+  summary: z.object({
+    openMovements: z.number().int().nonnegative(),
+    criticalMovements: z.number().int().nonnegative(),
+    pendingEvidence: z.number().int().nonnegative(),
+    varianceUnits: z.number().nonnegative(),
+    returnsInFlow: z.number().int().nonnegative()
+  }),
+  movements: z.array(InventoryMovementSchema),
+  risks: z.array(InventoryMovementRiskSchema),
+  focusMovement: InventoryMovementSchema.nullable()
+});
+
+export const UpdateInventoryMovementRequestSchema = z.object({
+  status: z.enum(["draft", "in_transit", "received", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
 export const MachineRiskSchema = z.object({
   id: z.string(),
   machineId: z.string(),
@@ -1220,6 +1316,14 @@ export type InventoryRiskContract = z.infer<typeof InventoryRiskSchema>;
 export type InventoryLocationContract = z.infer<typeof InventoryLocationSchema>;
 export type InventoryOverviewContract = z.infer<typeof InventoryOverviewSchema>;
 export type UpdateInventoryLocationRequestContract = z.infer<typeof UpdateInventoryLocationRequestSchema>;
+export type InventoryReceiptRiskContract = z.infer<typeof InventoryReceiptRiskSchema>;
+export type InventoryReceiptContract = z.infer<typeof InventoryReceiptSchema>;
+export type InventoryReceivingOverviewContract = z.infer<typeof InventoryReceivingOverviewSchema>;
+export type UpdateInventoryReceiptRequestContract = z.infer<typeof UpdateInventoryReceiptRequestSchema>;
+export type InventoryMovementRiskContract = z.infer<typeof InventoryMovementRiskSchema>;
+export type InventoryMovementContract = z.infer<typeof InventoryMovementSchema>;
+export type InventoryMovementsOverviewContract = z.infer<typeof InventoryMovementsOverviewSchema>;
+export type UpdateInventoryMovementRequestContract = z.infer<typeof UpdateInventoryMovementRequestSchema>;
 export type MachineRiskContract = z.infer<typeof MachineRiskSchema>;
 export type MachineItemContract = z.infer<typeof MachineItemSchema>;
 export type EquipmentOverviewContract = z.infer<typeof EquipmentOverviewSchema>;
@@ -1350,6 +1454,22 @@ export const moduleCatalog: ModuleContract[] = [
     area: "inventory",
     scope: "operations",
     description: "Stock, movements, cost traceability, and field supply.",
+    enabledByDefault: false
+  },
+  {
+    key: "inventory.receiving",
+    name: "Inventory Receiving",
+    area: "inventory",
+    scope: "operations",
+    description: "Inbound receipts, quantity variance, evidence, and warehouse acceptance control.",
+    enabledByDefault: false
+  },
+  {
+    key: "inventory.movements",
+    name: "Inventory Movements",
+    area: "inventory",
+    scope: "operations",
+    description: "Transfers, site issues, returns, and movement traceability across warehouses and fronts.",
     enabledByDefault: false
   },
   {

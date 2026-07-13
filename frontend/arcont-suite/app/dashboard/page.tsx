@@ -13,6 +13,8 @@ import {
   fetchCrmOverview,
   fetchDocumentControlOverview,
   fetchFinanceOverview,
+  fetchInventoryMovementsOverview,
+  fetchInventoryReceivingOverview,
   fetchInventoryOverview,
   fetchProcurementOverview
 } from "@/lib/platform-api";
@@ -20,6 +22,8 @@ import {
 type ExecutiveSnapshot = {
   crm: NonNullable<Awaited<ReturnType<typeof fetchCrmOverview>>>;
   inventory: NonNullable<Awaited<ReturnType<typeof fetchInventoryOverview>>>;
+  inventoryReceiving: NonNullable<Awaited<ReturnType<typeof fetchInventoryReceivingOverview>>>;
+  inventoryMovements: NonNullable<Awaited<ReturnType<typeof fetchInventoryMovementsOverview>>>;
   procurement: NonNullable<Awaited<ReturnType<typeof fetchProcurementOverview>>>;
   compliance: NonNullable<Awaited<ReturnType<typeof fetchComplianceOverview>>>;
   finance: NonNullable<Awaited<ReturnType<typeof fetchFinanceOverview>>>;
@@ -68,17 +72,19 @@ export default function DashboardPage() {
     void Promise.all([
       fetchCrmOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchInventoryReceivingOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchInventoryMovementsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchProcurementOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchComplianceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchFinanceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchDocumentControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
     ])
-      .then(([crm, inventory, procurement, compliance, finance, documentControl]) => {
+      .then(([crm, inventory, inventoryReceiving, inventoryMovements, procurement, compliance, finance, documentControl]) => {
         if (cancelled) {
           return;
         }
 
-        if (!crm || !inventory || !procurement || !compliance || !finance || !documentControl) {
+        if (!crm || !inventory || !inventoryReceiving || !inventoryMovements || !procurement || !compliance || !finance || !documentControl) {
           setSnapshotError("Executive dashboard could not assemble all live operating signals.");
           return;
         }
@@ -86,6 +92,8 @@ export default function DashboardPage() {
         setSnapshot({
           crm,
           inventory,
+          inventoryReceiving,
+          inventoryMovements,
           procurement,
           compliance,
           finance,
@@ -128,6 +136,16 @@ export default function DashboardPage() {
         tone: snapshot.inventory.summary.urgentReplenishments > 0 ? "warning" : "success"
       },
       {
+        title: "Inbound receiving",
+        detail: `${snapshot.inventoryReceiving.summary.overdueEta} overdue arrivals and ${snapshot.inventoryReceiving.summary.blockedReceipts} blocked receipts.`,
+        tone: snapshot.inventoryReceiving.summary.blockedReceipts > 0 ? "danger" : snapshot.inventoryReceiving.summary.overdueEta > 0 ? "warning" : "success"
+      },
+      {
+        title: "Movement traceability",
+        detail: `${snapshot.inventoryMovements.summary.openMovements} open movements and ${snapshot.inventoryMovements.summary.pendingEvidence} pending evidence items.`,
+        tone: snapshot.inventoryMovements.summary.criticalMovements > 0 ? "danger" : "info"
+      },
+      {
         title: "Procurement approvals",
         detail: `${snapshot.procurement.summary.openRequisitions} open requisitions and ${snapshot.procurement.summary.strategicPackages} strategic packages.`,
         tone: snapshot.procurement.summary.averageApprovalHours > 48 ? "danger" : "info"
@@ -154,7 +172,9 @@ export default function DashboardPage() {
         snapshot.documentControl.summary.openRfis,
       supplyRisk:
         snapshot.procurement.summary.strategicPackages +
-        snapshot.inventory.summary.urgentReplenishments,
+        snapshot.inventory.summary.urgentReplenishments +
+        snapshot.inventoryReceiving.summary.blockedReceipts +
+        snapshot.inventoryMovements.summary.criticalMovements,
       operatingHealth: Math.round(
         (
           snapshot.compliance.summary.averageDocumentCompletion +
@@ -188,6 +208,18 @@ export default function DashboardPage() {
         signal: snapshot.procurement.focusPackage?.nextAction ?? "No active action",
         owner: snapshot.procurement.focusPackage?.buyer ?? "Procurement",
         posture: snapshot.procurement.focusPackage?.status ?? "watch"
+      },
+      {
+        area: "Receiving",
+        signal: snapshot.inventoryReceiving.focusReceipt?.nextAction ?? "No active action",
+        owner: snapshot.inventoryReceiving.focusReceipt?.supplierName ?? "Warehouse",
+        posture: snapshot.inventoryReceiving.focusReceipt?.status ?? "watch"
+      },
+      {
+        area: "Movements",
+        signal: snapshot.inventoryMovements.focusMovement?.nextAction ?? "No active action",
+        owner: snapshot.inventoryMovements.focusMovement?.requestedBy ?? "Warehouse",
+        posture: snapshot.inventoryMovements.focusMovement?.impactLevel ?? "watch"
       },
       {
         area: "Document control",

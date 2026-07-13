@@ -157,6 +157,78 @@ type UpdateInventoryLocationInput = {
   nextAction: string;
 };
 
+type InventoryReceiptRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  supplierName: string;
+  destinationName: string;
+  destinationType: string;
+  purchaseReference: string;
+  etaDate: string;
+  receivedDate: string | null;
+  status: "draft" | "in_transit" | "received" | "blocked";
+  orderedUnits: number;
+  receivedUnits: number;
+  varianceUnits: number;
+  variancePercent: number;
+  pendingEvidence: number;
+  rejectedUnits: number;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type InventoryReceiptRiskRecord = {
+  id: string;
+  receiptId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type UpdateInventoryReceiptInput = {
+  receiptId: string;
+  status: "draft" | "in_transit" | "received" | "blocked";
+  nextAction: string;
+};
+
+type InventoryMovementRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  movementType: "transfer" | "issue" | "return";
+  skuName: string;
+  sourceName: string;
+  destinationName: string;
+  requestedBy: string;
+  status: "draft" | "in_transit" | "received" | "blocked";
+  requestedUnits: number;
+  movedUnits: number;
+  varianceUnits: number;
+  pendingEvidence: number;
+  impactLevel: "controlled" | "watch" | "critical";
+  nextAction: string;
+  updatedAt: string;
+};
+
+type InventoryMovementRiskRecord = {
+  id: string;
+  movementId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type UpdateInventoryMovementInput = {
+  movementId: string;
+  status: "draft" | "in_transit" | "received" | "blocked";
+  nextAction: string;
+};
+
 type MachineItemRecord = {
   id: string;
   companyId: string;
@@ -472,6 +544,10 @@ export type PlatformRepository = {
   listProcurementRisks(companyId: string): Promise<ProcurementRiskRecord[]>;
   listInventoryLocations(companyId: string): Promise<InventoryLocationRecord[]>;
   listInventoryRisks(companyId: string): Promise<InventoryRiskRecord[]>;
+  listInventoryReceipts(companyId: string): Promise<InventoryReceiptRecord[]>;
+  listInventoryReceiptRisks(companyId: string): Promise<InventoryReceiptRiskRecord[]>;
+  listInventoryMovements(companyId: string): Promise<InventoryMovementRecord[]>;
+  listInventoryMovementRisks(companyId: string): Promise<InventoryMovementRiskRecord[]>;
   listMachines(companyId: string): Promise<MachineItemRecord[]>;
   listMachineRisks(companyId: string): Promise<MachineRiskRecord[]>;
   listFinanceItems(companyId: string): Promise<FinanceLedgerItemRecord[]>;
@@ -528,6 +604,8 @@ export type PlatformRepository = {
   updateIntegrationStream(input: UpdateIntegrationStreamInput): Promise<IntegrationStreamRecord>;
   updateDocumentControlItem(input: UpdateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   updateInventoryLocation(input: UpdateInventoryLocationInput): Promise<InventoryLocationRecord>;
+  updateInventoryReceipt(input: UpdateInventoryReceiptInput): Promise<InventoryReceiptRecord>;
+  updateInventoryMovement(input: UpdateInventoryMovementInput): Promise<InventoryMovementRecord>;
   updateMachineItem(input: UpdateMachineItemInput): Promise<MachineItemRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
   updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
@@ -551,6 +629,8 @@ function createSeedState() {
         "projects.daily-log",
         "procurement.purchasing",
         "inventory.warehouse",
+        "inventory.receiving",
+        "inventory.movements",
         "inventory.equipment",
         "finance.accounting",
         "hr.workforce",
@@ -572,6 +652,8 @@ function createSeedState() {
         "projects.daily-log",
         "procurement.purchasing",
         "inventory.warehouse",
+        "inventory.receiving",
+        "inventory.movements",
         "inventory.equipment",
         "hr.workforce",
         "integrations.field-data"
@@ -1010,6 +1092,215 @@ function createSeedState() {
       severity: "info",
       owner: "Inventory analyst",
       status: "Scheduled for next count window"
+    }
+  ];
+
+  const inventoryReceipts: InventoryReceiptRecord[] = [
+    {
+      id: "rcv_steel_demo",
+      companyId: "cmp_arcont_demo",
+      code: "RCV-STEEL-01",
+      supplierName: "Aceros del Sureste",
+      destinationName: "Central warehouse",
+      destinationType: "Warehouse",
+      purchaseReference: "PO-STEEL-01",
+      etaDate: "2026-07-12T13:00:00.000Z",
+      receivedDate: null,
+      status: "in_transit",
+      orderedUnits: 240,
+      receivedUnits: 0,
+      varianceUnits: 0,
+      variancePercent: 0,
+      pendingEvidence: 3,
+      rejectedUnits: 0,
+      nextAction: "Receive the steel shipment and complete unloading evidence before evening cutoff.",
+      updatedAt: "2026-07-12T18:10:00.000Z"
+    },
+    {
+      id: "rcv_finish_demo",
+      companyId: "cmp_arcont_demo",
+      code: "RCV-FIN-02",
+      supplierName: "Acabados Peninsulares",
+      destinationName: "Jobsite B",
+      destinationType: "Jobsite",
+      purchaseReference: "PO-FIN-07",
+      etaDate: "2026-07-11T16:00:00.000Z",
+      receivedDate: null,
+      status: "blocked",
+      orderedUnits: 96,
+      receivedUnits: 72,
+      varianceUnits: 24,
+      variancePercent: 25,
+      pendingEvidence: 5,
+      rejectedUnits: 8,
+      nextAction: "Resolve damaged tile pallets and upload discrepancy evidence before warehouse acceptance.",
+      updatedAt: "2026-07-12T17:35:00.000Z"
+    },
+    {
+      id: "rcv_conc_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "RCV-CONC-03",
+      supplierName: "Concretos Peninsulares",
+      destinationName: "Frontline staging area",
+      destinationType: "Field staging",
+      purchaseReference: "PO-CONC-09",
+      etaDate: "2026-07-12T10:30:00.000Z",
+      receivedDate: "2026-07-12T11:05:00.000Z",
+      status: "received",
+      orderedUnits: 18,
+      receivedUnits: 18,
+      varianceUnits: 0,
+      variancePercent: 0,
+      pendingEvidence: 0,
+      rejectedUnits: 0,
+      nextAction: "Archive signed remision and keep the receipt linked to the concrete pour evidence.",
+      updatedAt: "2026-07-12T15:20:00.000Z"
+    },
+    {
+      id: "rcv_prefab_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "RCV-PREF-04",
+      supplierName: "Modulos Habitables Norte",
+      destinationName: "Prefabrication yard",
+      destinationType: "Yard",
+      purchaseReference: "PO-PREF-12",
+      etaDate: "2026-07-13T14:00:00.000Z",
+      receivedDate: null,
+      status: "draft",
+      orderedUnits: 20,
+      receivedUnits: 0,
+      varianceUnits: 0,
+      variancePercent: 0,
+      pendingEvidence: 2,
+      rejectedUnits: 0,
+      nextAction: "Release inbound checklist and confirm unloading crew before the prefab convoy arrives.",
+      updatedAt: "2026-07-12T14:40:00.000Z"
+    }
+  ];
+
+  const inventoryReceiptRisks: InventoryReceiptRiskRecord[] = [
+    {
+      id: "irr_finish_damage",
+      receiptId: "rcv_finish_demo",
+      title: "Damaged tile pallets still pending supplier resolution",
+      category: "Quality rejection",
+      severity: "critical",
+      owner: "Field storekeeper",
+      status: "Supplier response pending"
+    },
+    {
+      id: "irr_finish_evidence",
+      receiptId: "rcv_finish_demo",
+      title: "Receiving evidence pack is still incomplete",
+      category: "Documentation",
+      severity: "warning",
+      owner: "Warehouse analyst",
+      status: "Missing signed discrepancy photos"
+    },
+    {
+      id: "irr_steel_eta",
+      receiptId: "rcv_steel_demo",
+      title: "Inbound steel truck is close to missing the unloading slot",
+      category: "ETA slippage",
+      severity: "warning",
+      owner: "Logistics coordinator",
+      status: "Carrier en route to gate"
+    }
+  ];
+
+  const inventoryMovements: InventoryMovementRecord[] = [
+    {
+      id: "mov_conduit_demo",
+      companyId: "cmp_arcont_demo",
+      code: "MOV-CON-01",
+      movementType: "transfer",
+      skuName: "Conduit 1in",
+      sourceName: "Central warehouse",
+      destinationName: "Jobsite B",
+      requestedBy: "Monica Compras",
+      status: "in_transit",
+      requestedUnits: 180,
+      movedUnits: 180,
+      varianceUnits: 0,
+      pendingEvidence: 2,
+      impactLevel: "watch",
+      nextAction: "Confirm field receipt and attach unloading evidence before the slab crew starts tomorrow.",
+      updatedAt: "2026-07-12T18:20:00.000Z"
+    },
+    {
+      id: "mov_tile_return_demo",
+      companyId: "cmp_arcont_demo",
+      code: "MOV-TIL-02",
+      movementType: "return",
+      skuName: "Ceramic tile box",
+      sourceName: "Jobsite B",
+      destinationName: "Central warehouse",
+      requestedBy: "Nora Pacheco",
+      status: "blocked",
+      requestedUnits: 24,
+      movedUnits: 16,
+      varianceUnits: 8,
+      pendingEvidence: 4,
+      impactLevel: "critical",
+      nextAction: "Resolve damaged return boxes and document the discrepancy before warehouse re-entry.",
+      updatedAt: "2026-07-12T17:30:00.000Z"
+    },
+    {
+      id: "mov_mesh_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "MOV-MSH-03",
+      movementType: "issue",
+      skuName: "Steel mesh panel",
+      sourceName: "Prefabrication yard",
+      destinationName: "Frontline staging area",
+      requestedBy: "Cesar Chan",
+      status: "received",
+      requestedUnits: 42,
+      movedUnits: 42,
+      varianceUnits: 0,
+      pendingEvidence: 0,
+      impactLevel: "controlled",
+      nextAction: "Keep the signed movement note linked to the active foundation package.",
+      updatedAt: "2026-07-12T15:40:00.000Z"
+    },
+    {
+      id: "mov_plumbing_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "MOV-PLM-04",
+      movementType: "transfer",
+      skuName: "Plumbing kit",
+      sourceName: "Prefabrication yard",
+      destinationName: "Paquete Bienestar Norte",
+      requestedBy: "Lucia Herrera",
+      status: "draft",
+      requestedUnits: 32,
+      movedUnits: 0,
+      varianceUnits: 0,
+      pendingEvidence: 1,
+      impactLevel: "watch",
+      nextAction: "Release the transfer once the destination front confirms storage readiness and unloading labor.",
+      updatedAt: "2026-07-12T14:10:00.000Z"
+    }
+  ];
+
+  const inventoryMovementRisks: InventoryMovementRiskRecord[] = [
+    {
+      id: "imr_conduit_evidence",
+      movementId: "mov_conduit_demo",
+      title: "Field unloading evidence still pending for conduit transfer",
+      category: "Documentation",
+      severity: "warning",
+      owner: "Warehouse analyst",
+      status: "Waiting for signed field receipt"
+    },
+    {
+      id: "imr_tile_damage",
+      movementId: "mov_tile_return_demo",
+      title: "Returned tile boxes contain damaged units and variance still open",
+      category: "Damage / variance",
+      severity: "critical",
+      owner: "Inventory lead",
+      status: "Physical recount pending"
     }
   ];
 
@@ -2008,6 +2299,10 @@ function createSeedState() {
       procurementRisks,
       inventoryLocations,
       inventoryRisks,
+      inventoryReceipts,
+      inventoryReceiptRisks,
+      inventoryMovements,
+      inventoryMovementRisks,
       machines,
       machineRisks,
       financeItems,
@@ -2080,6 +2375,24 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.inventoryLocations.filter((location) => location.companyId === companyId).map((location) => location.id)
       );
       return state.inventoryRisks.filter((risk) => locationIds.has(risk.locationId));
+    },
+    async listInventoryReceipts(companyId: string) {
+      return state.inventoryReceipts.filter((receipt) => receipt.companyId === companyId);
+    },
+    async listInventoryReceiptRisks(companyId: string) {
+      const receiptIds = new Set(
+        state.inventoryReceipts.filter((receipt) => receipt.companyId === companyId).map((receipt) => receipt.id)
+      );
+      return state.inventoryReceiptRisks.filter((risk) => receiptIds.has(risk.receiptId));
+    },
+    async listInventoryMovements(companyId: string) {
+      return state.inventoryMovements.filter((movement) => movement.companyId === companyId);
+    },
+    async listInventoryMovementRisks(companyId: string) {
+      const movementIds = new Set(
+        state.inventoryMovements.filter((movement) => movement.companyId === companyId).map((movement) => movement.id)
+      );
+      return state.inventoryMovementRisks.filter((risk) => movementIds.has(risk.movementId));
     },
     async listMachines(companyId: string) {
       return state.machines.filter((machine) => machine.companyId === companyId);
@@ -2481,6 +2794,31 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       location.updatedAt = new Date().toISOString();
       return location;
     },
+    async updateInventoryReceipt(input) {
+      const receipt = state.inventoryReceipts.find((item) => item.id === input.receiptId);
+      if (!receipt) {
+        throw new Error("Inventory receipt not found in repository");
+      }
+
+      receipt.status = input.status;
+      receipt.nextAction = input.nextAction;
+      if (input.status === "received" && !receipt.receivedDate) {
+        receipt.receivedDate = new Date().toISOString();
+      }
+      receipt.updatedAt = new Date().toISOString();
+      return receipt;
+    },
+    async updateInventoryMovement(input) {
+      const movement = state.inventoryMovements.find((item) => item.id === input.movementId);
+      if (!movement) {
+        throw new Error("Inventory movement not found in repository");
+      }
+
+      movement.status = input.status;
+      movement.nextAction = input.nextAction;
+      movement.updatedAt = new Date().toISOString();
+      return movement;
+    },
     async updateMachineItem(input) {
       const machine = state.machines.find((item) => item.id === input.machineId);
       if (!machine) {
@@ -2762,6 +3100,30 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listInventoryRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listInventoryReceipts(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listInventoryReceiptRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listInventoryMovements(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listInventoryMovementRisks(companyId: string) {
       const items = await this.listCompanies();
       void companyId;
       void items;
@@ -3423,6 +3785,14 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     async updateInventoryLocation(input) {
       void input;
       throw new Error("Inventory location updates are not implemented for the postgres repository yet");
+    },
+    async updateInventoryReceipt(input) {
+      void input;
+      throw new Error("Inventory receipt updates are not implemented for the postgres repository yet");
+    },
+    async updateInventoryMovement(input) {
+      void input;
+      throw new Error("Inventory movement updates are not implemented for the postgres repository yet");
     },
     async updateMachineItem(input) {
       void input;

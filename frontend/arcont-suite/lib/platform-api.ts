@@ -35,6 +35,10 @@ import {
   IntegrationStreamSchema,
   InventoryLocationSchema,
   InventoryOverviewSchema,
+  InventoryReceiptSchema,
+  InventoryReceivingOverviewSchema,
+  InventoryMovementSchema,
+  InventoryMovementsOverviewSchema,
   MachineItemSchema,
   ModuleSchema,
   PostSaleCaseSchema,
@@ -65,6 +69,8 @@ import {
   UpdateHrWorkforceItemRequestSchema,
   UpdateIntegrationStreamRequestSchema,
   UpdateInventoryLocationRequestSchema,
+  UpdateInventoryReceiptRequestSchema,
+  UpdateInventoryMovementRequestSchema,
   UpdateMachineItemRequestSchema,
   UpdatePostSaleCaseRequestSchema,
   UpdateProjectPortfolioItemRequestSchema,
@@ -117,6 +123,10 @@ import {
   type IntegrationStreamContract,
   type InventoryLocationContract,
   type InventoryOverviewContract,
+  type InventoryReceiptContract,
+  type InventoryReceivingOverviewContract,
+  type InventoryMovementContract,
+  type InventoryMovementsOverviewContract,
   type MachineItemContract,
   type ModuleContract,
   type PostSaleCaseContract,
@@ -146,6 +156,8 @@ import {
   type UpdateHrWorkforceItemRequestContract,
   type UpdateIntegrationStreamRequestContract,
   type UpdateInventoryLocationRequestContract,
+  type UpdateInventoryReceiptRequestContract,
+  type UpdateInventoryMovementRequestContract,
   type UpdateMachineItemRequestContract,
   type UpdatePostSaleCaseRequestContract,
   type UpdateProjectPortfolioItemRequestContract,
@@ -717,6 +729,82 @@ export async function updateInventoryLocation(
 
   return {
     data: InventoryLocationSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchInventoryReceivingOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<InventoryReceivingOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/inventory/receiving/overview${query}`, options);
+  return response ? InventoryReceivingOverviewSchema.parse(response) : null;
+}
+
+export async function updateInventoryReceipt(
+  receiptId: string,
+  companyId: string | undefined,
+  input: UpdateInventoryReceiptRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<InventoryReceiptContract>> {
+  const payload = UpdateInventoryReceiptRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/inventory/receipts/${receiptId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: InventoryReceiptSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchInventoryMovementsOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<InventoryMovementsOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/inventory/movements/overview${query}`, options);
+  return response ? InventoryMovementsOverviewSchema.parse(response) : null;
+}
+
+export async function updateInventoryMovement(
+  movementId: string,
+  companyId: string | undefined,
+  input: UpdateInventoryMovementRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<InventoryMovementContract>> {
+  const payload = UpdateInventoryMovementRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/inventory/movements/${movementId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: InventoryMovementSchema.parse(response.data),
     error: null
   };
 }

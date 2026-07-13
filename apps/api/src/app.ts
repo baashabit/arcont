@@ -20,6 +20,8 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerHrRoutes } from "./routes/hr.js";
 import { registerIntegrationRoutes } from "./routes/integrations.js";
 import { registerInventoryRoutes } from "./routes/inventory.js";
+import { registerInventoryReceivingRoutes } from "./routes/inventory-receiving.js";
+import { registerInventoryMovementsRoutes } from "./routes/inventory-movements.js";
 import { registerPlatformRoutes } from "./routes/platform.js";
 import { registerPostSaleRoutes } from "./routes/post-sale.js";
 import { registerProcurementRoutes } from "./routes/procurement.js";
@@ -84,6 +86,8 @@ export async function buildApp() {
   await registerSupplierControlRoutes(app);
   await registerCostControlRoutes(app);
   await registerInventoryRoutes(app);
+  await registerInventoryReceivingRoutes(app);
+  await registerInventoryMovementsRoutes(app);
   await registerEquipmentRoutes(app);
   await registerFinanceRoutes(app);
   await registerEstimationsRoutes(app);
