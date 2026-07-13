@@ -12,6 +12,7 @@ import {
   fetchComplianceOverview,
   fetchCrmOverview,
   fetchDocumentControlOverview,
+  fetchEstimationCollectionOverview,
   fetchFinanceOverview,
   fetchInventoryMovementsOverview,
   fetchInventoryReceivingOverview,
@@ -24,6 +25,7 @@ type ExecutiveSnapshot = {
   inventory: NonNullable<Awaited<ReturnType<typeof fetchInventoryOverview>>>;
   inventoryReceiving: NonNullable<Awaited<ReturnType<typeof fetchInventoryReceivingOverview>>>;
   inventoryMovements: NonNullable<Awaited<ReturnType<typeof fetchInventoryMovementsOverview>>>;
+  estimations: NonNullable<Awaited<ReturnType<typeof fetchEstimationCollectionOverview>>>;
   procurement: NonNullable<Awaited<ReturnType<typeof fetchProcurementOverview>>>;
   compliance: NonNullable<Awaited<ReturnType<typeof fetchComplianceOverview>>>;
   finance: NonNullable<Awaited<ReturnType<typeof fetchFinanceOverview>>>;
@@ -74,17 +76,18 @@ export default function DashboardPage() {
       fetchInventoryOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryReceivingOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryMovementsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchEstimationCollectionOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchProcurementOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchComplianceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchFinanceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchDocumentControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
     ])
-      .then(([crm, inventory, inventoryReceiving, inventoryMovements, procurement, compliance, finance, documentControl]) => {
+      .then(([crm, inventory, inventoryReceiving, inventoryMovements, estimations, procurement, compliance, finance, documentControl]) => {
         if (cancelled) {
           return;
         }
 
-        if (!crm || !inventory || !inventoryReceiving || !inventoryMovements || !procurement || !compliance || !finance || !documentControl) {
+        if (!crm || !inventory || !inventoryReceiving || !inventoryMovements || !estimations || !procurement || !compliance || !finance || !documentControl) {
           setSnapshotError("Executive dashboard could not assemble all live operating signals.");
           return;
         }
@@ -94,6 +97,7 @@ export default function DashboardPage() {
           inventory,
           inventoryReceiving,
           inventoryMovements,
+          estimations,
           procurement,
           compliance,
           finance,
@@ -151,6 +155,11 @@ export default function DashboardPage() {
         tone: snapshot.procurement.summary.averageApprovalHours > 48 ? "danger" : "info"
       },
       {
+        title: "Collections aging",
+        detail: `MXN ${snapshot.estimations.summary.pendingCollection.toLocaleString()} pending and ${snapshot.estimations.summary.criticalCollections} critical collection lines.`,
+        tone: snapshot.estimations.summary.criticalCollections > 0 ? "danger" : "warning"
+      },
+      {
         title: "Compliance backlog",
         detail: `${snapshot.compliance.summary.atRiskCases} cases at risk and ${snapshot.compliance.summary.openFindings} open findings.`,
         tone: snapshot.compliance.summary.atRiskCases > 0 ? "danger" : "success"
@@ -169,7 +178,8 @@ export default function DashboardPage() {
       blackboardPressure:
         snapshot.procurement.summary.openRequisitions +
         snapshot.compliance.summary.activeCases +
-        snapshot.documentControl.summary.openRfis,
+        snapshot.documentControl.summary.openRfis +
+        snapshot.estimations.summary.criticalCollections,
       supplyRisk:
         snapshot.procurement.summary.strategicPackages +
         snapshot.inventory.summary.urgentReplenishments +
@@ -220,6 +230,12 @@ export default function DashboardPage() {
         signal: snapshot.inventoryMovements.focusMovement?.nextAction ?? "No active action",
         owner: snapshot.inventoryMovements.focusMovement?.requestedBy ?? "Warehouse",
         posture: snapshot.inventoryMovements.focusMovement?.impactLevel ?? "watch"
+      },
+      {
+        area: "Collections",
+        signal: snapshot.estimations.focusLine?.nextAction ?? "No active action",
+        owner: snapshot.estimations.focusLine?.buyer ?? "Finance",
+        posture: snapshot.estimations.focusLine?.collectionHealth ?? "watch"
       },
       {
         area: "Document control",

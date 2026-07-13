@@ -13,6 +13,7 @@ import { KpiCard } from "@/components/ui/kpi-card";
 import {
   fetchComplianceOverview,
   fetchDocumentControlOverview,
+  fetchEstimationCollectionOverview,
   fetchFinanceOverview,
   fetchHrOverview,
   fetchIntegrationOverview,
@@ -100,6 +101,7 @@ export default function OperationsPage() {
       fetchInventoryOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryReceivingOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryMovementsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchEstimationCollectionOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchFinanceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchHrOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchComplianceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
@@ -117,6 +119,7 @@ export default function OperationsPage() {
           inventoryResult,
           inventoryReceivingResult,
           inventoryMovementsResult,
+          estimationsResult,
           financeResult,
           hrResult,
           complianceResult,
@@ -197,6 +200,21 @@ export default function OperationsPage() {
               dueLabel: risk.status,
               domain: "Movements",
               severity: risk.severity
+            });
+          }
+        }
+
+        if (estimationsResult.status === "fulfilled" && estimationsResult.value) {
+          for (const exception of estimationsResult.value.exceptions.slice(0, 2)) {
+            nextTasks.push({
+              id: exception.id,
+              lane: deriveLaneFromSignal({ severity: exception.severity }),
+              title: exception.title,
+              detail: `${exception.category} · collections`,
+              owner: exception.owner,
+              dueLabel: exception.status,
+              domain: "Collections",
+              severity: exception.severity
             });
           }
         }
