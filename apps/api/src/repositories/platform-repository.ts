@@ -125,6 +125,40 @@ type UpdateProcurementPackageInput = {
   nextAction: string;
 };
 
+type ProcurementRequisitionRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  projectName: string;
+  frontName: string;
+  requestedBy: string;
+  category: string;
+  status: "draft" | "submitted" | "approved" | "sourcing" | "blocked";
+  requestedItems: number;
+  budgetAmount: number;
+  urgency: "planned" | "watch" | "critical";
+  approvalHours: number;
+  supplierCoverage: number;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type ProcurementRequisitionRiskRecord = {
+  id: string;
+  requisitionId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type UpdateProcurementRequisitionInput = {
+  requisitionId: string;
+  status: "draft" | "submitted" | "approved" | "sourcing" | "blocked";
+  nextAction: string;
+};
+
 type InventoryLocationRecord = {
   id: string;
   companyId: string;
@@ -542,6 +576,8 @@ export type PlatformRepository = {
   listDailyLogRisks(companyId: string): Promise<DailyLogRiskRecord[]>;
   listProcurementPackages(companyId: string): Promise<ProcurementPackageRecord[]>;
   listProcurementRisks(companyId: string): Promise<ProcurementRiskRecord[]>;
+  listProcurementRequisitions(companyId: string): Promise<ProcurementRequisitionRecord[]>;
+  listProcurementRequisitionRisks(companyId: string): Promise<ProcurementRequisitionRiskRecord[]>;
   listInventoryLocations(companyId: string): Promise<InventoryLocationRecord[]>;
   listInventoryRisks(companyId: string): Promise<InventoryRiskRecord[]>;
   listInventoryReceipts(companyId: string): Promise<InventoryReceiptRecord[]>;
@@ -596,6 +632,7 @@ export type PlatformRepository = {
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
   updateProjectPortfolioItem(input: UpdateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
   updateDailyLogEntry(input: UpdateDailyLogEntryInput): Promise<DailyLogEntryRecord>;
+  updateProcurementRequisition(input: UpdateProcurementRequisitionInput): Promise<ProcurementRequisitionRecord>;
   updateCrmLeadBucket(input: UpdateCrmLeadBucketInput): Promise<CrmLeadBucketRecord>;
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
@@ -999,6 +1036,98 @@ function createSeedState() {
       severity: "warning",
       owner: "Buyer lead",
       status: "Searching alternate vendors"
+    }
+  ];
+
+  const procurementRequisitions: ProcurementRequisitionRecord[] = [
+    {
+      id: "req_rebar_demo",
+      companyId: "cmp_arcont_demo",
+      code: "REQ-RBR-01",
+      projectName: "Torre B Residencial",
+      frontName: "Nucleo vertical",
+      requestedBy: "Ramon Cetz",
+      category: "Steel",
+      status: "submitted",
+      requestedItems: 6,
+      budgetAmount: 780000,
+      urgency: "watch",
+      approvalHours: 18,
+      supplierCoverage: 1,
+      nextAction: "Complete technical validation and route the requisition to buyer review.",
+      updatedAt: "2026-07-13T10:15:00.000Z"
+    },
+    {
+      id: "req_formwork_demo",
+      companyId: "cmp_arcont_demo",
+      code: "REQ-FRM-02",
+      projectName: "Etapa 2 Urbanizacion",
+      frontName: "Plataforma norte",
+      requestedBy: "Nora Pacheco",
+      category: "Formwork",
+      status: "approved",
+      requestedItems: 4,
+      budgetAmount: 245000,
+      urgency: "planned",
+      approvalHours: 9,
+      supplierCoverage: 2,
+      nextAction: "Convert approved requisition into sourcing package and request final quotations.",
+      updatedAt: "2026-07-13T09:20:00.000Z"
+    },
+    {
+      id: "req_prefab_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "REQ-PRF-03",
+      projectName: "Paquete Bienestar Norte",
+      frontName: "Pilot housing pad",
+      requestedBy: "Lucia Herrera",
+      category: "Prefabricated modules",
+      status: "blocked",
+      requestedItems: 3,
+      budgetAmount: 1620000,
+      urgency: "critical",
+      approvalHours: 31,
+      supplierCoverage: 1,
+      nextAction: "Resolve specification mismatch before the requisition can move into sourcing.",
+      updatedAt: "2026-07-13T08:10:00.000Z"
+    },
+    {
+      id: "req_plumbing_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "REQ-PLM-04",
+      projectName: "Infraestructura Vial y Vivienda",
+      frontName: "Campamento principal",
+      requestedBy: "Cesar Chan",
+      category: "Plumbing kits",
+      status: "draft",
+      requestedItems: 5,
+      budgetAmount: 310000,
+      urgency: "watch",
+      approvalHours: 0,
+      supplierCoverage: 0,
+      nextAction: "Finish the scope breakdown and submit the requisition before afternoon planning closes.",
+      updatedAt: "2026-07-13T07:55:00.000Z"
+    }
+  ];
+
+  const procurementRequisitionRisks: ProcurementRequisitionRiskRecord[] = [
+    {
+      id: "prr_rebar_coverage",
+      requisitionId: "req_rebar_demo",
+      title: "Rebar requisition still lacks enough supplier coverage",
+      category: "Competition",
+      severity: "warning",
+      owner: "Buyer lead",
+      status: "Second supplier pending"
+    },
+    {
+      id: "prr_prefab_spec",
+      requisitionId: "req_prefab_gov",
+      title: "Prefabricated module requisition blocked by specification mismatch",
+      category: "Technical definition",
+      severity: "critical",
+      owner: "Procurement technical office",
+      status: "Engineering clarification open"
     }
   ];
 
@@ -2297,6 +2426,8 @@ function createSeedState() {
       dailyLogRisks,
       procurementPackages,
       procurementRisks,
+      procurementRequisitions,
+      procurementRequisitionRisks,
       inventoryLocations,
       inventoryRisks,
       inventoryReceipts,
@@ -2366,6 +2497,15 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.procurementPackages.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.procurementRisks.filter((risk) => packageIds.has(risk.packageId));
+    },
+    async listProcurementRequisitions(companyId: string) {
+      return state.procurementRequisitions.filter((item) => item.companyId === companyId);
+    },
+    async listProcurementRequisitionRisks(companyId: string) {
+      const requisitionIds = new Set(
+        state.procurementRequisitions.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.procurementRequisitionRisks.filter((risk) => requisitionIds.has(risk.requisitionId));
     },
     async listInventoryLocations(companyId: string) {
       return state.inventoryLocations.filter((location) => location.companyId === companyId);
@@ -2716,6 +2856,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       entry.nextAction = input.nextAction;
       entry.updatedAt = new Date().toISOString();
       return entry;
+    },
+    async updateProcurementRequisition(input) {
+      const requisition = state.procurementRequisitions.find((candidate) => candidate.id === input.requisitionId);
+      if (!requisition) {
+        throw new Error("Procurement requisition not found in repository");
+      }
+
+      requisition.status = input.status;
+      requisition.nextAction = input.nextAction;
+      requisition.updatedAt = new Date().toISOString();
+      return requisition;
     },
     async updateCrmLeadBucket(input) {
       const item = state.crmLeadBuckets.find((candidate) => candidate.id === input.leadBucketId);
@@ -3090,6 +3241,19 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     },
     async listProcurementRisks(companyId: string) {
       const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listProcurementRequisitions(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
+      void items;
+      return [];
+    },
+    async listProcurementRequisitionRisks(companyId: string) {
+      const items = await this.listCompanies();
+      void companyId;
       void items;
       return [];
     },
@@ -3757,6 +3921,10 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
     async updateDailyLogEntry(input) {
       void input;
       throw new Error("Daily log updates are not implemented for the postgres repository yet");
+    },
+    async updateProcurementRequisition(input) {
+      void input;
+      throw new Error("Procurement requisition updates are not implemented for the postgres repository yet");
     },
     async updateCrmLeadBucket(input) {
       void input;

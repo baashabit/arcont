@@ -51,6 +51,8 @@ import {
   ProvisionCompanyResponseSchema,
   ProcurementOverviewSchema,
   ProcurementPackageSchema,
+  ProcurementRequisitionSchema,
+  ProcurementRequisitionsOverviewSchema,
   ProjectPortfolioItemSchema,
   ProjectPortfolioOverviewSchema,
   QualityInspectionSchema,
@@ -75,6 +77,7 @@ import {
   UpdatePostSaleCaseRequestSchema,
   UpdateProjectPortfolioItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
+  UpdateProcurementRequisitionRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
   UpdateBudgetBookLineRequestSchema,
@@ -139,6 +142,8 @@ import {
   type ProvisionCompanyResponseContract,
   type ProcurementOverviewContract,
   type ProcurementPackageContract,
+  type ProcurementRequisitionContract,
+  type ProcurementRequisitionsOverviewContract,
   type ProjectPortfolioItemContract,
   type ProjectPortfolioOverviewContract,
   type QualityInspectionContract,
@@ -162,6 +167,7 @@ import {
   type UpdatePostSaleCaseRequestContract,
   type UpdateProjectPortfolioItemRequestContract,
   type UpdateProcurementPackageRequestContract,
+  type UpdateProcurementRequisitionRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
   type UpdateBudgetBookLineRequestContract,
@@ -501,6 +507,44 @@ export async function updateProcurementPackage(
 
   return {
     data: ProcurementPackageSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchProcurementRequisitionsOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<ProcurementRequisitionsOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/procurement/requisitions/overview${query}`, options);
+  return response ? ProcurementRequisitionsOverviewSchema.parse(response) : null;
+}
+
+export async function updateProcurementRequisition(
+  requisitionId: string,
+  companyId: string | undefined,
+  input: UpdateProcurementRequisitionRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProcurementRequisitionContract>> {
+  const payload = UpdateProcurementRequisitionRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/procurement/requisitions/${requisitionId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProcurementRequisitionSchema.parse(response.data),
     error: null
   };
 }

@@ -25,6 +25,7 @@ import { registerInventoryMovementsRoutes } from "./routes/inventory-movements.j
 import { registerPlatformRoutes } from "./routes/platform.js";
 import { registerPostSaleRoutes } from "./routes/post-sale.js";
 import { registerProcurementRoutes } from "./routes/procurement.js";
+import { registerProcurementRequisitionsRoutes } from "./routes/procurement-requisitions.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerQualityRoutes } from "./routes/quality.js";
 import { registerSupplierControlRoutes } from "./routes/supplier-control.js";
@@ -80,6 +81,7 @@ export async function buildApp() {
   await registerProjectsRoutes(app);
   await registerDailyLogRoutes(app);
   await registerProcurementRoutes(app);
+  await registerProcurementRequisitionsRoutes(app);
   await registerBudgetBookRoutes(app);
   await registerCashFlowRoutes(app);
   await registerCloseControlRoutes(app);

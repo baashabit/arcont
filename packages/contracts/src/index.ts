@@ -251,6 +251,52 @@ export const UpdateProcurementPackageRequestSchema = z.object({
   nextAction: z.string().min(8)
 });
 
+export const ProcurementRequisitionRiskSchema = z.object({
+  id: z.string(),
+  requisitionId: z.string(),
+  title: z.string(),
+  category: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  owner: z.string(),
+  status: z.string()
+});
+
+export const ProcurementRequisitionSchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  code: z.string(),
+  projectName: z.string(),
+  frontName: z.string(),
+  requestedBy: z.string(),
+  category: z.string(),
+  status: z.enum(["draft", "submitted", "approved", "sourcing", "blocked"]),
+  requestedItems: z.number().int().nonnegative(),
+  budgetAmount: z.number().nonnegative(),
+  urgency: z.enum(["planned", "watch", "critical"]),
+  approvalHours: z.number().nonnegative(),
+  supplierCoverage: z.number().int().nonnegative(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const ProcurementRequisitionsOverviewSchema = z.object({
+  summary: z.object({
+    openRequisitions: z.number().int().nonnegative(),
+    pendingApproval: z.number().int().nonnegative(),
+    criticalUrgency: z.number().int().nonnegative(),
+    averageApprovalHours: z.number().nonnegative(),
+    supplierCoverage: z.number().nonnegative()
+  }),
+  requisitions: z.array(ProcurementRequisitionSchema),
+  risks: z.array(ProcurementRequisitionRiskSchema),
+  focusRequisition: ProcurementRequisitionSchema.nullable()
+});
+
+export const UpdateProcurementRequisitionRequestSchema = z.object({
+  status: z.enum(["draft", "submitted", "approved", "sourcing", "blocked"]),
+  nextAction: z.string().min(8)
+});
+
 export const CostControlExceptionSchema = z.object({
   id: z.string(),
   lineId: z.string(),
@@ -1308,6 +1354,10 @@ export type ProcurementRiskContract = z.infer<typeof ProcurementRiskSchema>;
 export type ProcurementPackageContract = z.infer<typeof ProcurementPackageSchema>;
 export type ProcurementOverviewContract = z.infer<typeof ProcurementOverviewSchema>;
 export type UpdateProcurementPackageRequestContract = z.infer<typeof UpdateProcurementPackageRequestSchema>;
+export type ProcurementRequisitionRiskContract = z.infer<typeof ProcurementRequisitionRiskSchema>;
+export type ProcurementRequisitionContract = z.infer<typeof ProcurementRequisitionSchema>;
+export type ProcurementRequisitionsOverviewContract = z.infer<typeof ProcurementRequisitionsOverviewSchema>;
+export type UpdateProcurementRequisitionRequestContract = z.infer<typeof UpdateProcurementRequisitionRequestSchema>;
 export type CostControlExceptionContract = z.infer<typeof CostControlExceptionSchema>;
 export type CostControlLineContract = z.infer<typeof CostControlLineSchema>;
 export type CostControlOverviewContract = z.infer<typeof CostControlOverviewSchema>;

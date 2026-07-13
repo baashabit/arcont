@@ -22,6 +22,7 @@ import { createInventoryService } from "./services/inventory-service.js";
 import { createInventoryMovementsService } from "./services/inventory-movements-service.js";
 import { createInventoryReceivingService } from "./services/inventory-receiving-service.js";
 import { createProcurementService } from "./services/procurement-service.js";
+import { createProcurementRequisitionsService } from "./services/procurement-requisitions-service.js";
 import { createProjectsService } from "./services/projects-service.js";
 import { createQualityService } from "./services/quality-service.js";
 import { createPlatformService } from "./services/platform-service.js";
@@ -39,6 +40,7 @@ export function createContainer() {
   const projectsService = createProjectsService(platformRepository);
   const dailyLogService = createDailyLogService(platformRepository);
   const procurementService = createProcurementService(platformRepository);
+  const procurementRequisitionsService = createProcurementRequisitionsService(platformRepository);
   const budgetBookService = createBudgetBookService(platformRepository);
   const cashFlowService = createCashFlowService(platformRepository);
   const closeControlService = createCloseControlService(platformRepository);
@@ -66,6 +68,7 @@ export function createContainer() {
     projectsService,
     dailyLogService,
     procurementService,
+    procurementRequisitionsService,
     budgetBookService,
     cashFlowService,
     closeControlService,
