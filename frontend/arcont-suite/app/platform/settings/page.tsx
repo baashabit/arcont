@@ -116,6 +116,9 @@ export default function PlatformSettingsPage() {
   const [modulesError, setModulesError] = useState<string | null>(null);
   const [userMessage, setUserMessage] = useState<string | null>(null);
   const [userError, setUserError] = useState<string | null>(null);
+  const [modulesFilter, setModulesFilter] = useState("");
+  const [usersFilter, setUsersFilter] = useState("");
+  const [readinessFilter, setReadinessFilter] = useState<"all" | "ready" | "warning" | "blocked">("all");
   const [userForm, setUserForm] = useState(emptyUserForm);
 
   useEffect(() => {
@@ -179,6 +182,34 @@ export default function PlatformSettingsPage() {
     () => modules.filter((module) => module.area !== "platform"),
     [modules]
   );
+
+  const filteredCompanyModules = useMemo(() => {
+    const normalizedFilter = modulesFilter.trim().toLowerCase();
+    return companyModules.filter((entry) =>
+      normalizedFilter.length === 0 ||
+      entry.module.name.toLowerCase().includes(normalizedFilter) ||
+      entry.module.description.toLowerCase().includes(normalizedFilter) ||
+      entry.module.area.toLowerCase().includes(normalizedFilter)
+    );
+  }, [companyModules, modulesFilter]);
+
+  const filteredReadinessChecks = useMemo(() => {
+    if (!readiness) {
+      return [];
+    }
+
+    return readiness.checks.filter((check) => readinessFilter === "all" || check.status === readinessFilter);
+  }, [readiness, readinessFilter]);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedFilter = usersFilter.trim().toLowerCase();
+    return activeUsers.filter((user) =>
+      normalizedFilter.length === 0 ||
+      user.fullName.toLowerCase().includes(normalizedFilter) ||
+      user.email.toLowerCase().includes(normalizedFilter) ||
+      user.roleKey.toLowerCase().includes(normalizedFilter)
+    );
+  }, [activeUsers, usersFilter]);
 
   async function handleSaveSettings() {
     const nextForm = {
@@ -450,8 +481,17 @@ export default function PlatformSettingsPage() {
           description="This tenant score now comes from the backend and checks whether identity, fiscal setup, enabled modules, seeded operations and audit trace are strong enough."
         >
           {readiness ? (
-            <div className="list">
-              {readiness.checks.map((check) => (
+            <>
+              <FilterBar summary={`${filteredReadinessChecks.length} readiness checks match the current filter`}>
+                <select className="selectField" value={readinessFilter} onChange={(event) => setReadinessFilter(event.target.value as typeof readinessFilter)}>
+                  <option value="all">All checks</option>
+                  <option value="ready">Ready</option>
+                  <option value="warning">Warning</option>
+                  <option value="blocked">Blocked</option>
+                </select>
+              </FilterBar>
+              <div className="list">
+              {filteredReadinessChecks.map((check) => (
                 <div className="listItem" key={check.key}>
                   <div>
                     <strong>{check.label}</strong>
@@ -461,7 +501,8 @@ export default function PlatformSettingsPage() {
                   <Badge tone={readinessTone(check.status)}>{check.status}</Badge>
                 </div>
               ))}
-            </div>
+              </div>
+            </>
           ) : (
             <div className="list">
               <div className="listItem">
@@ -480,8 +521,11 @@ export default function PlatformSettingsPage() {
           title="Module control"
           description="This tenant can enable only the capabilities it really needs while platform identity remains mandatory."
         >
+          <FilterBar summary={`${filteredCompanyModules.length} modules match the current search`}>
+            <input className="field" type="search" value={modulesFilter} onChange={(event) => setModulesFilter(event.target.value)} placeholder="Module, area or description" style={{ minWidth: 220 }} />
+          </FilterBar>
           <div className="list">
-            {companyModules.map((entry) => {
+            {filteredCompanyModules.map((entry) => {
               const required = requiredPlatformModules.has(entry.module.key);
               const enabled = moduleKeys.includes(entry.module.key);
 
@@ -529,6 +573,9 @@ export default function PlatformSettingsPage() {
           title="Tenant users"
           description="Create implementation users directly inside the active company without leaving the platform domain."
         >
+          <FilterBar summary={`${filteredUsers.length} users match the current search`}>
+            <input className="field" type="search" value={usersFilter} onChange={(event) => setUsersFilter(event.target.value)} placeholder="User, email or role" style={{ minWidth: 220 }} />
+          </FilterBar>
           <div className="detailGrid">
             <label className="detailRow">
               <div className="detailLabel">Full name</div>
@@ -589,7 +636,7 @@ export default function PlatformSettingsPage() {
           </div>
 
           <div className="list" style={{ marginTop: 16 }}>
-            {activeUsers.slice(0, 6).map((user) => (
+            {filteredUsers.slice(0, 6).map((user) => (
               <div className="listItem" key={user.id}>
                 <div>
                   <strong>{user.fullName}</strong>
