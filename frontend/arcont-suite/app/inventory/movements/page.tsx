@@ -254,9 +254,29 @@ function InventoryMovementsPageContent() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const eligibleReceipts = useMemo(
+    () => bridgeContext?.receiving.receipts.filter((item) => item.status === "received") ?? [],
+    [bridgeContext]
+  );
+  const filteredMovements = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return overview.movements.filter((movement) => {
+      const matchesPurchaseReference = !purchaseReferenceParam || movement.purchaseReference === purchaseReferenceParam;
+      const matchesUpstreamReceipt =
+        !upstreamReceiptCodeParam || movement.upstreamReceiptCode === upstreamReceiptCodeParam;
+
+      return matchesPurchaseReference && matchesUpstreamReceipt;
+    });
+  }, [overview, purchaseReferenceParam, upstreamReceiptCodeParam]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredMovements), [filteredMovements]);
+
   const selectedMovement = useMemo(
-    () => overview?.movements.find((item) => item.id === selectedMovementId) ?? overview?.focusMovement ?? null,
-    [overview, selectedMovementId]
+    () => filteredMovements.find((item) => item.id === selectedMovementId) ?? filteredMovements[0] ?? null,
+    [filteredMovements, selectedMovementId]
   );
 
   const selectedRisks = useMemo(
@@ -267,10 +287,22 @@ function InventoryMovementsPageContent() {
   const movementActions = useMemo(() => (selectedMovement ? actionOptions(selectedMovement) : []), [selectedMovement]);
 
   const selectedStory = useMemo(() => buildMovementStory(selectedMovement, bridgeContext), [bridgeContext, selectedMovement]);
-  const eligibleReceipts = useMemo(
-    () => bridgeContext?.receiving.receipts.filter((item) => item.status === "received") ?? [],
-    [bridgeContext]
-  );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredMovements.length === 0) {
+      setSelectedMovementId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredMovements.some((item) => item.id === selectedMovementId);
+    if (!isSelectedVisible) {
+      setSelectedMovementId(filteredMovements[0]?.id ?? null);
+    }
+  }, [filteredMovements, overview, selectedMovementId]);
 
   useEffect(() => {
     if (createForm.upstreamReceiptCode || eligibleReceipts.length === 0) {
@@ -505,11 +537,11 @@ function InventoryMovementsPageContent() {
         {overview ? (
           <>
             <section className="grid cols4">
-              <KpiCard label="Open movements" value={String(overview.summary.openMovements)} footnote="Moves still not fully closed at destination." />
-              <KpiCard label="Critical impact" value={String(overview.summary.criticalMovements)} footnote="Movements currently putting execution or stock traceability at risk." />
-              <KpiCard label="Pending evidence" value={String(overview.summary.pendingEvidence)} footnote="Missing proof of dispatch, handoff or receipt." />
-              <KpiCard label="Returns in flow" value={String(overview.summary.returnsInFlow)} footnote="Return movements still open between front and warehouse." />
-              <KpiCard label="Commercial risk" value={String(overview.summary.movementsAtCommercialRisk)} footnote="Movements tied to blocked purchase posture or fiscal packet risk." />
+              <KpiCard label="Open movements" value={String(filteredSummary.openMovements)} footnote="Moves still not fully closed at destination." />
+              <KpiCard label="Critical impact" value={String(filteredSummary.criticalMovements)} footnote="Movements currently putting execution or stock traceability at risk." />
+              <KpiCard label="Pending evidence" value={String(filteredSummary.pendingEvidence)} footnote="Missing proof of dispatch, handoff or receipt." />
+              <KpiCard label="Returns in flow" value={String(filteredSummary.returnsInFlow)} footnote="Return movements still open between front and warehouse." />
+              <KpiCard label="Commercial risk" value={String(filteredSummary.movementsAtCommercialRisk)} footnote="Movements tied to blocked purchase posture or fiscal packet risk." />
             </section>
 
             <section className="grid cols3">
@@ -532,14 +564,21 @@ function InventoryMovementsPageContent() {
 
             <section className="grid cols2">
               <Card title="Movement board" description="Operational handoffs across warehouses, yards and jobsite fronts.">
-                <FilterBar summary={`${overview.movements.length} movements in the active tenant`}>
+                <FilterBar summary={`${filteredMovements.length} movements in the active tenant`}>
+                  {purchaseReferenceParam ? <Badge tone="info">{purchaseReferenceParam}</Badge> : null}
+                  {upstreamReceiptCodeParam ? <Badge tone="info">{upstreamReceiptCodeParam}</Badge> : null}
+                  {purchaseReferenceParam || upstreamReceiptCodeParam ? (
+                    <Link className="buttonGhost" href="/inventory/movements">
+                      Clear context
+                    </Link>
+                  ) : null}
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "movements ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.movements}
+                  rows={filteredMovements}
                   columns={[
                     {
                       key: "code",
