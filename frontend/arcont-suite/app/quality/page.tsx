@@ -145,6 +145,9 @@ function QualityPageContent() {
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [areaFilter, setAreaFilter] = useState<string>("all");
+  const [severityFilter, setSeverityFilter] = useState<"all" | QualityInspectionContract["severity"]>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | QualityInspectionContract["status"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [createForm, setCreateForm] = useState({
     projectName: "Proyecto central",
     areaName: "Frente 1",
@@ -244,12 +247,22 @@ function QualityPageContent() {
       return [];
     }
 
+    const normalizedSearch = searchFilter.trim().toLowerCase();
     return overview.inspectionsBoard.filter(
       (item) =>
         (projectFilter === "all" || item.projectName === projectFilter) &&
-        (areaFilter === "all" || item.areaName === areaFilter)
+        (areaFilter === "all" || item.areaName === areaFilter) &&
+        (severityFilter === "all" || item.severity === severityFilter) &&
+        (statusFilter === "all" || item.status === statusFilter) &&
+        (normalizedSearch.length === 0 ||
+          item.contractorName.toLowerCase().includes(normalizedSearch) ||
+          item.checklistName.toLowerCase().includes(normalizedSearch) ||
+          item.code.toLowerCase().includes(normalizedSearch) ||
+          item.nextAction.toLowerCase().includes(normalizedSearch))
     );
-  }, [areaFilter, overview, projectFilter]);
+  }, [areaFilter, overview, projectFilter, searchFilter, severityFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredInspections), [filteredInspections]);
 
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.inspectionId === selectedInspection?.id) ?? [],
@@ -513,28 +526,28 @@ function QualityPageContent() {
             <section className="grid cols4">
               <KpiCard
                 label="Inspections"
-                value={String(overview.summary.inspections)}
-                footnote="Current inspection workload visible for the active tenant."
+                value={String(filteredSummary.inspections)}
+                footnote="Visible inspection workload for the current operating filter."
               />
               <KpiCard
                 label="Open findings"
-                value={String(overview.summary.openFindings)}
-                footnote="Findings still affecting release or reinspection."
+                value={String(filteredSummary.openFindings)}
+                footnote="Visible findings still affecting release or reinspection."
               />
               <KpiCard
                 label="Release readiness"
-                value={`${overview.summary.releaseReadiness}%`}
-                footnote="Average release posture across current quality checks."
+                value={`${filteredSummary.releaseReadiness}%`}
+                footnote="Average release posture across the visible quality subset."
               />
               <KpiCard
                 label="Rework"
-                value={`${overview.summary.averageReworkRate}%`}
-                footnote="Average rework rate across the current inspection board."
+                value={`${filteredSummary.averageReworkRate}%`}
+                footnote="Average rework rate across the visible inspection board."
               />
               <KpiCard
                 label="Execution risk"
-                value={String(overview.summary.executionRiskInspections)}
-                footnote="Inspections already under project blockage, flagged field logs or heavy findings."
+                value={String(filteredSummary.executionRiskInspections)}
+                footnote="Visible inspections already under blockage, flagged logs or heavy findings."
               />
             </section>
 
@@ -558,7 +571,7 @@ function QualityPageContent() {
 
             <section className="grid cols2">
               <Card title="Inspection board" description="Live inspection, punch list and non-conformance signals.">
-                <FilterBar summary={`${overview.inspectionsBoard.length} quality inspections in the active tenant`}>
+                <FilterBar summary={`${filteredInspections.length} quality inspections match the current operating filters`}>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
@@ -579,6 +592,34 @@ function QualityPageContent() {
                       </option>
                     ))}
                   </select>
+                  <select className="selectField" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as typeof severityFilter)}>
+                    <option value="all">All severity</option>
+                    <option value="critical">Critical</option>
+                    <option value="major">Major</option>
+                    <option value="minor">Minor</option>
+                  </select>
+                  <select className="selectField" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                    <option value="all">All status</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="pending_release">Pending release</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                  <input
+                    className="field"
+                    type="search"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Contractor, checklist, code or next action"
+                    style={{ minWidth: 220 }}
+                  />
+                  <Badge tone={filteredSummary.executionRiskInspections > 0 ? "danger" : filteredSummary.openFindings > 0 ? "warning" : "success"}>
+                    {filteredSummary.executionRiskInspections > 0
+                      ? `${filteredSummary.executionRiskInspections} at risk`
+                      : filteredSummary.openFindings > 0
+                        ? `${filteredSummary.openFindings} findings`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
                   rows={filteredInspections}
