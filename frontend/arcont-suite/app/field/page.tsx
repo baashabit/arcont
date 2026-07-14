@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { FieldMaterialRequestContract } from "@/lib/contracts";
 import {
@@ -226,6 +227,9 @@ function FieldPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState<FieldCaptureForm>(() => createCaptureForm("daily_log"));
+  const [postureFilter, setPostureFilter] = useState<"all" | FieldSignal["posture"]>("all");
+  const [areaFilter, setAreaFilter] = useState("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const projectQuery = searchParams.get("projectName")?.trim() ?? "";
 
   useEffect(() => {
@@ -461,29 +465,49 @@ function FieldPageContent() {
     });
   }, [combinedSignals, projectQuery]);
 
-  const metrics = useMemo(() => {
-    const critical = visibleSignals.filter((signal) => signal.posture === "critical").length;
-    const watch = visibleSignals.filter((signal) => signal.posture === "watch").length;
-    const healthy = visibleSignals.filter((signal) => signal.posture === "healthy").length;
+  const areaOptions = useMemo(() => Array.from(new Set(visibleSignals.map((signal) => signal.area))).sort((left, right) => left.localeCompare(right)), [visibleSignals]);
+
+  const filteredSignals = useMemo(() => {
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return visibleSignals.filter((signal) => {
+      const matchesPosture = postureFilter === "all" || signal.posture === postureFilter;
+      const matchesArea = areaFilter === "all" || signal.area === areaFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        signal.title.toLowerCase().includes(normalizedSearch) ||
+        signal.detail.toLowerCase().includes(normalizedSearch) ||
+        signal.owner.toLowerCase().includes(normalizedSearch) ||
+        signal.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesPosture && matchesArea && matchesSearch;
+    });
+  }, [areaFilter, postureFilter, searchFilter, visibleSignals]);
+
+  const filteredMetrics = useMemo(() => {
+    const critical = filteredSignals.filter((signal) => signal.posture === "critical").length;
+    const watch = filteredSignals.filter((signal) => signal.posture === "watch").length;
+    const healthy = filteredSignals.filter((signal) => signal.posture === "healthy").length;
 
     return {
-      capturesToday: visibleSignals.length * 24,
+      capturesToday: filteredSignals.length * 24,
       offlineSync: healthy > 0 ? Math.max(72, 100 - critical * 7) : 0,
-      photosLinked: visibleSignals.length * 96,
-      checklistDiscipline: Math.max(55, 100 - watch * 6 - critical * 8)
+      photosLinked: filteredSignals.length * 96,
+      checklistDiscipline: Math.max(55, 100 - watch * 6 - critical * 8),
+      critical,
+      watch
     };
-  }, [visibleSignals]);
+  }, [filteredSignals]);
 
   const prioritySignals = useMemo(
     () =>
-      visibleSignals
+      filteredSignals
         .slice()
         .sort((left, right) => {
           const postureWeight = { critical: 0, watch: 1, healthy: 2 };
           return postureWeight[left.posture] - postureWeight[right.posture];
         })
         .slice(0, 4),
-    [visibleSignals]
+    [filteredSignals]
   );
 
   const equipmentPriority = useMemo(
@@ -864,22 +888,22 @@ function FieldPageContent() {
             <section className="grid cols4">
               <KpiCard
                 label="Captures today"
-                value={String(metrics.capturesToday)}
+                value={String(filteredMetrics.capturesToday)}
                 footnote="Directional field capture load assembled from current live site signals."
               />
               <KpiCard
                 label="Offline sync"
-                value={`${metrics.offlineSync}%`}
+                value={`${filteredMetrics.offlineSync}%`}
                 footnote="Practical connectivity posture based on current site signal health."
               />
               <KpiCard
                 label="Photos linked"
-                value={String(metrics.photosLinked)}
+                value={String(filteredMetrics.photosLinked)}
                 footnote="Estimated evidence volume tied to active mobile field workflows."
               />
               <KpiCard
                 label="Checklists"
-                value={`${metrics.checklistDiscipline}%`}
+                value={`${filteredMetrics.checklistDiscipline}%`}
                 footnote="Directional discipline score for current field workflows."
               />
               <KpiCard
@@ -891,14 +915,43 @@ function FieldPageContent() {
 
             <section className="grid cols2">
               <Card title="Field flows" description="The mobile layer now reflects live site pressure across execution areas.">
-                {projectQuery ? (
-                  <div className="row gap wrap" style={{ marginBottom: 12 }}>
-                    <Badge tone="info">Filtered by {projectQuery}</Badge>
-                    <Link className="buttonGhost" href="/field">Clear filter</Link>
-                  </div>
-                ) : null}
+                <FilterBar summary={`${filteredSignals.length} field signals match the current operating filters`}>
+                  {projectQuery ? (
+                    <Badge tone="info">Project {projectQuery}</Badge>
+                  ) : null}
+                  <select className="field" value={postureFilter} onChange={(event) => setPostureFilter(event.target.value as typeof postureFilter)}>
+                    <option value="all">All posture</option>
+                    <option value="critical">Critical</option>
+                    <option value="watch">Watch</option>
+                    <option value="healthy">Healthy</option>
+                  </select>
+                  <select className="field" value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
+                    <option value="all">All areas</option>
+                    {areaOptions.map((area) => (
+                      <option key={area} value={area}>
+                        {area}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="field"
+                    type="search"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Signal, owner, detail or action"
+                    style={{ minWidth: 220 }}
+                  />
+                  <Badge tone={filteredMetrics.critical > 0 ? "danger" : filteredMetrics.watch > 0 ? "warning" : "success"}>
+                    {filteredMetrics.critical > 0
+                      ? `${filteredMetrics.critical} critical`
+                      : filteredMetrics.watch > 0
+                        ? `${filteredMetrics.watch} watch`
+                        : "visible subset stable"}
+                  </Badge>
+                  {projectQuery ? <Link className="buttonGhost" href="/field">Clear project</Link> : null}
+                </FilterBar>
                 <div className="list">
-                  {visibleSignals.map((signal) => (
+                  {filteredSignals.map((signal) => (
                     <div className="listItem" key={signal.id}>
                       <div>
                         <strong>{signal.title}</strong>
