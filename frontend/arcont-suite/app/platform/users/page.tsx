@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,26 @@ function ErrorBanner({ error }: { error: PlatformApiErrorContract["error"] }) {
   );
 }
 
+function validateUserCreateForm(input: {
+  fullName: string;
+  email: string;
+  roleKey: string;
+}) {
+  if (input.fullName.trim().length < 3) {
+    return "Full name must be specific before creating the user.";
+  }
+
+  if (!input.email.includes("@")) {
+    return "A valid email is required before creating the user.";
+  }
+
+  if (!input.roleKey) {
+    return "Select a role before creating the user.";
+  }
+
+  return null;
+}
+
 export default function PlatformUsersPage() {
   const {
     activeCompany,
@@ -48,6 +69,7 @@ export default function PlatformUsersPage() {
   const [query, setQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<PlatformApiErrorContract["error"] | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [lastCreatedPassword, setLastCreatedPassword] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState({
     companyId: activeCompany.id,
@@ -106,6 +128,11 @@ export default function PlatformUsersPage() {
       ),
     [activeCompany.tradeName, activeUsers, query]
   );
+  const activeUserCount = useMemo(
+    () => activeUsers.filter((user) => user.status === "active").length,
+    [activeUsers]
+  );
+  const availableRoles = useMemo(() => roles.filter((role) => role.scope !== "platform"), [roles]);
 
   if (!isRouteVisible({ moduleKeys: ["platform.identity"], requiredPermissions: ["users:*", "users:read"] })) {
     return (
@@ -132,12 +159,20 @@ export default function PlatformUsersPage() {
     >
       <section className="grid cols4">
         <KpiCard label="Users in tenant" value={String(activeUsers.length)} footnote={`Identity view scoped to ${activeCompany.tradeName}.`} />
-        <KpiCard label="Active users" value={String(activeUsers.filter((user) => user.status === "active").length)} footnote="Operationally available accounts." />
+        <KpiCard label="Active users" value={String(activeUserCount)} footnote="Operationally available accounts." />
         <KpiCard label="Invitations" value={String(activeUsers.filter((user) => user.status === "invited").length)} footnote="Pending onboarding and access provisioning." />
         <KpiCard label="Roles" value={String(roles.length)} footnote="Roles are read from the live platform catalog." />
       </section>
 
       {actionError ? <ErrorBanner error={actionError} /> : null}
+      {actionMessage ? (
+        <Card title="Last identity action" description="Latest successful user-management action applied to the active tenant.">
+          <div className="tagRow">
+            <Badge tone="success">identity updated</Badge>
+            <Badge tone="neutral">{actionMessage}</Badge>
+          </div>
+        </Card>
+      ) : null}
 
       {lastCreatedPassword ? (
         <Card title="Temporary password issued" description="The backend returned a temporary credential for the newly created user.">
@@ -277,7 +312,8 @@ export default function PlatformUsersPage() {
                   setCreateForm((current) => ({ ...current, roleKey: event.target.value }))
                 }
               >
-                {roles.map((role) => (
+                <option value="">Select role</option>
+                {availableRoles.map((role) => (
                   <option key={role.key} value={role.key}>
                     {role.name}
                   </option>
@@ -309,8 +345,24 @@ export default function PlatformUsersPage() {
               disabled={isSavingUsers}
               onClick={async () => {
                 setActionError(null);
+                setActionMessage(null);
                 setLastCreatedPassword(null);
-                const result = await createUser(createForm);
+                const normalizedForm = {
+                  ...createForm,
+                  fullName: createForm.fullName.trim(),
+                  email: createForm.email.trim().toLowerCase()
+                };
+                const validationMessage = validateUserCreateForm(normalizedForm);
+
+                if (validationMessage) {
+                  setActionError({
+                    code: "PLATFORM_USER_FORM_INVALID",
+                    message: validationMessage
+                  });
+                  return;
+                }
+
+                const result = await createUser(normalizedForm);
 
                 if (result.error) {
                   setActionError(result.error);
@@ -319,6 +371,7 @@ export default function PlatformUsersPage() {
 
                 if (result.data && "temporaryPassword" in result.data) {
                   setLastCreatedPassword(result.data.temporaryPassword);
+                  setActionMessage(`${result.data.user.fullName} created in ${activeCompany.tradeName}.`);
                   setCreateForm((current) => ({
                     ...current,
                     fullName: "",
@@ -360,6 +413,17 @@ export default function PlatformUsersPage() {
                   ))}
                 </div>
               </div>
+              <div className="detailRow">
+                <div className="detailLabel">Tenant actions</div>
+                <div className="row gap wrap">
+                  <Link className="button secondary" href="/platform/settings">
+                    Open settings
+                  </Link>
+                  <Link className="buttonGhost" href="/platform/companies">
+                    Open companies
+                  </Link>
+                </div>
+              </div>
             </div>
 
             <div className="detailGrid">
@@ -372,7 +436,7 @@ export default function PlatformUsersPage() {
                     setDetailDraft((current) => ({ ...current, roleKey: event.target.value }))
                   }
                 >
-                  {roles.map((role) => (
+                  {availableRoles.map((role) => (
                     <option key={role.key} value={role.key}>
                       {role.name}
                     </option>
@@ -403,13 +467,17 @@ export default function PlatformUsersPage() {
                   disabled={isSavingUsers || detailDraft.roleKey === selectedDetail.user.roleKey}
                   onClick={async () => {
                     setActionError(null);
+                    setActionMessage(null);
                     const result = await changeUserRole(selectedDetail.user.id, {
                       roleKey: detailDraft.roleKey
                     });
 
                     if (result.error) {
                       setActionError(result.error);
+                      return;
                     }
+
+                    setActionMessage(`Role updated for ${selectedDetail.user.fullName}.`);
                   }}
                 >
                   {isSavingUsers ? "Saving..." : "Change role"}
@@ -420,13 +488,29 @@ export default function PlatformUsersPage() {
                   disabled={isSavingUsers || detailDraft.status === selectedDetail.user.status}
                   onClick={async () => {
                     setActionError(null);
+                    setActionMessage(null);
+                    if (
+                      selectedDetail.user.status === "active" &&
+                      detailDraft.status !== "active" &&
+                      activeUserCount <= 1
+                    ) {
+                      setActionError({
+                        code: "PLATFORM_LAST_ACTIVE_USER",
+                        message: "Cannot disable the last active user in the tenant."
+                      });
+                      return;
+                    }
+
                     const result = await changeUserStatus(selectedDetail.user.id, {
                       status: detailDraft.status
                     });
 
                     if (result.error) {
                       setActionError(result.error);
+                      return;
                     }
+
+                    setActionMessage(`Status updated for ${selectedDetail.user.fullName}.`);
                   }}
                 >
                   {isSavingUsers ? "Saving..." : "Change status"}

@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import {
+  fetchAccountsPayableOverview,
   fetchCashFlowOverview,
   fetchComplianceOverview,
   fetchDailyLogOverview,
@@ -30,8 +31,10 @@ import {
   fetchProcurementPurchaseOrdersOverview,
   fetchProjectsOverview,
   fetchQualityOverview,
+  fetchSupplierMasterOverview,
   fetchSupplierControlOverview,
-  fetchSubcontractOverview
+  fetchSubcontractOverview,
+  fetchTreasuryPaymentRunsOverview
 } from "@/lib/platform-api";
 
 type BlackboardTask = {
@@ -101,6 +104,10 @@ function primaryHrefForTask(task: BlackboardTask) {
       return "/procurement/purchase-orders";
     case "Supplier control":
       return "/supplier-control";
+    case "Supplier master":
+      return "/supplier-master";
+    case "Accounts payable":
+      return "/accounts-payable";
     case "Inventory":
       return "/inventory";
     case "Receiving":
@@ -113,6 +120,8 @@ function primaryHrefForTask(task: BlackboardTask) {
       return "/cash-flow";
     case "Finance":
       return "/finance";
+    case "Treasury runs":
+      return "/treasury/payment-runs";
     case "HR":
       return "/hr";
     case "Quality":
@@ -157,6 +166,9 @@ export default function OperationsPage() {
       fetchProcurementOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchProcurementPurchaseOrdersOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchSupplierControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchSupplierMasterOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchAccountsPayableOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchTreasuryPaymentRunsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchQualityOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchSubcontractOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchEquipmentOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
@@ -184,6 +196,9 @@ export default function OperationsPage() {
           procurementResult,
           procurementPurchaseOrdersResult,
           supplierControlResult,
+          supplierMasterResult,
+          accountsPayableResult,
+          treasuryRunsResult,
           qualityResult,
           subcontractsResult,
           equipmentResult,
@@ -339,6 +354,101 @@ export default function OperationsPage() {
           }
         }
 
+        if (supplierMasterResult.status === "fulfilled" && supplierMasterResult.value) {
+          for (const risk of supplierMasterResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · supplier fiscal control`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Supplier master",
+              severity: risk.severity
+            });
+          }
+
+          if (
+            supplierMasterResult.value.summary.criticalSuppliers > 0 ||
+            supplierMasterResult.value.summary.incompletePackets > 0
+          ) {
+            nextTasks.push({
+              id: "supplier_master_fiscal_pressure",
+              lane: supplierMasterResult.value.summary.criticalSuppliers > 0 ? "risk" : "in_progress",
+              title: "Supplier fiscal readiness is still constraining payment flow",
+              detail: `${supplierMasterResult.value.summary.criticalSuppliers} critical suppliers and ${supplierMasterResult.value.summary.incompletePackets} incomplete packets remain open`,
+              owner: supplierMasterResult.value.focusItem?.supplierName ?? "Fiscal control",
+              dueLabel: supplierMasterResult.value.focusItem?.nextAction ?? "Supplier fiscal follow-up",
+              domain: "Supplier master",
+              severity: supplierMasterResult.value.summary.criticalSuppliers > 0 ? "critical" : "warning"
+            });
+          }
+        }
+
+        if (accountsPayableResult.status === "fulfilled" && accountsPayableResult.value) {
+          for (const risk of accountsPayableResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · payable release`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Accounts payable",
+              severity: risk.severity
+            });
+          }
+
+          if (
+            accountsPayableResult.value.summary.blockedInvoices > 0 ||
+            accountsPayableResult.value.summary.overdueInvoices > 0
+          ) {
+            nextTasks.push({
+              id: "accounts_payable_release_pressure",
+              lane: "risk",
+              title: "Accounts payable already carries blocked or overdue invoice pressure",
+              detail: `${accountsPayableResult.value.summary.blockedInvoices} blocked invoices and ${accountsPayableResult.value.summary.overdueInvoices} overdue invoices remain active`,
+              owner: accountsPayableResult.value.focusInvoice?.supplierName ?? "Accounts payable",
+              dueLabel: accountsPayableResult.value.focusInvoice?.nextAction ?? "Invoice release follow-up",
+              domain: "Accounts payable",
+              severity: "critical"
+            });
+          }
+        }
+
+        if (treasuryRunsResult.status === "fulfilled" && treasuryRunsResult.value) {
+          for (const risk of treasuryRunsResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · treasury batch release`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Treasury runs",
+              severity: risk.severity
+            });
+          }
+
+          if (
+            treasuryRunsResult.value.summary.blockedRuns > 0 ||
+            treasuryRunsResult.value.unavailableInvoices.length > 0
+          ) {
+            nextTasks.push({
+              id: "treasury_batch_release_pressure",
+              lane: treasuryRunsResult.value.summary.blockedRuns > 0 ? "risk" : "in_progress",
+              title: "Treasury batches still cannot close a clean release cycle",
+              detail: `${treasuryRunsResult.value.summary.blockedRuns} blocked runs and ${treasuryRunsResult.value.unavailableInvoices.length} unavailable invoices still constrain payment release`,
+              owner: treasuryRunsResult.value.focusRun?.owner ?? "Treasury",
+              dueLabel:
+                treasuryRunsResult.value.focusRun?.nextAction ??
+                treasuryRunsResult.value.unavailableInvoices[0]?.reasonLabel ??
+                "Treasury release review",
+              domain: "Treasury runs",
+              severity: treasuryRunsResult.value.summary.blockedRuns > 0 ? "critical" : "warning"
+            });
+          }
+        }
         if (inventoryResult.status === "fulfilled" && inventoryResult.value) {
           for (const risk of inventoryResult.value.risks.slice(0, 1)) {
             nextTasks.push({
@@ -965,6 +1075,8 @@ export default function OperationsPage() {
                   <Link className="buttonGhost" href="/procurement/purchase-orders">Requisitions to PO</Link>
                   <Link className="buttonGhost" href="/inventory/receiving">PO to receiving</Link>
                   <Link className="buttonGhost" href="/supplier-control">Supplier blockers</Link>
+                  <Link className="buttonGhost" href="/supplier-master">Supplier fiscal</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Invoice blockers</Link>
                   <Link className="buttonGhost" href="/equipment">Equipment blockers</Link>
                   <Link className="buttonGhost" href="/treasury/payment-runs">Treasury release</Link>
                 </div>
@@ -1058,7 +1170,7 @@ export default function OperationsPage() {
                   </div>
                   <div className="detailRow">
                     <div className="detailLabel">3. Finance release</div>
-                    <div>Close collections, payables and treasury blockers after supply posture is clarified.</div>
+                    <div>Close supplier fiscal, payables and treasury blockers after supply posture is clarified.</div>
                   </div>
                 </div>
               </Card>

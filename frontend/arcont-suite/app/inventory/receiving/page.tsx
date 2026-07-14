@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
@@ -377,6 +378,10 @@ function InventoryReceivingPageContent() {
     const receivedUnits = Number(createForm.receivedUnits);
     const pendingEvidence = Number(createForm.pendingEvidence);
     const rejectedUnits = Number(createForm.rejectedUnits);
+    const linkedOrder = eligiblePurchaseOrders.find((item) => item.code === purchaseReference);
+    const etaTimestamp = createForm.etaDate ? Date.parse(createForm.etaDate) : Number.NaN;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     if (supplierName.length < 3 || destinationName.length < 3 || destinationType.length < 3 || purchaseReference.length < 3) {
       setActionError("Supplier, destination and purchase reference must be defined before creating the receipt.");
@@ -384,12 +389,22 @@ function InventoryReceivingPageContent() {
       return;
     }
 
+    if (!linkedOrder) {
+      setActionError("The selected purchase order is no longer eligible to open a receipt.");
+      setCreateMessage(null);
+      return;
+    }
     if (!createForm.etaDate) {
       setActionError("ETA date is required before creating the receipt.");
       setCreateMessage(null);
       return;
     }
 
+    if (!Number.isFinite(etaTimestamp) || etaTimestamp < today.getTime()) {
+      setActionError("ETA date cannot be in the past when registering an inbound receipt.");
+      setCreateMessage(null);
+      return;
+    }
     if (nextAction.length < 8) {
       setActionError("Next action must be specific before creating the receipt.");
       setCreateMessage(null);
@@ -408,6 +423,17 @@ function InventoryReceivingPageContent() {
       return;
     }
 
+    if (receivedUnits > orderedUnits) {
+      setActionError("Received units cannot exceed ordered units on receipt creation.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (rejectedUnits > receivedUnits) {
+      setActionError("Rejected units cannot exceed received units on receipt creation.");
+      setCreateMessage(null);
+      return;
+    }
     setIsSaving(true);
     setActionError(null);
     setCreateMessage(null);
@@ -610,6 +636,20 @@ function InventoryReceivingPageContent() {
                       </Badge>
                     </div>
 
+                    <div className="row gap wrap">
+                      <Link
+                        className="buttonGhost"
+                        href={`/procurement/purchase-orders?purchaseReference=${encodeURIComponent(selectedReceipt.purchaseReference)}`}
+                      >
+                        Open purchase orders
+                      </Link>
+                      <Link
+                        className="buttonGhost"
+                        href={`/inventory/movements?purchaseReference=${encodeURIComponent(selectedReceipt.purchaseReference)}&upstreamReceiptCode=${encodeURIComponent(selectedReceipt.code)}`}
+                      >
+                        Open movements
+                      </Link>
+                    </div>
                     <div className="detailGrid">
                       <div className="detailRow">
                         <div className="detailLabel">Purchase order</div>

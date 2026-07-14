@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -320,12 +321,17 @@ export default function CashFlowPage() {
                 }
               >
                 <div className="detailGrid">
-                  <div className="detailRow"><div className="detailLabel">Supplier fiscal blockers</div><div>{supplierMasterOverview?.summary.criticalSuppliers ?? 0} critical and {supplierMasterOverview?.summary.incompletePackets ?? 0} incomplete packets</div></div>
-                  <div className="detailRow"><div className="detailLabel">Accounts payable</div><div>{accountsPayableOverview?.summary.blockedInvoices ?? 0} blocked and {accountsPayableOverview?.summary.overdueInvoices ?? 0} overdue invoices</div></div>
-                  <div className="detailRow"><div className="detailLabel">Treasury execution</div><div>{treasuryOverview?.summary.blockedRuns ?? 0} blocked runs and {treasuryOverview?.unavailableInvoices.length ?? 0} ineligible invoices</div></div>
-                  <div className="detailRow"><div className="detailLabel">What this means</div><div>{treasuryChainPressure > 0 ? "Treasury depends on upstream fiscal and AP cleanup before clean release." : "Treasury lane is currently clean enough for predictable short-term execution."}</div></div>
-                </div>
-              </Card>
+                <div className="detailRow"><div className="detailLabel">Supplier fiscal blockers</div><div>{supplierMasterOverview?.summary.criticalSuppliers ?? 0} critical and {supplierMasterOverview?.summary.incompletePackets ?? 0} incomplete packets</div></div>
+                <div className="detailRow"><div className="detailLabel">Accounts payable</div><div>{accountsPayableOverview?.summary.blockedInvoices ?? 0} blocked and {accountsPayableOverview?.summary.overdueInvoices ?? 0} overdue invoices</div></div>
+                <div className="detailRow"><div className="detailLabel">Treasury execution</div><div>{treasuryOverview?.summary.blockedRuns ?? 0} blocked runs and {treasuryOverview?.unavailableInvoices.length ?? 0} ineligible invoices</div></div>
+                <div className="detailRow"><div className="detailLabel">What this means</div><div>{treasuryChainPressure > 0 ? "Treasury depends on upstream fiscal and AP cleanup before clean release." : "Treasury lane is currently clean enough for predictable short-term execution."}</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className="button" href="/supplier-master">Open supplier master</Link>
+                <Link className="buttonGhost" href="/accounts-payable">Open accounts payable</Link>
+                <Link className="buttonGhost" href="/treasury/payment-runs">Open treasury</Link>
+              </div>
+            </Card>
 
               <Card title="Cash flow board" description="Treasury signal board across collections, payables, tax and close pressure.">
                 <FilterBar summary={`${overview.lines.length} cash flow streams in the active tenant`}>
@@ -432,6 +438,17 @@ export default function CashFlowPage() {
                           {action.label}
                         </button>
                       ))}
+                    </div>
+                    <div className="row gap wrap">
+                      <Link className="button secondary" href="/finance">
+                        Open finance
+                      </Link>
+                      <Link className="buttonGhost" href="/accounts-payable">
+                        Open accounts payable
+                      </Link>
+                      <Link className="buttonGhost" href="/treasury/payment-runs">
+                        Open treasury
+                      </Link>
                     </div>
 
                     {actionError ? <EmptyState title="Update blocked" description={actionError} /> : null}

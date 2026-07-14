@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,59 @@ function ErrorBanner({ error }: { error: PlatformApiErrorContract["error"] }) {
   );
 }
 
+function validateCompanyForm(input: ProvisionCompanyRequestContract) {
+  if (input.tradeName.trim().length < 2) {
+    return "Trade name must be specific before provisioning the tenant.";
+  }
+
+  if (input.legalName.trim().length < 3) {
+    return "Legal name must be specific before provisioning the tenant.";
+  }
+
+  if (input.taxId.trim().length < 6) {
+    return "Tax ID must contain enough information for the tenant.";
+  }
+
+  if (input.adminFullName.trim().length < 3) {
+    return "Admin full name must be specific before provisioning the tenant.";
+  }
+
+  if (!input.adminEmail.includes("@")) {
+    return "Admin email must be valid before provisioning the tenant.";
+  }
+
+  if (!input.timezone.includes("/")) {
+    return "Timezone must use an IANA zone such as America/Merida.";
+  }
+
+  if (!/^[A-Z]{3}$/.test(input.currency.trim().toUpperCase())) {
+    return "Currency must use a 3-letter code.";
+  }
+
+  if (input.fiscalCountry === "MX") {
+    if (input.currency !== "MXN") {
+      return "Mexican tenants must use MXN currency.";
+    }
+
+    if (!input.locale.startsWith("es-MX")) {
+      return "Mexican tenants must use an es-MX locale.";
+    }
+
+    if (!/^\d{3}$/.test(input.fiscalRegime.trim())) {
+      return "Fiscal regime must use a 3-digit SAT code for Mexican tenants.";
+    }
+  }
+
+  const operationalModules = input.enabledModules.filter(
+    (moduleKey) => !["platform.companies", "platform.identity"].includes(moduleKey)
+  );
+  if (operationalModules.length === 0) {
+    return "Enable at least one operational module in addition to the platform kernel.";
+  }
+
+  return null;
+}
+
 export default function PlatformCompaniesPage() {
   const {
     activeCompany,
@@ -56,6 +110,7 @@ export default function PlatformCompaniesPage() {
   } = useAppState();
   const [query, setQuery] = useState("");
   const [actionError, setActionError] = useState<PlatformApiErrorContract["error"] | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [lastProvisioned, setLastProvisioned] = useState<{
     companyName: string;
     temporaryPassword: string;
@@ -87,6 +142,13 @@ export default function PlatformCompaniesPage() {
         )
       ),
     [modules]
+  );
+  const selectedOperationalModules = useMemo(
+    () =>
+      companyForm.enabledModules.filter(
+        (moduleKey) => !["platform.companies", "platform.identity"].includes(moduleKey)
+      ),
+    [companyForm.enabledModules]
   );
 
   function toggleModule(moduleKey: string) {
@@ -131,6 +193,14 @@ export default function PlatformCompaniesPage() {
       </section>
 
       {actionError ? <ErrorBanner error={actionError} /> : null}
+      {actionMessage ? (
+        <Card title="Last tenant action" description="Latest successful platform-company action executed on the portfolio.">
+          <div className="tagRow">
+            <Badge tone="success">tenant updated</Badge>
+            <Badge tone="neutral">{actionMessage}</Badge>
+          </div>
+        </Card>
+      ) : null}
 
       {lastProvisioned ? (
         <Card title="Tenant provisioned" description="The backend issued the admin bootstrap credential for the newly created company.">
@@ -201,12 +271,13 @@ export default function PlatformCompaniesPage() {
                 render: (company) => (
                   <button
                     className="buttonGhost"
-                    type="button"
-                    onClick={() => {
-                      setActionError(null);
-                      setActiveCompanyId(company.id);
-                    }}
-                  >
+                  type="button"
+                  onClick={() => {
+                    setActionError(null);
+                    setActionMessage(null);
+                    setActiveCompanyId(company.id);
+                  }}
+                >
                     Open
                   </button>
                 )
@@ -319,6 +390,13 @@ export default function PlatformCompaniesPage() {
                 </div>
               </div>
             </div>
+            <div className="tagRow" style={{ marginTop: 16 }}>
+              {selectedOperationalModules.map((moduleKey) => (
+                <Badge key={moduleKey} tone="info">
+                  {getModuleByKey(moduleKey)?.name ?? moduleKey}
+                </Badge>
+              ))}
+            </div>
             <div className="emptyActions">
               <button
                 className="button"
@@ -326,11 +404,32 @@ export default function PlatformCompaniesPage() {
                 disabled={isProvisioningCompany}
                 onClick={async () => {
                   setActionError(null);
+                  setActionMessage(null);
                   setLastProvisioned(null);
+                  const normalizedForm = {
+                    ...companyForm,
+                    tradeName: companyForm.tradeName.trim(),
+                    legalName: companyForm.legalName.trim(),
+                    taxId: companyForm.taxId.trim().toUpperCase(),
+                    adminFullName: companyForm.adminFullName.trim(),
+                    adminEmail: companyForm.adminEmail.trim().toLowerCase(),
+                    currency: companyForm.currency.trim().toUpperCase(),
+                    timezone: companyForm.timezone.trim(),
+                    fiscalRegime: companyForm.fiscalRegime.trim()
+                  };
+                  const validationMessage = validateCompanyForm(normalizedForm);
+
+                  if (validationMessage) {
+                    setActionError({
+                      code: "PLATFORM_COMPANY_FORM_INVALID",
+                      message: validationMessage
+                    });
+                    return;
+                  }
 
                   const result = await createCompany({
-                    ...companyForm,
-                    enabledModules: companyForm.enabledModules.filter((moduleKey) => getModuleByKey(moduleKey))
+                    ...normalizedForm,
+                    enabledModules: normalizedForm.enabledModules.filter((moduleKey) => getModuleByKey(moduleKey))
                   });
 
                   if (result.error) {
@@ -343,6 +442,7 @@ export default function PlatformCompaniesPage() {
                       companyName: result.data.company.tradeName,
                       temporaryPassword: result.data.temporaryPassword
                     });
+                    setActionMessage(`${result.data.company.tradeName} provisioned with ${result.data.company.enabledModules.length} modules.`);
                     setCompanyForm(initialCompanyForm);
                     setActiveCompanyId(result.data.company.id);
                     await refreshCompanyDetail(result.data.company.id);
@@ -377,12 +477,23 @@ export default function PlatformCompaniesPage() {
                   <div className="detailLabel">Locale</div>
                   <div>{detail.settings.locale} · {detail.settings.timezone}</div>
                 </div>
-                <div className="detailRow">
-                  <div className="detailLabel">Fiscal</div>
-                  <div>{detail.settings.fiscalCountry} · regime {detail.settings.fiscalRegime}</div>
+              <div className="detailRow">
+                <div className="detailLabel">Fiscal</div>
+                <div>{detail.settings.fiscalCountry} · regime {detail.settings.fiscalRegime}</div>
+              </div>
+              <div className="detailRow">
+                <div className="detailLabel">Tenant actions</div>
+                <div className="row gap wrap">
+                  <Link className="button secondary" href="/platform/settings">
+                    Open settings
+                  </Link>
+                  <Link className="buttonGhost" href="/platform/users">
+                    Open users
+                  </Link>
                 </div>
               </div>
-            ) : (
+            </div>
+          ) : (
               <EmptyState
                 title="Company detail not loaded yet"
                 description="The list is already available, but tenant detail still falls back until the company detail endpoint responds."

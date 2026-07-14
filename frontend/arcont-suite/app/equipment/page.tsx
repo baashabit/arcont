@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -132,6 +133,62 @@ function buildEquipmentStory(machine: MachineItemContract | null, bridge: Equipm
   };
 }
 
+function validateMachineCreateForm(input: {
+  availabilityPercent: number;
+  utilizationPercent: number;
+  hourMeter: number;
+  nextMaintenanceHours: number;
+  maintenanceBacklog: number;
+  openFailures: number;
+  criticalOpenFailures: number;
+  status: MachineItemContract["status"];
+  health: MachineItemContract["health"];
+}) {
+  if (!Number.isFinite(input.availabilityPercent) || input.availabilityPercent < 0 || input.availabilityPercent > 100) {
+    return "Availability must stay between 0% and 100%.";
+  }
+
+  if (!Number.isFinite(input.utilizationPercent) || input.utilizationPercent < 0 || input.utilizationPercent > 100) {
+    return "Utilization must stay between 0% and 100%.";
+  }
+
+  if (!Number.isFinite(input.hourMeter) || input.hourMeter < 0) {
+    return "Hour meter must be zero or greater.";
+  }
+
+  if (!Number.isFinite(input.nextMaintenanceHours) || input.nextMaintenanceHours < 0) {
+    return "Next maintenance hours must be zero or greater.";
+  }
+
+  if (!Number.isFinite(input.maintenanceBacklog) || input.maintenanceBacklog < 0) {
+    return "Maintenance backlog must be zero or greater.";
+  }
+
+  if (!Number.isFinite(input.openFailures) || input.openFailures < 0) {
+    return "Open failures must be zero or greater.";
+  }
+
+  if (!Number.isFinite(input.criticalOpenFailures) || input.criticalOpenFailures < 0) {
+    return "Critical failures must be zero or greater.";
+  }
+
+  if (input.openFailures < input.criticalOpenFailures) {
+    return "Open failures cannot be lower than critical failures.";
+  }
+
+  if (input.status === "available" && input.criticalOpenFailures > 0) {
+    return "Available status is blocked while critical failures remain open.";
+  }
+
+  if (
+    input.health === "healthy" &&
+    (input.criticalOpenFailures > 0 || input.nextMaintenanceHours <= 0 || input.maintenanceBacklog > 0)
+  ) {
+    return "Healthy status requires no critical failures and no overdue maintenance pressure.";
+  }
+
+  return null;
+}
 export default function EquipmentPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<EquipmentOverviewContract | null>(null);
@@ -390,6 +447,17 @@ export default function EquipmentPage() {
     const projectName = createForm.projectName.trim();
     const frontName = createForm.frontName.trim();
     const nextAction = createForm.nextAction.trim();
+    const numericInput = {
+      availabilityPercent: Number(createForm.availabilityPercent),
+      utilizationPercent: Number(createForm.utilizationPercent),
+      hourMeter: Number(createForm.hourMeter),
+      nextMaintenanceHours: Number(createForm.nextMaintenanceHours),
+      maintenanceBacklog: Number(createForm.maintenanceBacklog),
+      openFailures: Number(createForm.openFailures),
+      criticalOpenFailures: Number(createForm.criticalOpenFailures),
+      status: createForm.status,
+      health: createForm.health
+    };
 
     if (machineName.length < 3 || machineType.length < 3 || projectName.length < 3 || frontName.length < 3) {
       setActionError("Machine, type, project and front must be specific before creating equipment.");
@@ -403,6 +471,12 @@ export default function EquipmentPage() {
       return;
     }
 
+    const numericValidation = validateMachineCreateForm(numericInput);
+    if (numericValidation) {
+      setActionError(numericValidation);
+      setCreateMessage(null);
+      return;
+    }
     setIsCreating(true);
     setActionError(null);
     setCreateMessage(null);
@@ -416,13 +490,13 @@ export default function EquipmentPage() {
         frontName,
         status: createForm.status,
         health: createForm.health,
-        availabilityPercent: Number(createForm.availabilityPercent),
-        utilizationPercent: Number(createForm.utilizationPercent),
-        hourMeter: Number(createForm.hourMeter),
-        nextMaintenanceHours: Number(createForm.nextMaintenanceHours),
-        maintenanceBacklog: Number(createForm.maintenanceBacklog),
-        openFailures: Number(createForm.openFailures),
-        criticalOpenFailures: Number(createForm.criticalOpenFailures),
+        availabilityPercent: numericInput.availabilityPercent,
+        utilizationPercent: numericInput.utilizationPercent,
+        hourMeter: numericInput.hourMeter,
+        nextMaintenanceHours: numericInput.nextMaintenanceHours,
+        maintenanceBacklog: numericInput.maintenanceBacklog,
+        openFailures: numericInput.openFailures,
+        criticalOpenFailures: numericInput.criticalOpenFailures,
         nextAction
       },
       {
@@ -650,6 +724,17 @@ export default function EquipmentPage() {
                         <span className="tableCellMuted">Available is blocked while maintenance is overdue.</span>
                         <span className="tableCellMuted">Available is blocked while critical failures remain open.</span>
                         <span className="tableCellMuted">Healthy requires available status and no blocking conditions.</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Linked actions</div>
+                      <div className="row gap wrap">
+                        <Link className="button secondary" href="/inventory/movements">
+                          Open movements
+                        </Link>
+                        <Link className="buttonGhost" href="/quality">
+                          Open quality
+                        </Link>
                       </div>
                     </div>
                     <div className="detailRow">

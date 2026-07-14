@@ -475,6 +475,17 @@ export default function FinancePage() {
                             </button>
                           ))}
                         </div>
+                        <div className="row gap wrap">
+                          <Link className="button secondary" href="/cash-flow">
+                            Open cash flow
+                          </Link>
+                          <Link className="buttonGhost" href="/accounts-payable">
+                            Open accounts payable
+                          </Link>
+                          <Link className="buttonGhost" href="/treasury/payment-runs">
+                            Open treasury
+                          </Link>
+                        </div>
                         {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
                         {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
                       </div>
@@ -552,6 +563,8 @@ export default function FinancePage() {
                 <div className="detailGrid">
                   <div className="detailRow"><div className="detailLabel">Supplier exceptions</div><div>{overview.summary.supplierExceptions}</div></div>
                   <div className="detailRow"><div className="detailLabel">Payment-ready suppliers</div><div>{overview.summary.paymentReadySuppliers}</div></div>
+                  <div className="detailRow"><div className="detailLabel">AP focus</div><div>{accountsPayableOverview?.focusInvoice?.code ?? "No payable invoice focus"}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Treasury focus</div><div>{treasuryOverview?.focusRun?.code ?? "No treasury focus"}</div></div>
                   <div className="detailRow"><div className="detailLabel">Why it matters</div><div>Invoices and treasury release now depend on real supplier fiscal posture, not only on invoice-side CFDI data.</div></div>
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>

@@ -43,7 +43,7 @@ ARCONT is split into two macro domains:
 
 Requirements:
 
-- Node.js 22+
+- Node.js 24+
 - npm 10+
 - Docker / Docker Compose for PostgreSQL when running the persistent backend
 
@@ -62,8 +62,10 @@ npm run dev:api
 Run PostgreSQL locally:
 
 ```bash
+npm run env:doctor
 docker compose up -d postgres
-npm run db:migrate -w @arcont/api
+npm run demo:prepare
+npm run demo:verify
 ```
 
 Run the web app:

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -12,6 +13,7 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { SupplierControlLineContract, SupplierControlOverviewContract } from "@/lib/contracts";
 import {
+  createSupplierControlLine,
   fetchInventoryReceivingOverview,
   fetchProcurementPurchaseOrdersOverview,
   fetchSupplierControlOverview,
@@ -120,6 +122,49 @@ function buildSupplierBridge(line: SupplierControlLineContract | null, bridge: S
   };
 }
 
+function validateSupplierCreateForm(input: {
+  awardedPackages: number;
+  activePackages: number;
+  contractedAmount: number;
+  concentrationPercent: number;
+  bidCoverage: number;
+  approvalPressureHours: number;
+  complianceAlerts: number;
+}) {
+  if (!Number.isFinite(input.awardedPackages) || input.awardedPackages < 0) {
+    return "Awarded packages must be zero or greater.";
+  }
+
+  if (!Number.isFinite(input.activePackages) || input.activePackages < 0) {
+    return "Active packages must be zero or greater.";
+  }
+
+  if (input.awardedPackages < input.activePackages) {
+    return "Awarded packages cannot be lower than active packages.";
+  }
+
+  if (!Number.isFinite(input.contractedAmount) || input.contractedAmount <= 0) {
+    return "Contracted amount must be greater than zero.";
+  }
+
+  if (!Number.isFinite(input.concentrationPercent) || input.concentrationPercent < 0 || input.concentrationPercent > 100) {
+    return "Concentration must stay between 0% and 100%.";
+  }
+
+  if (!Number.isFinite(input.bidCoverage) || input.bidCoverage < 0 || input.bidCoverage > 10) {
+    return "Bid coverage must stay between 0 and 10.";
+  }
+
+  if (!Number.isFinite(input.approvalPressureHours) || input.approvalPressureHours < 0) {
+    return "Approval pressure must be zero or greater.";
+  }
+
+  if (!Number.isFinite(input.complianceAlerts) || input.complianceAlerts < 0) {
+    return "Compliance alerts must be zero or greater.";
+  }
+
+  return null;
+}
 export default function SupplierControlPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<SupplierControlOverviewContract | null>(null);
@@ -272,14 +317,23 @@ export default function SupplierControlPage() {
     setIsSaving(false);
   }
 
-  function handleCreateSupplier() {
-    if (!overview) {
+  async function handleCreateSupplier() {
+    if (!overview || !session.accessToken) {
       return;
     }
 
     const supplierName = createForm.supplierName.trim();
     const owner = createForm.owner.trim();
     const nextAction = createForm.nextAction.trim();
+    const numericInput = {
+      awardedPackages: Number(createForm.awardedPackages),
+      activePackages: Number(createForm.activePackages),
+      contractedAmount: Number(createForm.contractedAmount),
+      concentrationPercent: Number(createForm.concentrationPercent),
+      bidCoverage: Number(createForm.bidCoverage),
+      approvalPressureHours: Number(createForm.approvalPressureHours),
+      complianceAlerts: Number(createForm.complianceAlerts)
+    };
 
     if (supplierName.length < 3 || owner.length < 3) {
       setActionError("Supplier name and owner must be specific before creating the supplier lane.");
@@ -293,34 +347,48 @@ export default function SupplierControlPage() {
       return;
     }
 
-    const now = new Date();
-    const lineId = `local-supplier-line-${now.getTime()}`;
-    const supplierId = `local-supplier-${overview.lines.length + 1}`;
+    const numericValidation = validateSupplierCreateForm(numericInput);
+    if (numericValidation) {
+      setActionError(numericValidation);
+      setCreateMessage(null);
+      return;
+    }
 
-    const newLine: SupplierControlLineContract = {
-      id: lineId,
-      supplierId,
-      companyId: activeCompany.id,
-      supplierName,
-      owner,
-      awardedPackages: Number(createForm.awardedPackages),
-      activePackages: Number(createForm.activePackages),
-      contractedAmount: Number(createForm.contractedAmount),
-      concentrationPercent: Number(createForm.concentrationPercent),
-      bidCoverage: Number(createForm.bidCoverage),
-      deliveryHealth: createForm.deliveryHealth,
-      approvalPressureHours: Number(createForm.approvalPressureHours),
-      complianceAlerts: Number(createForm.complianceAlerts),
-      nextAction,
-      updatedAt: now.toISOString()
-    };
+    const response = await createSupplierControlLine(
+      activeCompany.id,
+      {
+        supplierName,
+        owner,
+        awardedPackages: numericInput.awardedPackages,
+        activePackages: numericInput.activePackages,
+        contractedAmount: numericInput.contractedAmount,
+        concentrationPercent: numericInput.concentrationPercent,
+        bidCoverage: numericInput.bidCoverage,
+        deliveryHealth: createForm.deliveryHealth,
+        approvalPressureHours: numericInput.approvalPressureHours,
+        complianceAlerts: numericInput.complianceAlerts,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Supplier creation failed.");
+      setCreateMessage(null);
+      return;
+    }
+
+    const createdLine = response.data;
 
     setOverview((current) => {
       if (!current) {
         return current;
       }
 
-      const lines = [...current.lines, newLine];
+      const lines = [createdLine, ...current.lines];
       return {
         ...current,
         summary: recomputeSummary(lines),
@@ -328,7 +396,7 @@ export default function SupplierControlPage() {
         focusLine: pickFocusLine(lines)
       };
     });
-    setSelectedLineId(lineId);
+    setSelectedLineId(createdLine.id);
     setNextActionDraft(nextAction);
     setActionError(null);
     setCreateMessage(`${supplierName} added to the supplier workbench.`);
@@ -507,6 +575,14 @@ export default function SupplierControlPage() {
                         </button>
                       ))}
                     </div>
+                    <div className="row gap wrap">
+                      <Link className="button secondary" href="/procurement/purchase-orders">
+                        Open purchase orders
+                      </Link>
+                      <Link className="buttonGhost" href="/inventory/receiving">
+                        Open receiving
+                      </Link>
+                    </div>
 
                     {actionError ? <EmptyState title="Update blocked" description={actionError} /> : null}
                     {actionMessage ? <EmptyState title="Supplier updated" description={actionMessage} /> : null}
@@ -523,7 +599,7 @@ export default function SupplierControlPage() {
             <section className="grid cols2">
               <Card
                 title="Register supplier lane"
-                description="Create a new supplier-control record in the tenant workbench before live POST endpoints are added."
+                description="Create a new supplier-control record directly in the tenant backend."
               >
                 <div className="detailGrid">
                   <label className="detailRow">
@@ -657,7 +733,7 @@ export default function SupplierControlPage() {
                 </div>
 
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
-                  <button type="button" className="button" onClick={handleCreateSupplier}>
+                  <button type="button" className="button" onClick={() => void handleCreateSupplier()}>
                     Add supplier lane
                   </button>
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
@@ -666,12 +742,12 @@ export default function SupplierControlPage() {
 
               <Card
                 title="Workbench rules"
-                description="The creation flow stays coherent now and maps cleanly to a future backend endpoint."
+                description="The creation flow now writes directly into the tenant workbench and stays aligned with backend rules."
               >
                 <div className="detailGrid">
                   <div className="detailRow">
                     <div className="detailLabel">Scope</div>
-                    <div>New supplier lanes stay in the active tenant session and immediately reshape concentration metrics.</div>
+                    <div>New supplier lanes are stored in the active tenant and immediately reshape concentration metrics.</div>
                   </div>
                   <div className="detailRow">
                     <div className="detailLabel">Selection</div>
@@ -679,7 +755,7 @@ export default function SupplierControlPage() {
                   </div>
                   <div className="detailRow">
                     <div className="detailLabel">Backend path</div>
-                    <div>This same intake can later point to `POST /supplier-control/lines` without changing the UX.</div>
+                    <div>This intake already uses `POST /supplier-control/lines` and remains consistent with future procurement integrations.</div>
                   </div>
                 </div>
               </Card>

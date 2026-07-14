@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getPostgresPool, closePostgresPool } from "../db/postgres.js";
+import { seedCatalogs } from "../repositories/platform-repository.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(__dirname, "../../db/migrations");
@@ -39,6 +40,8 @@ async function main() {
       await client.query("insert into schema_migrations (id) values ($1)", [file]);
       await client.query("commit");
     }
+
+    await seedCatalogs(client);
   } catch (error) {
     await client.query("rollback");
     throw error;

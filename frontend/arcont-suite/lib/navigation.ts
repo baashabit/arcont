@@ -161,6 +161,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["procurement:*"]
   },
   {
+    href: "/supplier-master",
+    label: "Supplier Master",
+    description: "Fiscal and commercial packet",
+    domain: "procurement",
+    moduleKeys: ["procurement.purchasing"],
+    requiredPermissions: ["procurement:*", "finance:*", "finance:read"]
+  },
+  {
     href: "/cost-control",
     label: "Cost Control",
     description: "Budget, forecast and drift",
@@ -204,6 +212,22 @@ export const navigationItems: NavigationItem[] = [
     href: "/finance",
     label: "Finance",
     description: "Treasury and close",
+    domain: "finance",
+    moduleKeys: ["finance.accounting"],
+    requiredPermissions: ["finance:*", "finance:read"]
+  },
+  {
+    href: "/accounts-payable",
+    label: "Accounts Payable",
+    description: "Invoices, CFDI and payment run",
+    domain: "finance",
+    moduleKeys: ["finance.accounting"],
+    requiredPermissions: ["finance:*", "finance:read"]
+  },
+  {
+    href: "/treasury/payment-runs",
+    label: "Payment Runs",
+    description: "Treasury disbursement batches",
     domain: "finance",
     moduleKeys: ["finance.accounting"],
     requiredPermissions: ["finance:*", "finance:read"]
