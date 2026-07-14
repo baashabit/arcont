@@ -146,6 +146,9 @@ function primaryHrefForTask(task: BlackboardTask) {
 export default function OperationsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [tasks, setTasks] = useState<BlackboardTask[]>([]);
+  const [laneFilter, setLaneFilter] = useState<"all" | BlackboardTask["lane"]>("all");
+  const [domainFilter, setDomainFilter] = useState("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -780,36 +783,54 @@ export default function OperationsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const domainOptions = useMemo(() => Array.from(new Set(tasks.map((task) => task.domain))).sort((left, right) => left.localeCompare(right)), [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return tasks.filter((task) => {
+      const matchesLane = laneFilter === "all" || task.lane === laneFilter;
+      const matchesDomain = domainFilter === "all" || task.domain === domainFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        task.title.toLowerCase().includes(normalizedSearch) ||
+        task.detail.toLowerCase().includes(normalizedSearch) ||
+        task.owner.toLowerCase().includes(normalizedSearch) ||
+        task.dueLabel.toLowerCase().includes(normalizedSearch);
+
+      return matchesLane && matchesDomain && matchesSearch;
+    });
+  }, [domainFilter, laneFilter, searchFilter, tasks]);
+
   const lanes = useMemo(
     () => ({
-      new: tasks.filter((task) => task.lane === "new"),
-      in_progress: tasks.filter((task) => task.lane === "in_progress"),
-      risk: tasks.filter((task) => task.lane === "risk"),
-      closed: tasks.filter((task) => task.lane === "closed")
+      new: filteredTasks.filter((task) => task.lane === "new"),
+      in_progress: filteredTasks.filter((task) => task.lane === "in_progress"),
+      risk: filteredTasks.filter((task) => task.lane === "risk"),
+      closed: filteredTasks.filter((task) => task.lane === "closed")
     }),
-    [tasks]
+    [filteredTasks]
   );
 
   const summary = useMemo(() => {
-    const openTasks = tasks.filter((task) => task.lane !== "closed");
-    const dueSoon = tasks.filter((task) => task.lane === "new" || task.lane === "risk");
-    const criticalResolved = tasks.filter((task) => task.lane === "closed" && task.severity === "critical").length;
-    const complianceRate = tasks.length > 0 ? Math.round(((tasks.length - lanes.risk.length) / tasks.length) * 100) : 0;
+    const openTasks = filteredTasks.filter((task) => task.lane !== "closed");
+    const dueSoon = filteredTasks.filter((task) => task.lane === "new" || task.lane === "risk");
+    const criticalResolved = filteredTasks.filter((task) => task.lane === "closed" && task.severity === "critical").length;
+    const complianceRate = filteredTasks.length > 0 ? Math.round(((filteredTasks.length - lanes.risk.length) / filteredTasks.length) * 100) : 0;
 
     return {
       openTasks: openTasks.length,
       dueSoon: dueSoon.length,
       complianceRate,
       criticalResolved,
-      fieldChainPressure: tasks.filter((task) =>
+      fieldChainPressure: filteredTasks.filter((task) =>
         ["Daily log", "Field materials", "Quality", "Equipment", "Document control", "Procurement", "POs"].includes(task.domain)
       ).length
     };
-  }, [lanes.risk.length, tasks]);
+  }, [filteredTasks, lanes.risk.length]);
 
   const priorityActions = useMemo(
-    () => tasks.filter((task) => task.lane === "risk" || task.severity === "critical").slice(0, 4),
-    [tasks]
+    () => filteredTasks.filter((task) => task.lane === "risk" || task.severity === "critical").slice(0, 4),
+    [filteredTasks]
   );
   const ownerWorkload = useMemo(() => {
     const grouped = new Map<
@@ -823,7 +844,7 @@ export default function OperationsPage() {
       }
     >();
 
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       const current = grouped.get(task.owner);
       if (current) {
         current.total += 1;
@@ -852,7 +873,7 @@ export default function OperationsPage() {
         return right.total - left.total;
       })
       .slice(0, 6);
-  }, [tasks]);
+  }, [filteredTasks]);
   const domainBlockers = useMemo(() => {
     const grouped = new Map<
       string,
@@ -865,7 +886,7 @@ export default function OperationsPage() {
       }
     >();
 
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       const current = grouped.get(task.domain);
       const taskRisk = task.lane === "risk" || task.severity === "critical" ? 1 : 0;
       if (current) {
@@ -890,7 +911,7 @@ export default function OperationsPage() {
         return right.total - left.total;
       })
       .slice(0, 6);
-  }, [tasks]);
+  }, [filteredTasks]);
 
   return (
     <AppShell
@@ -1013,11 +1034,36 @@ export default function OperationsPage() {
               </Card>
 
               <Card title="Signals by owner and domain" description="Focused table to decide who must move next and from which area.">
-                <FilterBar summary={`${tasks.length} live cross-domain signals`}>
+                <FilterBar summary={`${filteredTasks.length} live cross-domain signals match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Lane
+                    <select className="field" value={laneFilter} onChange={(event) => setLaneFilter(event.target.value as typeof laneFilter)}>
+                      <option value="all">All</option>
+                      <option value="new">New</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="risk">Risk</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Domain
+                    <select className="field" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
+                      <option value="all">All</option>
+                      {domainOptions.map((domain) => (
+                        <option key={domain} value={domain}>
+                          {domain}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input className="field" type="search" value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder="Signal, owner, detail or next label" />
+                  </label>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "board ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={tasks}
+                  rows={filteredTasks}
                   columns={[
                     {
                       key: "task",
