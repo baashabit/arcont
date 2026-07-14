@@ -271,6 +271,22 @@ function QualityPageContent() {
   }, [areaFilter, overview, projectFilter]);
 
   useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredInspections.length === 0) {
+      setSelectedInspectionId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredInspections.some((item) => item.id === selectedInspectionId);
+    if (!isSelectedVisible) {
+      setSelectedInspectionId(filteredInspections[0]?.id ?? null);
+    }
+  }, [filteredInspections, overview, selectedInspectionId]);
+
+  useEffect(() => {
     const nextParams = new URLSearchParams(searchParams.toString());
 
     if (projectFilter === "all") {

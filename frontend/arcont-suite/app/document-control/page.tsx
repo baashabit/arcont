@@ -306,6 +306,22 @@ function DocumentControlPageContent() {
   }, [documentTypeFilter, overview, projectFilter]);
 
   useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredItems.length === 0) {
+      setSelectedItemId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredItems.some((item) => item.id === selectedItemId);
+    if (!isSelectedVisible) {
+      setSelectedItemId(filteredItems[0]?.id ?? null);
+    }
+  }, [filteredItems, overview, selectedItemId]);
+
+  useEffect(() => {
     const nextParams = new URLSearchParams(searchParams.toString());
 
     if (projectFilter === "all") {
