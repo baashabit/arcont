@@ -97,6 +97,8 @@ export default function FinancePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [satFilter, setSatFilter] = useState<"all" | FinanceLedgerItemContract["satStatus"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -157,9 +159,55 @@ export default function FinancePage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredItems = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.items.filter((item) => {
+      const matchesSat = satFilter === "all" || item.satStatus === satFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.metricName.toLowerCase().includes(normalizedSearch) ||
+        item.code.toLowerCase().includes(normalizedSearch) ||
+        item.valueLabel.toLowerCase().includes(normalizedSearch);
+
+      return matchesSat && matchesSearch;
+    });
+  }, [overview, satFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const cashPosition = filteredItems.reduce((sum, item) => sum + item.cashImpact, 0);
+    const urgentPayables = filteredItems.reduce((sum, item) => sum + item.urgentItems, 0);
+    const closeReadiness =
+      filteredItems.length > 0
+        ? Number((filteredItems.reduce((sum, item) => sum + item.closeReadiness, 0) / filteredItems.length).toFixed(1))
+        : 0;
+    const satStatusSummary: FinanceLedgerItemContract["satStatus"] = filteredItems.some((item) => item.satStatus === "critical")
+      ? "critical"
+      : filteredItems.some((item) => item.satStatus === "watch")
+        ? "watch"
+        : "controlled";
+
+    return {
+      cashPosition,
+      urgentPayables,
+      closeReadiness,
+      satStatus: satStatusSummary,
+      supplierExceptions: overview?.summary.supplierExceptions ?? 0,
+      paymentReadySuppliers: overview?.summary.paymentReadySuppliers ?? 0,
+      blockedTreasuryRuns: overview?.summary.blockedTreasuryRuns ?? 0,
+      unavailableTreasuryInvoices: overview?.summary.unavailableTreasuryInvoices ?? 0,
+      overdueCollections: overview?.summary.overdueCollections ?? 0,
+      criticalCollections: overview?.summary.criticalCollections ?? 0,
+      financeChainPressure: overview?.summary.financeChainPressure ?? 0
+    };
+  }, [filteredItems, overview]);
+
   const selectedItem = useMemo(
-    () => overview?.items.find((item) => item.id === selectedItemId) ?? overview?.focusItem ?? null,
-    [overview, selectedItemId]
+    () => filteredItems.find((item) => item.id === selectedItemId) ?? filteredItems[0] ?? null,
+    [filteredItems, selectedItemId]
   );
 
   const selectedRisks = useMemo(
@@ -169,6 +217,22 @@ export default function FinancePage() {
 
   const selectedStory = useMemo(() => buildFinanceStory(selectedItem, selectedRisks.length), [selectedItem, selectedRisks.length]);
   const actionOptions = useMemo(() => (selectedItem ? financeActionOptions(selectedItem) : []), [selectedItem]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredItems.length === 0) {
+      setSelectedItemId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredItems.some((item) => item.id === selectedItemId);
+    if (!isSelectedVisible) {
+      setSelectedItemId(filteredItems[0]?.id ?? null);
+    }
+  }, [filteredItems, overview, selectedItemId]);
 
   useEffect(() => {
     setNoteDraft(selectedItem?.note ?? "");
@@ -271,33 +335,33 @@ export default function FinancePage() {
             <section className="grid cols4">
               <KpiCard
                 label="Cash position"
-                value={`MXN ${overview.summary.cashPosition.toLocaleString()}`}
+                value={`MXN ${filteredSummary.cashPosition.toLocaleString()}`}
                 footnote="Net operating cash posture from the current finance set."
               />
               <KpiCard
                 label="Urgent payables"
-                value={String(overview.summary.urgentPayables)}
+                value={String(filteredSummary.urgentPayables)}
                 footnote="Items pushing the next payment run and approval pressure."
               />
               <KpiCard
                 label="Close readiness"
-                value={`${overview.summary.closeReadiness}%`}
+                value={`${filteredSummary.closeReadiness}%`}
                 footnote="Readiness level for close and supporting evidence."
               />
               <KpiCard
                 label="SAT posture"
-                value={overview.summary.satStatus}
+                value={filteredSummary.satStatus}
                 footnote="Fiscal control signal tied to current exceptions and complements."
-                badge={{ label: "fiscal", tone: satTone(overview.summary.satStatus) }}
+                badge={{ label: "fiscal", tone: satTone(filteredSummary.satStatus) }}
               />
               <KpiCard
                 label="Supplier exceptions"
-                value={String(overview.summary.supplierExceptions)}
+                value={String(filteredSummary.supplierExceptions)}
                 footnote="Suppliers still blocked, critical or fiscally incomplete."
               />
               <KpiCard
                 label="Finance chain pressure"
-                value={String(overview.summary.financeChainPressure)}
+                value={String(filteredSummary.financeChainPressure)}
                 footnote="Combined friction across supplier master, AP and treasury release lane."
               />
             </section>
@@ -359,14 +423,30 @@ export default function FinancePage() {
               </Card>
 
               <Card title="Finance board" description="Treasury, payables and close-readiness in one live view.">
-                <FilterBar summary={`${overview.items.length} finance signals in the active tenant`}>
+                <FilterBar summary={`${filteredItems.length} finance signals in the active tenant`}>
+                  <select
+                    className="selectField"
+                    value={satFilter}
+                    onChange={(event) => setSatFilter(event.target.value as "all" | FinanceLedgerItemContract["satStatus"])}
+                  >
+                    <option value="all">All SAT</option>
+                    <option value="controlled">controlled</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search metric, code or value"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "finance ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.items}
+                  rows={filteredItems}
                   columns={[
                     {
                       key: "metric",
