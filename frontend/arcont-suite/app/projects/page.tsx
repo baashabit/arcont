@@ -229,6 +229,9 @@ export default function ProjectsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | ProjectPortfolioItemContract["status"]>("all");
+  const [budgetHealthFilter, setBudgetHealthFilter] = useState<"all" | ProjectPortfolioItemContract["budgetHealth"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextMilestoneDraft, setNextMilestoneDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -296,9 +299,31 @@ export default function ProjectsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredProjects = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.projects.filter((project) => {
+      const matchesStatus = statusFilter === "all" || project.status === statusFilter;
+      const matchesBudget = budgetHealthFilter === "all" || project.budgetHealth === budgetHealthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        project.name.toLowerCase().includes(normalizedSearch) ||
+        project.code.toLowerCase().includes(normalizedSearch) ||
+        project.client.toLowerCase().includes(normalizedSearch) ||
+        project.nextMilestone.toLowerCase().includes(normalizedSearch);
+
+      return matchesStatus && matchesBudget && matchesSearch;
+    });
+  }, [budgetHealthFilter, overview, searchFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredProjects), [filteredProjects]);
+
   const selectedProject = useMemo(
-    () => overview?.projects.find((project) => project.id === selectedProjectId) ?? overview?.focusProject ?? null,
-    [overview, selectedProjectId]
+    () => filteredProjects.find((project) => project.id === selectedProjectId) ?? filteredProjects[0] ?? null,
+    [filteredProjects, selectedProjectId]
   );
 
   const selectedRisks = useMemo(
@@ -312,6 +337,22 @@ export default function ProjectsPage() {
   );
 
   const actionOptions = useMemo(() => (selectedProject ? projectActionOptions(selectedProject) : []), [selectedProject]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredProjects.length === 0) {
+      setSelectedProjectId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredProjects.some((project) => project.id === selectedProjectId);
+    if (!isSelectedVisible) {
+      setSelectedProjectId(filteredProjects[0]?.id ?? null);
+    }
+  }, [filteredProjects, overview, selectedProjectId]);
 
   useEffect(() => {
     setNextMilestoneDraft(selectedProject?.nextMilestone ?? "");
@@ -468,29 +509,29 @@ export default function ProjectsPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Active fronts"
-                value={String(overview.summary.activeProjects)}
+                value={String(filteredSummary.activeProjects)}
                 footnote="Live portfolio count scoped to the active tenant."
               />
               <KpiCard
                 label="Average progress"
-                value={`${overview.summary.averageProgress}%`}
+                value={`${filteredSummary.averageProgress}%`}
                 footnote="Average physical progress across active execution work."
               />
               <KpiCard
                 label="Quality holds"
-                value={String(overview.summary.qualityHolds)}
+                value={String(filteredSummary.qualityHolds)}
                 footnote="Open quality pressure points that still affect flow."
                 badge={{ label: "field control", tone: "warning" }}
               />
               <KpiCard
                 label="Permit blockers"
-                value={String(overview.summary.permitBlockers)}
+                value={String(filteredSummary.permitBlockers)}
                 footnote="Critical blockers tied to permits, release or supervision."
-                badge={{ label: "watchlist", tone: overview.summary.permitBlockers > 0 ? "danger" : "success" }}
+                badge={{ label: "watchlist", tone: filteredSummary.permitBlockers > 0 ? "danger" : "success" }}
               />
               <KpiCard
                 label="Execution risk"
-                value={String(overview.summary.executionRiskProjects)}
+                value={String(filteredSummary.executionRiskProjects)}
                 footnote="Projects where field log, quality or subcontract posture already signal execution risk."
               />
             </section>
@@ -515,14 +556,51 @@ export default function ProjectsPage() {
 
             <section className="grid cols2">
               <Card title="Project portfolio" description="Execution snapshot for PMO, supervision and directors.">
-                <FilterBar summary={`${overview.projects.length} projects in the tenant portfolio`}>
+                <FilterBar summary={`${filteredProjects.length} projects match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Status
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                      <option value="all">All</option>
+                      <option value="planning">Planning</option>
+                      <option value="active">Active</option>
+                      <option value="at_risk">At risk</option>
+                      <option value="blocked">Blocked</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Budget
+                    <select className="field" value={budgetHealthFilter} onChange={(event) => setBudgetHealthFilter(event.target.value as typeof budgetHealthFilter)}>
+                      <option value="all">All</option>
+                      <option value="on_track">On track</option>
+                      <option value="warning">Warning</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Project, code, client or milestone"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "portfolio ready"}</Badge>
+                  <Badge tone={filteredSummary.executionRiskProjects > 0 ? "danger" : filteredSummary.permitBlockers > 0 ? "warning" : "success"}>
+                    {filteredSummary.executionRiskProjects > 0
+                      ? `${filteredSummary.executionRiskProjects} at risk`
+                      : filteredSummary.permitBlockers > 0
+                        ? `${filteredSummary.permitBlockers} permit blockers`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.projects}
+                  rows={filteredProjects}
                   columns={[
                     {
                       key: "project",
