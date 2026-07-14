@@ -114,6 +114,9 @@ export default function CloseControlPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | CloseControlLineContract["closeHealth"]>("all");
+  const [streamFilter, setStreamFilter] = useState<"all" | CloseControlLineContract["streamType"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -157,9 +160,31 @@ export default function CloseControlPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredLines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.lines.filter((line) => {
+      const matchesHealth = healthFilter === "all" || line.closeHealth === healthFilter;
+      const matchesStream = streamFilter === "all" || line.streamType === streamFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        line.streamName.toLowerCase().includes(normalizedSearch) ||
+        line.code.toLowerCase().includes(normalizedSearch) ||
+        line.streamType.toLowerCase().includes(normalizedSearch) ||
+        line.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesStream && matchesSearch;
+    });
+  }, [healthFilter, overview, searchFilter, streamFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLines), [filteredLines]);
+
   const selectedLine = useMemo(
-    () => overview?.lines.find((item) => item.id === selectedLineId) ?? overview?.focusLine ?? null,
-    [overview, selectedLineId]
+    () => filteredLines.find((item) => item.id === selectedLineId) ?? filteredLines[0] ?? null,
+    [filteredLines, selectedLineId]
   );
 
   const selectedRisks = useMemo(
@@ -170,6 +195,22 @@ export default function CloseControlPage() {
   const selectedStory = useMemo(() => buildCloseStory(selectedLine, selectedRisks.length), [selectedLine, selectedRisks.length]);
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLines.length === 0) {
+      setSelectedLineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLines.some((line) => line.id === selectedLineId);
+    if (!isSelectedVisible) {
+      setSelectedLineId(filteredLines[0]?.id ?? null);
+    }
+  }, [filteredLines, overview, selectedLineId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLine?.nextAction ?? "");
@@ -247,36 +288,71 @@ export default function CloseControlPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Tracked streams"
-                value={String(overview.summary.trackedStreams)}
-                footnote="Finance, compliance and document streams participating in the close."
+                value={String(filteredSummary.trackedStreams)}
+                footnote="Finance, compliance and document streams visible in the current filter."
               />
               <KpiCard
                 label="Readiness"
-                value={`${overview.summary.averageCloseReadiness}%`}
-                footnote="Average close readiness across the active close room."
+                value={`${filteredSummary.averageCloseReadiness}%`}
+                footnote="Average close readiness across the visible close subset."
               />
               <KpiCard
                 label="Blocked items"
-                value={String(overview.summary.blockedItems)}
-                footnote="Open blockers still preventing a clean close checkpoint."
+                value={String(filteredSummary.blockedItems)}
+                footnote="Open blockers still preventing a clean visible close checkpoint."
               />
               <KpiCard
                 label="Fiscal exposure"
-                value={`MXN ${overview.summary.fiscalExposure.toLocaleString()}`}
-                footnote="Directional exposure still linked to fiscal, evidence or closing exceptions."
+                value={`MXN ${filteredSummary.fiscalExposure.toLocaleString()}`}
+                footnote="Directional exposure still linked to the visible close subset."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Close board" description="Live close control across finance, compliance and document evidence.">
-                <FilterBar summary={`${overview.lines.length} close streams in the active tenant`}>
+                <FilterBar summary={`${filteredLines.length} close streams match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="controlled">Controlled</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Stream
+                    <select className="field" value={streamFilter} onChange={(event) => setStreamFilter(event.target.value as typeof streamFilter)}>
+                      <option value="all">All</option>
+                      <option value="finance">Finance</option>
+                      <option value="compliance">Compliance</option>
+                      <option value="document_control">Document control</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Stream, code, type or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "close control ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalStreams > 0 ? "danger" : filteredSummary.overdueStreams > 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalStreams > 0
+                      ? `${filteredSummary.criticalStreams} critical`
+                      : filteredSummary.overdueStreams > 0
+                        ? `${filteredSummary.overdueStreams} overdue`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.lines}
+                  rows={filteredLines}
                   columns={[
                     {
                       key: "stream",
