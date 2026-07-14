@@ -52,6 +52,20 @@ function isMaintenanceOverdue(
   );
 }
 
+function recomputeSummary(machines: MachineItemContract[]) {
+  return {
+    trackedMachines: machines.length,
+    availableMachines: machines.filter((item) => item.status === "available").length,
+    machinesInMaintenance: machines.filter((item) => item.status === "maintenance").length,
+    overdueMaintenance: machines.filter((item) => isMaintenanceOverdue(item)).length,
+    criticalOpenFailures: machines.reduce((sum, item) => sum + item.criticalOpenFailures, 0),
+    averageAvailability:
+      machines.length > 0
+        ? Number((machines.reduce((sum, item) => sum + item.availabilityPercent, 0) / machines.length).toFixed(1))
+        : 0
+  };
+}
+
 function deriveOverview(current: EquipmentOverviewContract, updatedMachine: MachineItemContract): EquipmentOverviewContract {
   const machines = current.machines.some((item) => item.id === updatedMachine.id)
     ? current.machines.map((item) => (item.id === updatedMachine.id ? updatedMachine : item))
@@ -196,6 +210,8 @@ export default function EquipmentPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | MachineItemContract["status"]>("all");
+  const [projectFilter, setProjectFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -268,9 +284,28 @@ export default function EquipmentPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredMachines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedProject = projectFilter.trim().toLowerCase();
+    return overview.machines.filter((machine) => {
+      const matchesStatus = statusFilter === "all" || machine.status === statusFilter;
+      const matchesProject =
+        normalizedProject.length === 0 ||
+        machine.projectName.toLowerCase().includes(normalizedProject) ||
+        machine.frontName.toLowerCase().includes(normalizedProject);
+
+      return matchesStatus && matchesProject;
+    });
+  }, [overview, projectFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredMachines), [filteredMachines]);
+
   const selectedMachine = useMemo(
-    () => overview?.machines.find((item) => item.id === selectedMachineId) ?? overview?.focusMachine ?? null,
-    [overview, selectedMachineId]
+    () => filteredMachines.find((item) => item.id === selectedMachineId) ?? filteredMachines[0] ?? null,
+    [filteredMachines, selectedMachineId]
   );
 
   const selectedRisks = useMemo(
@@ -279,20 +314,32 @@ export default function EquipmentPage() {
   );
 
   const affectedFronts = useMemo(() => {
-    if (!overview) {
-      return 0;
-    }
-
     return new Set(
-      overview.machines
+      filteredMachines
         .filter((item) => item.status !== "available" || item.health !== "healthy")
         .map((item) => `${item.projectName}::${item.frontName}`)
     ).size;
-  }, [overview]);
+  }, [filteredMachines]);
 
   const equipmentStory = useMemo(() => {
     return buildEquipmentStory(selectedMachine, bridgeContext);
   }, [bridgeContext, selectedMachine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredMachines.length === 0) {
+      setSelectedMachineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredMachines.some((machine) => machine.id === selectedMachineId);
+    if (!isSelectedVisible) {
+      setSelectedMachineId(filteredMachines[0]?.id ?? null);
+    }
+  }, [filteredMachines, overview, selectedMachineId]);
 
   const statusOptions = useMemo(() => {
     if (!selectedMachine) {
@@ -547,22 +594,22 @@ export default function EquipmentPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Tracked machines"
-                value={overview.summary.trackedMachines.toLocaleString()}
+                value={filteredSummary.trackedMachines.toLocaleString()}
                 footnote="Equipment units currently controlled in the active tenant."
               />
               <KpiCard
                 label="Available"
-                value={String(overview.summary.availableMachines)}
+                value={String(filteredSummary.availableMachines)}
                 footnote="Machines ready for dispatch without open blocking conditions."
               />
               <KpiCard
                 label="Overdue maintenance"
-                value={String(overview.summary.overdueMaintenance)}
+                value={String(filteredSummary.overdueMaintenance)}
                 footnote="Units that still cannot clear maintenance exposure."
               />
               <KpiCard
                 label="Critical failures"
-                value={String(overview.summary.criticalOpenFailures)}
+                value={String(filteredSummary.criticalOpenFailures)}
                 footnote="Open critical breakdown signals across the active fleet."
               />
               <KpiCard
@@ -602,14 +649,40 @@ export default function EquipmentPage() {
 
             <section className="grid cols2">
               <Card title="Fleet posture" description="Availability, maintenance and utilization by machine.">
-                <FilterBar summary={`${overview.machines.length} machines in the active tenant`}>
+                <FilterBar summary={`${filteredMachines.length} machines match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Status
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                      <option value="all">All</option>
+                      <option value="available">Available</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="down">Down</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Project
+                    <input
+                      className="field"
+                      type="search"
+                      value={projectFilter}
+                      onChange={(event) => setProjectFilter(event.target.value)}
+                      placeholder="Project or front"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "equipment ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalOpenFailures > 0 ? "danger" : filteredSummary.overdueMaintenance > 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalOpenFailures > 0
+                      ? `${filteredSummary.criticalOpenFailures} critical failures`
+                      : filteredSummary.overdueMaintenance > 0
+                        ? `${filteredSummary.overdueMaintenance} overdue`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.machines}
+                  rows={filteredMachines}
                   columns={[
                     {
                       key: "machine",

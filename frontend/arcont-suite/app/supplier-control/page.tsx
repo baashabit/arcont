@@ -172,6 +172,8 @@ export default function SupplierControlPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | SupplierControlLineContract["deliveryHealth"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -240,9 +242,29 @@ export default function SupplierControlPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredLines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.lines.filter((line) => {
+      const matchesHealth = healthFilter === "all" || line.deliveryHealth === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        line.supplierName.toLowerCase().includes(normalizedSearch) ||
+        line.owner.toLowerCase().includes(normalizedSearch) ||
+        line.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, searchFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLines), [filteredLines]);
+
   const selectedLine = useMemo(
-    () => overview?.lines.find((item) => item.id === selectedLineId) ?? overview?.focusLine ?? null,
-    [overview, selectedLineId]
+    () => filteredLines.find((item) => item.id === selectedLineId) ?? filteredLines[0] ?? null,
+    [filteredLines, selectedLineId]
   );
 
   const selectedRisks = useMemo(
@@ -253,6 +275,22 @@ export default function SupplierControlPage() {
   const selectedStory = useMemo(() => buildSupplierBridge(selectedLine, bridgeContext), [bridgeContext, selectedLine]);
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLines.length === 0) {
+      setSelectedLineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLines.some((line) => line.id === selectedLineId);
+    if (!isSelectedVisible) {
+      setSelectedLineId(filteredLines[0]?.id ?? null);
+    }
+  }, [filteredLines, overview, selectedLineId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLine?.nextAction ?? "");
@@ -431,22 +469,22 @@ export default function SupplierControlPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Tracked suppliers"
-                value={String(overview.summary.trackedSuppliers)}
+                value={String(filteredSummary.trackedSuppliers)}
                 footnote="Suppliers currently carrying live contracted volume in the tenant."
               />
               <KpiCard
                 label="Concentrated"
-                value={String(overview.summary.concentratedSuppliers)}
+                value={String(filteredSummary.concentratedSuppliers)}
                 footnote="Suppliers already above concentration tolerance."
               />
               <KpiCard
                 label="Awarded volume"
-                value={`MXN ${overview.summary.awardedVolume.toLocaleString()}`}
+                value={`MXN ${filteredSummary.awardedVolume.toLocaleString()}`}
                 footnote="Volume already sitting on suppliers with at least one awarded package."
               />
               <KpiCard
                 label="Compliance alerts"
-                value={String(overview.summary.complianceAlerts)}
+                value={String(filteredSummary.complianceAlerts)}
                 footnote="Open commercial or operating alerts still attached to the current supplier base."
               />
             </section>
@@ -471,14 +509,40 @@ export default function SupplierControlPage() {
 
             <section className="grid cols2">
               <Card title="Supplier board" description="Commercial concentration, bid coverage and approval pressure across the current supplier base.">
-                <FilterBar summary={`${overview.lines.length} supplier lines in the active tenant`}>
+                <FilterBar summary={`${filteredLines.length} supplier lines match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Delivery health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="controlled">Controlled</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Supplier, owner or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "supplier control ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalSuppliers > 0 ? "danger" : filteredSummary.concentratedSuppliers > 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalSuppliers > 0
+                      ? `${filteredSummary.criticalSuppliers} critical`
+                      : filteredSummary.concentratedSuppliers > 0
+                        ? `${filteredSummary.concentratedSuppliers} concentrated`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.lines}
+                  rows={filteredLines}
                   columns={[
                     {
                       key: "supplier",
