@@ -24,6 +24,7 @@ import {
   CompanyModuleStateSchema,
   CompanySchema,
   CreateAccountsPayableInvoiceRequestSchema,
+  CreateProjectPortfolioItemRequestSchema,
   CreateDocumentControlItemRequestSchema,
   CreateFieldMaterialRequestRequestSchema,
   CreateFieldMaterialRequestResponseSchema,
@@ -116,6 +117,7 @@ import {
   UserSchema,
   type AccountsPayableInvoiceContract,
   type AccountsPayableOverviewContract,
+  type CreateProjectPortfolioItemRequestContract,
   type CreateTreasuryPaymentRunRequestContract,
   type AuditEventContract,
   type AuthLoginRequestContract,
@@ -519,6 +521,34 @@ export async function updateProjectPortfolioItem(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/projects/items/${projectId}${query}`, options, {
     method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProjectPortfolioItemSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function createProjectPortfolioItem(
+  companyId: string | undefined,
+  input: CreateProjectPortfolioItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProjectPortfolioItemContract>> {
+  const payload = CreateProjectPortfolioItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/projects/items${query}`, options, {
+    method: "POST",
     headers: {
       "Content-Type": "application/json"
     },

@@ -56,6 +56,23 @@ type UpdateProjectPortfolioItemInput = {
   nextMilestone: string;
 };
 
+type CreateProjectPortfolioItemInput = {
+  companyId: string;
+  code: string;
+  name: string;
+  client: string;
+  segment: string;
+  status: "planning" | "active" | "at_risk" | "blocked" | "closed";
+  stage: string;
+  progress: number;
+  scheduleVarianceDays: number;
+  budgetHealth: "on_track" | "warning" | "critical";
+  qualityHolds: number;
+  permitBlockers: number;
+  activeFronts: number;
+  nextMilestone: string;
+};
+
 type DailyLogEntryRecord = {
   id: string;
   companyId: string;
@@ -1081,6 +1098,7 @@ export type PlatformRepository = {
   }>;
   updateUserRole(input: UpdatePlatformUserRoleInput): Promise<UserRecord>;
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
+  createProjectPortfolioItem(input: CreateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
   updateProjectPortfolioItem(input: UpdateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
   updateDailyLogEntry(input: UpdateDailyLogEntryInput): Promise<DailyLogEntryRecord>;
   updateProcurementRequisition(input: UpdateProcurementRequisitionInput): Promise<ProcurementRequisitionRecord>;
@@ -4032,6 +4050,29 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       item.updatedAt = new Date().toISOString();
       return item;
     },
+    async createProjectPortfolioItem(input) {
+      const item: ProjectPortfolioItemRecord = {
+        id: createPrefixedId("prj"),
+        companyId: input.companyId,
+        code: input.code,
+        name: input.name,
+        client: input.client,
+        segment: input.segment,
+        status: input.status,
+        stage: input.stage,
+        progress: input.progress,
+        scheduleVarianceDays: input.scheduleVarianceDays,
+        budgetHealth: input.budgetHealth,
+        qualityHolds: input.qualityHolds,
+        permitBlockers: input.permitBlockers,
+        activeFronts: input.activeFronts,
+        updatedAt: new Date().toISOString(),
+        nextMilestone: input.nextMilestone
+      };
+
+      state.projects.unshift(item);
+      return item;
+    },
     async updateDailyLogEntry(input) {
       const entry = state.dailyLogEntries.find((candidate) => candidate.id === input.entryId);
       if (!entry) {
@@ -6885,6 +6926,73 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
 
       if (!result.rows[0]) {
         throw new Error("Project portfolio item not found in repository");
+      }
+
+      const row = result.rows[0];
+      return {
+        id: String(row.id),
+        companyId: String(row.company_id),
+        code: String(row.external_key),
+        name: String(row.name),
+        client: String(row.client_name),
+        segment: String(row.segment),
+        status: row.status as ProjectPortfolioItemRecord["status"],
+        stage: String(row.stage),
+        progress: Number(row.progress_percent),
+        scheduleVarianceDays: Number(row.schedule_variance_days),
+        budgetHealth: row.budget_health as ProjectPortfolioItemRecord["budgetHealth"],
+        qualityHolds: Number(row.quality_holds),
+        permitBlockers: Number(row.permit_blockers),
+        activeFronts: Number(row.active_fronts),
+        updatedAt: String(row.updated_at),
+        nextMilestone: String(row.next_milestone)
+      };
+    },
+    async createProjectPortfolioItem(input) {
+      const projectId = createPrefixedId("prj");
+      const result = await pool.query(
+        `
+          insert into project_portfolio (
+            id,
+            company_id,
+            external_key,
+            name,
+            client_name,
+            segment,
+            status,
+            stage,
+            progress_percent,
+            schedule_variance_days,
+            budget_health,
+            quality_holds,
+            permit_blockers,
+            active_fronts,
+            next_milestone
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          returning id, company_id, external_key, name, client_name, segment, status, stage, progress_percent, schedule_variance_days, budget_health, quality_holds, permit_blockers, active_fronts, updated_at, next_milestone
+        `,
+        [
+          projectId,
+          input.companyId,
+          input.code,
+          input.name,
+          input.client,
+          input.segment,
+          input.status,
+          input.stage,
+          input.progress,
+          input.scheduleVarianceDays,
+          input.budgetHealth,
+          input.qualityHolds,
+          input.permitBlockers,
+          input.activeFronts,
+          input.nextMilestone
+        ]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Project portfolio item could not be created");
       }
 
       const row = result.rows[0];

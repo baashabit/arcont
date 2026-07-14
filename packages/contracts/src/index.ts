@@ -164,6 +164,22 @@ export const UpdateProjectPortfolioItemRequestSchema = z.object({
   nextMilestone: z.string().min(8)
 });
 
+export const CreateProjectPortfolioItemRequestSchema = z.object({
+  code: z.string().min(3),
+  name: z.string().min(3),
+  client: z.string().min(3),
+  segment: z.string().min(3),
+  status: z.enum(projectStatuses),
+  stage: z.string().min(3),
+  progress: z.number().min(0).max(100),
+  scheduleVarianceDays: z.number(),
+  budgetHealth: z.enum(projectBudgetHealth),
+  qualityHolds: z.number().int().nonnegative(),
+  permitBlockers: z.number().int().nonnegative(),
+  activeFronts: z.number().int().nonnegative(),
+  nextMilestone: z.string().min(8)
+});
+
 export const DailyLogRiskSchema = z.object({
   id: z.string(),
   logId: z.string(),
@@ -1911,6 +1927,7 @@ export type ProjectRiskContract = z.infer<typeof ProjectRiskSchema>;
 export type ProjectPortfolioItemContract = z.infer<typeof ProjectPortfolioItemSchema>;
 export type ProjectPortfolioOverviewContract = z.infer<typeof ProjectPortfolioOverviewSchema>;
 export type UpdateProjectPortfolioItemRequestContract = z.infer<typeof UpdateProjectPortfolioItemRequestSchema>;
+export type CreateProjectPortfolioItemRequestContract = z.infer<typeof CreateProjectPortfolioItemRequestSchema>;
 export type DailyLogRiskContract = z.infer<typeof DailyLogRiskSchema>;
 export type DailyLogEntryContract = z.infer<typeof DailyLogEntrySchema>;
 export type DailyLogOverviewContract = z.infer<typeof DailyLogOverviewSchema>;

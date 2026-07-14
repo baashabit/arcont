@@ -133,6 +133,150 @@ export function createProjectsService(repository: PlatformRepository) {
         focusProject
       };
     },
+    async createProject(input: {
+      companyId: string;
+      code: string;
+      name: string;
+      client: string;
+      segment: string;
+      status: "planning" | "active" | "at_risk" | "blocked" | "closed";
+      stage: string;
+      progress: number;
+      scheduleVarianceDays: number;
+      budgetHealth: "on_track" | "warning" | "critical";
+      qualityHolds: number;
+      permitBlockers: number;
+      activeFronts: number;
+      nextMilestone: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("PROJECTS_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const overview = await this.getPortfolioOverview(input.companyId);
+      const code = input.code.trim().toUpperCase();
+      const name = input.name.trim();
+      const client = input.client.trim();
+      const segment = input.segment.trim();
+      const stage = input.stage.trim();
+      const nextMilestone = input.nextMilestone.trim();
+
+      if ([code, name, client, segment, stage].some((value) => value.length < 3)) {
+        throw validationError("PROJECTS_INVALID_CREATE_INPUT", "Project code, name, client, segment and stage must be specific", {
+          codeLength: code.length,
+          nameLength: name.length,
+          clientLength: client.length,
+          segmentLength: segment.length,
+          stageLength: stage.length
+        });
+      }
+
+      if (nextMilestone.length < 8) {
+        throw validationError("PROJECTS_INVALID_NEXT_MILESTONE", "Next milestone must be specific", {
+          nextMilestoneLength: nextMilestone.length
+        });
+      }
+
+      if (!/^[A-Z0-9-]+$/.test(code)) {
+        throw validationError("PROJECTS_INVALID_CODE", "Project code must use uppercase letters, numbers or dashes", {
+          code
+        });
+      }
+
+      if (overview.projects.some((project) => project.code.trim().toUpperCase() === code)) {
+        throw validationError("PROJECTS_DUPLICATE_CODE", "A project with this code already exists", {
+          code
+        });
+      }
+
+      if (
+        overview.projects.some(
+          (project) => project.name.trim().toLowerCase() === name.toLowerCase() && project.client.trim().toLowerCase() === client.toLowerCase()
+        )
+      ) {
+        throw validationError("PROJECTS_DUPLICATE_NAME", "A project with this name and client already exists", {
+          name,
+          client
+        });
+      }
+
+      if (
+        [input.progress, input.qualityHolds, input.permitBlockers, input.activeFronts].some(
+          (value) => !Number.isFinite(value) || value < 0
+        )
+      ) {
+        throw validationError("PROJECTS_INVALID_COUNTS", "Progress, holds, blockers and active fronts must be valid non-negative values", {
+          progress: input.progress,
+          qualityHolds: input.qualityHolds,
+          permitBlockers: input.permitBlockers,
+          activeFronts: input.activeFronts
+        });
+      }
+
+      if (!Number.isFinite(input.scheduleVarianceDays)) {
+        throw validationError("PROJECTS_INVALID_SCHEDULE_VARIANCE", "Schedule variance must be a valid number", {
+          scheduleVarianceDays: input.scheduleVarianceDays
+        });
+      }
+
+      if (input.status === "closed" && (input.progress < 100 || input.qualityHolds > 0 || input.permitBlockers > 0)) {
+        throw validationError("PROJECTS_INVALID_CLOSED_CREATE", "Closed projects require 100% progress and zero open blockers", {
+          progress: input.progress,
+          qualityHolds: input.qualityHolds,
+          permitBlockers: input.permitBlockers
+        });
+      }
+
+      if (input.status === "active" && input.permitBlockers > 2) {
+        throw validationError("PROJECTS_PERMIT_BLOCKERS", "Project cannot start as active while permit blockers remain too high", {
+          permitBlockers: input.permitBlockers
+        });
+      }
+
+      const created = await repository.createProjectPortfolioItem({
+        companyId: input.companyId,
+        code,
+        name,
+        client,
+        segment,
+        status: input.status,
+        stage,
+        progress: input.progress,
+        scheduleVarianceDays: input.scheduleVarianceDays,
+        budgetHealth: input.budgetHealth,
+        qualityHolds: input.qualityHolds,
+        permitBlockers: input.permitBlockers,
+        activeFronts: input.activeFronts,
+        nextMilestone
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "project_portfolio_item",
+        aggregateId: created.id,
+        action: "projects.portfolio_item.created",
+        metadata: {
+          code: created.code,
+          name: created.name,
+          status: created.status
+        }
+      });
+
+      const refreshed = await this.getPortfolioOverview(input.companyId);
+      const refreshedProject = refreshed.projects.find((candidate) => candidate.id === created.id);
+      if (!refreshedProject) {
+        throw notFound("PROJECTS_PROJECT_NOT_FOUND", "Project not found after creation", {
+          companyId: input.companyId,
+          projectId: created.id
+        });
+      }
+
+      return refreshedProject;
+    },
     async updateProject(input: {
       companyId: string;
       projectId: string;

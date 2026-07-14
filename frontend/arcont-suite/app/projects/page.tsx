@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { ProjectPortfolioItemContract, ProjectPortfolioOverviewContract } from "@/lib/contracts";
-import { fetchEquipmentOverview, fetchProjectsOverview, updateProjectPortfolioItem } from "@/lib/platform-api";
+import { createProjectPortfolioItem, fetchEquipmentOverview, fetchProjectsOverview, updateProjectPortfolioItem } from "@/lib/platform-api";
 
 function statusTone(status: ProjectPortfolioItemContract["status"]) {
   switch (status) {
@@ -173,6 +173,55 @@ function buildProjectEquipmentStory(project: ProjectPortfolioItemContract | null
   };
 }
 
+function validateProjectCreateForm(input: {
+  code: string;
+  name: string;
+  client: string;
+  segment: string;
+  stage: string;
+  progress: number;
+  scheduleVarianceDays: number;
+  qualityHolds: number;
+  permitBlockers: number;
+  activeFronts: number;
+  nextMilestone: string;
+  status: ProjectPortfolioItemContract["status"];
+}) {
+  if ([input.code, input.name, input.client, input.segment, input.stage].some((value) => value.trim().length < 3)) {
+    return "Code, name, client, segment and stage must be specific before creating a project.";
+  }
+
+  if (!/^[A-Z0-9-]+$/.test(input.code.trim().toUpperCase())) {
+    return "Project code must use uppercase letters, numbers or dashes.";
+  }
+
+  if (input.nextMilestone.trim().length < 8) {
+    return "Next milestone must be more specific before creating a project.";
+  }
+
+  if (!Number.isFinite(input.progress) || input.progress < 0 || input.progress > 100) {
+    return "Progress must stay between 0% and 100%.";
+  }
+
+  if (!Number.isFinite(input.scheduleVarianceDays)) {
+    return "Schedule variance must be a valid number.";
+  }
+
+  if ([input.qualityHolds, input.permitBlockers, input.activeFronts].some((value) => !Number.isFinite(value) || value < 0)) {
+    return "Quality holds, permit blockers and active fronts must be zero or greater.";
+  }
+
+  if (input.status === "active" && input.permitBlockers > 2) {
+    return "Active status is blocked while permit blockers stay above 2.";
+  }
+
+  if (input.status === "closed" && (input.progress < 100 || input.qualityHolds > 0 || input.permitBlockers > 0)) {
+    return "Closed status requires 100% progress with zero quality holds and zero permit blockers.";
+  }
+
+  return null;
+}
+
 export default function ProjectsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<ProjectPortfolioOverviewContract | null>(null);
@@ -184,6 +233,23 @@ export default function ProjectsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    code: "",
+    name: "",
+    client: "",
+    segment: "Residential",
+    status: "planning" as ProjectPortfolioItemContract["status"],
+    stage: "Preconstruction",
+    progress: "0",
+    scheduleVarianceDays: "0",
+    budgetHealth: "on_track" as ProjectPortfolioItemContract["budgetHealth"],
+    qualityHolds: "0",
+    permitBlockers: "0",
+    activeFronts: "1",
+    nextMilestone: ""
+  });
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -308,6 +374,86 @@ export default function ProjectsPage() {
     setNextMilestoneDraft(response.data.nextMilestone);
     setActionMessage(`Project moved to ${response.data.status}.`);
     setIsSaving(false);
+  }
+
+  async function handleCreateProject() {
+    if (!overview || !session.accessToken) {
+      return;
+    }
+
+    const payload = {
+      code: createForm.code.trim().toUpperCase(),
+      name: createForm.name.trim(),
+      client: createForm.client.trim(),
+      segment: createForm.segment.trim(),
+      status: createForm.status,
+      stage: createForm.stage.trim(),
+      progress: Number(createForm.progress),
+      scheduleVarianceDays: Number(createForm.scheduleVarianceDays),
+      budgetHealth: createForm.budgetHealth,
+      qualityHolds: Number(createForm.qualityHolds),
+      permitBlockers: Number(createForm.permitBlockers),
+      activeFronts: Number(createForm.activeFronts),
+      nextMilestone: createForm.nextMilestone.trim()
+    };
+
+    const validation = validateProjectCreateForm(payload);
+    if (validation) {
+      setActionError(validation);
+      setCreateMessage(null);
+      return;
+    }
+
+    setIsCreating(true);
+    setActionError(null);
+    setCreateMessage(null);
+
+    const response = await createProjectPortfolioItem(activeCompany.id, payload, {
+      apiBaseUrl,
+      accessToken: session.accessToken
+    });
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Project creation failed.");
+      setIsCreating(false);
+      return;
+    }
+
+    const createdProject = response.data;
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const projects = [createdProject, ...current.projects];
+      return {
+        ...current,
+        summary: recomputeSummary(projects),
+        projects,
+        focusProject: pickFocusProject(projects)
+      };
+    });
+
+    setSelectedProjectId(createdProject.id);
+    setNextMilestoneDraft(createdProject.nextMilestone);
+    setCreateMessage(`${createdProject.code} added to the active portfolio.`);
+    setCreateForm({
+      code: "",
+      name: "",
+      client: payload.client,
+      segment: payload.segment,
+      status: "planning",
+      stage: payload.stage,
+      progress: "0",
+      scheduleVarianceDays: "0",
+      budgetHealth: "on_track",
+      qualityHolds: "0",
+      permitBlockers: "0",
+      activeFronts: "1",
+      nextMilestone: ""
+    });
+    setIsCreating(false);
   }
 
   return (
@@ -585,6 +731,41 @@ export default function ProjectsPage() {
                 ]}
               />
             </Card>
+
+            <section className="grid cols2">
+              <Card title="Register project" description="Create a new project directly in the tenant portfolio and start tracking it immediately.">
+                <div className="detailGrid">
+                  <label className="detailRow"><div className="detailLabel">Code</div><input className="field" value={createForm.code} onChange={(event) => setCreateForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))} placeholder="ARB-NVO-03" /></label>
+                  <label className="detailRow"><div className="detailLabel">Project name</div><input className="field" value={createForm.name} onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))} placeholder="Conjunto Residencial Norte" /></label>
+                  <label className="detailRow"><div className="detailLabel">Client</div><input className="field" value={createForm.client} onChange={(event) => setCreateForm((current) => ({ ...current, client: event.target.value }))} placeholder="Desarrolladora Norte" /></label>
+                  <label className="detailRow"><div className="detailLabel">Segment</div><input className="field" value={createForm.segment} onChange={(event) => setCreateForm((current) => ({ ...current, segment: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Status</div><select className="selectField" value={createForm.status} onChange={(event) => setCreateForm((current) => ({ ...current, status: event.target.value as ProjectPortfolioItemContract["status"] }))}><option value="planning">planning</option><option value="active">active</option><option value="at_risk">at_risk</option><option value="blocked">blocked</option><option value="closed">closed</option></select></label>
+                  <label className="detailRow"><div className="detailLabel">Stage</div><input className="field" value={createForm.stage} onChange={(event) => setCreateForm((current) => ({ ...current, stage: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Progress %</div><input className="field" type="number" min="0" max="100" value={createForm.progress} onChange={(event) => setCreateForm((current) => ({ ...current, progress: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Variance days</div><input className="field" type="number" step="0.1" value={createForm.scheduleVarianceDays} onChange={(event) => setCreateForm((current) => ({ ...current, scheduleVarianceDays: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Budget health</div><select className="selectField" value={createForm.budgetHealth} onChange={(event) => setCreateForm((current) => ({ ...current, budgetHealth: event.target.value as ProjectPortfolioItemContract["budgetHealth"] }))}><option value="on_track">on_track</option><option value="warning">warning</option><option value="critical">critical</option></select></label>
+                  <label className="detailRow"><div className="detailLabel">Quality holds</div><input className="field" type="number" min="0" value={createForm.qualityHolds} onChange={(event) => setCreateForm((current) => ({ ...current, qualityHolds: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Permit blockers</div><input className="field" type="number" min="0" value={createForm.permitBlockers} onChange={(event) => setCreateForm((current) => ({ ...current, permitBlockers: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Active fronts</div><input className="field" type="number" min="0" value={createForm.activeFronts} onChange={(event) => setCreateForm((current) => ({ ...current, activeFronts: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Next milestone</div><input className="field" value={createForm.nextMilestone} onChange={(event) => setCreateForm((current) => ({ ...current, nextMilestone: event.target.value }))} placeholder="Municipal permit release and first front mobilization" /></label>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateProject()}>
+                    {isCreating ? "Creating..." : "Add project"}
+                  </button>
+                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                </div>
+              </Card>
+
+              <Card title="Project creation rules" description="The portfolio intake now persists directly to the backend and enforces the same operational constraints.">
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Unique code</div><div>Project codes stay unique per tenant to avoid duplicate portfolio tracking.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Active gate</div><div>Projects cannot start as `active` when permit blockers are above 2.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Closed gate</div><div>`closed` requires 100% progress, zero quality holds and zero permit blockers.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Operational continuity</div><div>The created project becomes selectable immediately for field, quality and equipment flows.</div></div>
+                </div>
+              </Card>
+            </section>
           </>
         ) : error ? (
           <EmptyState
