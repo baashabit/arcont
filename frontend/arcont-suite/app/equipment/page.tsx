@@ -11,7 +11,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { EquipmentOverviewContract, MachineItemContract } from "@/lib/contracts";
-import { fetchEquipmentOverview, updateMachineItem } from "@/lib/platform-api";
+import {
+  createMachineItem,
+  fetchEquipmentOverview,
+  fetchInventoryMovementsOverview,
+  fetchQualityOverview,
+  updateMachineItem
+} from "@/lib/platform-api";
 
 function statusTone(status: MachineItemContract["status"]) {
   switch (status) {
@@ -46,7 +52,9 @@ function isMaintenanceOverdue(
 }
 
 function deriveOverview(current: EquipmentOverviewContract, updatedMachine: MachineItemContract): EquipmentOverviewContract {
-  const machines = current.machines.map((item) => (item.id === updatedMachine.id ? updatedMachine : item));
+  const machines = current.machines.some((item) => item.id === updatedMachine.id)
+    ? current.machines.map((item) => (item.id === updatedMachine.id ? updatedMachine : item))
+    : [updatedMachine, ...current.machines];
   const focusMachine =
     machines
       .slice()
@@ -88,9 +96,46 @@ function deriveOverview(current: EquipmentOverviewContract, updatedMachine: Mach
   };
 }
 
+type EquipmentBridgeContext = {
+  movements: NonNullable<Awaited<ReturnType<typeof fetchInventoryMovementsOverview>>>;
+  quality: NonNullable<Awaited<ReturnType<typeof fetchQualityOverview>>>;
+} | null;
+
+function buildEquipmentStory(machine: MachineItemContract | null, bridge: EquipmentBridgeContext) {
+  if (!machine) {
+    return null;
+  }
+
+  const movementSignal = bridge?.movements.focusMovement ?? null;
+  const qualitySignal = bridge?.quality.focusInspection ?? null;
+
+  return {
+    fieldImpact:
+      machine.status === "down"
+        ? `${machine.projectName} · ${machine.frontName} is directly exposed because this machine is down.`
+        : machine.status === "maintenance"
+          ? `${machine.projectName} · ${machine.frontName} is running under maintenance pressure.`
+          : `${machine.projectName} · ${machine.frontName} currently has this machine available for dispatch.`,
+    maintenanceSignal: isMaintenanceOverdue(machine)
+      ? `Maintenance is already overdue and this asset should not be treated as stable for field planning.`
+      : `${machine.nextMaintenanceHours} operating hours remain before the next service window.`,
+    criticalAsset:
+      machine.criticalOpenFailures > 0
+        ? `${machine.criticalOpenFailures} critical failures still need closure before safe release.`
+        : "No critical failure is currently open on the selected asset.",
+    inventoryDependency: movementSignal
+      ? `${movementSignal.code} is the current stock-movement anchor with ${movementSignal.pendingEvidence} pending evidence items and ${movementSignal.impactLevel} impact.`
+      : "No inventory movement is currently in focus for this asset lane.",
+    qualityConstraint: qualitySignal
+      ? `${qualitySignal.code} remains ${qualitySignal.status} with ${qualitySignal.openFindings} open findings and ${qualitySignal.releaseReadiness}% release readiness.`
+      : "No quality-release constraint is currently attached to the active equipment lane."
+  };
+}
+
 export default function EquipmentPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<EquipmentOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<EquipmentBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
@@ -98,6 +143,24 @@ export default function EquipmentPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    machineName: "",
+    machineType: "Excavator",
+    projectName: "Nuevo proyecto",
+    frontName: "Frente 1",
+    status: "available" as MachineItemContract["status"],
+    health: "healthy" as MachineItemContract["health"],
+    availabilityPercent: "92",
+    utilizationPercent: "68",
+    hourMeter: "1200",
+    nextMaintenanceHours: "80",
+    maintenanceBacklog: "0",
+    openFailures: "0",
+    criticalOpenFailures: "0",
+    nextAction: ""
+  });
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -109,11 +172,21 @@ export default function EquipmentPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchEquipmentOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchEquipmentOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchInventoryMovementsOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchQualityOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, movements, quality]) => {
         if (cancelled) {
           return;
         }
@@ -125,6 +198,7 @@ export default function EquipmentPage() {
 
         setOverview(result);
         setSelectedMachineId((current) => current ?? result.focusMachine?.id ?? result.machines[0]?.id ?? null);
+        setBridgeContext(movements && quality ? { movements, quality } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -146,6 +220,22 @@ export default function EquipmentPage() {
     () => overview?.risks.filter((risk) => risk.machineId === selectedMachine?.id) ?? [],
     [overview, selectedMachine]
   );
+
+  const affectedFronts = useMemo(() => {
+    if (!overview) {
+      return 0;
+    }
+
+    return new Set(
+      overview.machines
+        .filter((item) => item.status !== "available" || item.health !== "healthy")
+        .map((item) => `${item.projectName}::${item.frontName}`)
+    ).size;
+  }, [overview]);
+
+  const equipmentStory = useMemo(() => {
+    return buildEquipmentStory(selectedMachine, bridgeContext);
+  }, [bridgeContext, selectedMachine]);
 
   const statusOptions = useMemo(() => {
     if (!selectedMachine) {
@@ -290,6 +380,87 @@ export default function EquipmentPage() {
     setIsSaving(false);
   }
 
+  async function handleCreateMachine() {
+    if (!overview || !session.accessToken) {
+      return;
+    }
+
+    const machineName = createForm.machineName.trim();
+    const machineType = createForm.machineType.trim();
+    const projectName = createForm.projectName.trim();
+    const frontName = createForm.frontName.trim();
+    const nextAction = createForm.nextAction.trim();
+
+    if (machineName.length < 3 || machineType.length < 3 || projectName.length < 3 || frontName.length < 3) {
+      setActionError("Machine, type, project and front must be specific before creating equipment.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before creating the machine.");
+      setCreateMessage(null);
+      return;
+    }
+
+    setIsCreating(true);
+    setActionError(null);
+    setCreateMessage(null);
+
+    const response = await createMachineItem(
+      activeCompany.id,
+      {
+        machineName,
+        machineType,
+        projectName,
+        frontName,
+        status: createForm.status,
+        health: createForm.health,
+        availabilityPercent: Number(createForm.availabilityPercent),
+        utilizationPercent: Number(createForm.utilizationPercent),
+        hourMeter: Number(createForm.hourMeter),
+        nextMaintenanceHours: Number(createForm.nextMaintenanceHours),
+        maintenanceBacklog: Number(createForm.maintenanceBacklog),
+        openFailures: Number(createForm.openFailures),
+        criticalOpenFailures: Number(createForm.criticalOpenFailures),
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Equipment creation failed.");
+      setIsCreating(false);
+      return;
+    }
+
+    const newMachine = response.data;
+    setOverview((current) => (current ? deriveOverview(current, newMachine) : current));
+    setSelectedMachineId(newMachine.id);
+    setNextActionDraft(newMachine.nextAction);
+    setCreateMessage(`${newMachine.code} added to the equipment workbench.`);
+    setCreateForm({
+      machineName: "",
+      machineType: createForm.machineType,
+      projectName,
+      frontName,
+      status: "available",
+      health: "healthy",
+      availabilityPercent: "92",
+      utilizationPercent: "68",
+      hourMeter: "0",
+      nextMaintenanceHours: "80",
+      maintenanceBacklog: "0",
+      openFailures: "0",
+      criticalOpenFailures: "0",
+      nextAction: ""
+    });
+    setIsCreating(false);
+  }
+
   return (
     <AppShell
       title="Equipment and maintenance"
@@ -320,6 +491,39 @@ export default function EquipmentPage() {
                 value={String(overview.summary.criticalOpenFailures)}
                 footnote="Open critical breakdown signals across the active fleet."
               />
+              <KpiCard
+                label="Affected fronts"
+                value={String(affectedFronts)}
+                footnote="Active fronts currently exposed to equipment downtime, maintenance or degraded health."
+              />
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Field execution impact" description="What the selected asset means for active production fronts.">
+                <p className="sectionText">
+                  {equipmentStory?.fieldImpact ?? "Choose an asset to inspect its field execution impact."}
+                </p>
+              </Card>
+              <Card title="Maintenance pressure" description="Immediate maintenance posture for the selected machine.">
+                <p className="sectionText">
+                  {equipmentStory?.maintenanceSignal ?? "Choose an asset to inspect its maintenance pressure."}
+                </p>
+              </Card>
+              <Card title="Critical asset for today" description="Fast read for dispatch, resident engineers and field supervisors.">
+                <p className="sectionText">
+                  {equipmentStory?.criticalAsset ?? "Choose an asset to inspect today's critical condition."}
+                </p>
+              </Card>
+              <Card title="Inventory dependency" description="Warehouse and material-handling pressure attached to this asset lane.">
+                <p className="sectionText">
+                  {equipmentStory?.inventoryDependency ?? "Choose an asset to inspect inventory dependency."}
+                </p>
+              </Card>
+              <Card title="Quality constraint" description="Release and corrective-work signal around the selected machine.">
+                <p className="sectionText">
+                  {equipmentStory?.qualityConstraint ?? "Choose an asset to inspect quality constraints."}
+                </p>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -492,6 +696,189 @@ export default function EquipmentPage() {
                     primaryAction={{ label: "Stay on equipment", href: "/equipment" }}
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Register machine"
+                description="Create a new equipment lane directly in the tenant backend and reflect it immediately on the board."
+              >
+                <div className="detailGrid">
+                  <label className="detailRow">
+                    <div className="detailLabel">Machine</div>
+                    <input
+                      className="field"
+                      value={createForm.machineName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, machineName: event.target.value }))}
+                      placeholder="Excavadora CAT 320"
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Type</div>
+                    <input
+                      className="field"
+                      value={createForm.machineType}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, machineType: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Project</div>
+                    <input
+                      className="field"
+                      value={createForm.projectName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Front</div>
+                    <input
+                      className="field"
+                      value={createForm.frontName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, frontName: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Status</div>
+                    <select
+                      className="selectField"
+                      value={createForm.status}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          status: event.target.value as MachineItemContract["status"]
+                        }))
+                      }
+                    >
+                      <option value="available">available</option>
+                      <option value="maintenance">maintenance</option>
+                      <option value="down">down</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Health</div>
+                    <select
+                      className="selectField"
+                      value={createForm.health}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          health: event.target.value as MachineItemContract["health"]
+                        }))
+                      }
+                    >
+                      <option value="healthy">healthy</option>
+                      <option value="watch">watch</option>
+                      <option value="critical">critical</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Availability %</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={createForm.availabilityPercent}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, availabilityPercent: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Utilization %</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={createForm.utilizationPercent}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, utilizationPercent: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Hour meter</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.hourMeter}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, hourMeter: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Next maintenance h</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.nextMaintenanceHours}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, nextMaintenanceHours: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Open failures</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.openFailures}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, openFailures: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Critical failures</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.criticalOpenFailures}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, criticalOpenFailures: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Next action</div>
+                    <input
+                      className="field"
+                      value={createForm.nextAction}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))}
+                      placeholder="Liberar operador, revisar servicio y confirmar salida a obra"
+                    />
+                  </label>
+                </div>
+
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateMachine()}>
+                    {isCreating ? "Saving..." : "Add machine"}
+                  </button>
+                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                </div>
+              </Card>
+
+              <Card
+                title="Workbench rules"
+                description="These creation rules keep the workbench coherent until live POST endpoints exist."
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">Scope</div>
+                    <div>New machines stay inside the current tenant session and immediately recalculate the board.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Selection</div>
+                    <div>The newly created machine becomes the active focus item for dispatch and maintenance review.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Backend path</div>
+                    <div>This form already persists through `POST /equipment/machines`, so the equipment lane is now backed by the API.</div>
+                  </div>
+                </div>
               </Card>
             </section>
 

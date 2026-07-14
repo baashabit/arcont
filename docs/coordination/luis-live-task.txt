@@ -1,0 +1,20 @@
+Luis activo en PC1
+
+Objetivo actual:
+Endurecer backend/API del flujo `integrations + copilot-context` para que las restricciones no dependan solo del frontend.
+
+Entregable esperado:
+1. Revisar:
+- `apps/api/src/services/integration-service.ts`
+- revisar si hace falta algun ajuste de contratos o rutas para soportar mejor el copilot-context
+
+2. En integrations:
+- validar `nextAction`
+- reforzar `healthy/watch/critical` con restricciones de alerts, freshness o coverage si aplica
+
+3. En copilot-context:
+- si hace falta, ajustar datos compartidos o contratos para que la UI pueda mostrar un contexto mas accionable sin inventar datos
+
+4. Ejecutar validacion tecnica:
+- `npm run build -w @arcont/api`
+- luego sincronizar a PC2

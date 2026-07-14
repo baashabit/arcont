@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { UpdateDocumentControlItemRequestSchema } from "@arcont/contracts";
+import { CreateDocumentControlItemRequestSchema, UpdateDocumentControlItemRequestSchema } from "@arcont/contracts";
 import { authError } from "../lib/domain-error.js";
 
 function getBearerToken(authorization?: string) {
@@ -27,6 +27,32 @@ export async function registerDocumentControlRoutes(app: FastifyInstance) {
       session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
 
     return app.container.documentControlService.getOverview(companyId);
+  });
+
+  app.post<{ Body: unknown; Querystring: { companyId?: string } }>("/document-control/items", async (request) => {
+    const accessToken = getBearerToken(request.headers.authorization);
+    const session = await app.container.authService.authorize(accessToken, {
+      requiredPermissions: ["projects:*"],
+      companyId: request.query.companyId
+    });
+    const input = CreateDocumentControlItemRequestSchema.parse(request.body);
+
+    const companyId =
+      session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
+
+    return app.container.documentControlService.createItem({
+      companyId,
+      documentType: input.documentType,
+      subject: input.subject,
+      projectName: input.projectName,
+      owner: input.owner,
+      status: input.status,
+      revisionCount: input.revisionCount,
+      turnaroundDays: input.turnaroundDays,
+      openComments: input.openComments,
+      health: input.health,
+      nextAction: input.nextAction
+    });
   });
 
   app.patch<{ Params: { itemId: string }; Body: unknown; Querystring: { companyId?: string } }>(

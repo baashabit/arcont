@@ -1,5 +1,7 @@
 import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
+import { buildDerivedFinanceState } from "./finance-derived.js";
+import { buildEstimationCollectionOverview } from "./estimation-collection-service.js";
 
 export function createFinanceService(repository: PlatformRepository) {
   return {
@@ -11,10 +13,20 @@ export function createFinanceService(repository: PlatformRepository) {
         });
       }
 
-      const items = await repository.listFinanceItems(companyId);
-      const risks = await repository.listFinanceRisks(companyId);
+      const [{ items, risks, supplierProfiles }, treasuryRuns, estimationOverview] = await Promise.all([
+        buildDerivedFinanceState(repository, companyId),
+        repository.listTreasuryPaymentRuns(companyId),
+        buildEstimationCollectionOverview(repository, companyId)
+      ]);
+
       const cashPosition = items.reduce((sum, item) => sum + item.cashImpact, 0);
       const urgentPayables = items.reduce((sum, item) => sum + item.urgentItems, 0);
+      const supplierExceptions = supplierProfiles.filter(
+        (profile) => profile.complianceStatus === "blocked" || profile.satStatus === "critical" || profile.fiscalPacketCompletion < 100
+      ).length;
+      const paymentReadySuppliers = supplierProfiles.filter(
+        (profile) => profile.complianceStatus === "complete" && profile.satStatus === "controlled"
+      ).length;
       const closeReadiness =
         items.length > 0
           ? Number((items.reduce((sum, item) => sum + item.closeReadiness, 0) / items.length).toFixed(1))
@@ -24,6 +36,59 @@ export function createFinanceService(repository: PlatformRepository) {
         : items.some((item) => item.satStatus === "watch")
           ? "watch"
           : "controlled";
+      const blockedTreasuryRuns = treasuryRuns.filter((run) => run.status === "blocked").length;
+      const unavailableTreasuryInvoices = treasuryRuns.reduce(
+        (sum, run) => sum + run.invoices.filter((invoice) => invoice.satStatus === "critical" || invoice.complementStatus === "risk" || invoice.receiptEvidenceStatus === "missing").length,
+        0
+      );
+      const blockedTreasuryAmount = treasuryRuns
+        .filter((run) => run.status === "blocked")
+        .reduce((sum, run) => sum + run.totalAmount, 0);
+      const blockedInvoiceAmount = items
+        .filter((item) => item.satStatus === "critical")
+        .reduce((sum, item) => sum + Math.max(Math.abs(item.cashImpact), 0), 0);
+      const blockedAmount = Math.max(
+        estimationOverview.summary.pendingCollection + blockedTreasuryAmount + blockedInvoiceAmount,
+        0
+      );
+      const financeChainPressure =
+        supplierExceptions +
+        urgentPayables +
+        blockedTreasuryRuns +
+        unavailableTreasuryInvoices +
+        estimationOverview.summary.overdueCollections +
+        estimationOverview.summary.criticalCollections;
+      const collectionsPressure =
+        estimationOverview.summary.overdueCollections + estimationOverview.summary.criticalCollections;
+      const treasuryPressure = blockedTreasuryRuns + unavailableTreasuryInvoices;
+      const laneStatus =
+        blockedTreasuryRuns > 0 ||
+        unavailableTreasuryInvoices > 0 ||
+        estimationOverview.summary.criticalCollections > 0
+          ? "critical"
+          : financeChainPressure > 0
+            ? "watch"
+            : "controlled";
+      const headline =
+        laneStatus === "critical"
+          ? `${estimationOverview.summary.criticalCollections} critical collection line(s), ${blockedTreasuryRuns} blocked treasury run(s) and ${unavailableTreasuryInvoices} ineligible invoice(s) are constraining cash release.`
+          : laneStatus === "watch"
+            ? `${estimationOverview.summary.overdueCollections} overdue collection tranche(s) and ${urgentPayables} urgent payable item(s) still need active treasury follow-up.`
+            : "Collections, accounts payable and treasury release are currently aligned for predictable cash execution.";
+      const topAction =
+        blockedTreasuryRuns > 0
+          ? "Clear blocked treasury runs first, then release the invoices still failing fiscal or evidence readiness."
+          : estimationOverview.summary.overdueCollections > 0
+            ? "Push overdue collections and reduce evidence gap before the next treasury cut."
+            : supplierExceptions > 0
+              ? "Finish supplier fiscal packets so invoices can move cleanly into treasury."
+              : "Maintain the current payment lane and refresh collections plus treasury forecast on schedule.";
+      const nextMilestone =
+        laneStatus === "critical"
+          ? "Stabilize collections and unblock treasury before the next disbursement cycle."
+          : laneStatus === "watch"
+            ? "Reduce overdue collections and urgent payables in the next weekly cash review."
+            : "Preserve payment discipline and weekly liquidity confidence.";
       const focusItem =
         items
           .slice()
@@ -44,7 +109,23 @@ export function createFinanceService(repository: PlatformRepository) {
           cashPosition,
           urgentPayables,
           closeReadiness,
-          satStatus
+          satStatus,
+          supplierExceptions,
+          paymentReadySuppliers,
+          blockedTreasuryRuns,
+          unavailableTreasuryInvoices,
+          overdueCollections: estimationOverview.summary.overdueCollections,
+          criticalCollections: estimationOverview.summary.criticalCollections,
+          financeChainPressure
+        },
+        command: {
+          laneStatus,
+          collectionsPressure,
+          treasuryPressure,
+          blockedAmount,
+          headline,
+          topAction,
+          nextMilestone
         },
         items,
         risks,

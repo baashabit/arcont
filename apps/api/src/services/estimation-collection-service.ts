@@ -9,6 +9,30 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function collectionOwnerFor(projectSegment: string, client: string) {
+  if (projectSegment === "Government housing" || client.toLowerCase().includes("gobierno") || client === "SEDATU") {
+    return "Government estimations desk";
+  }
+
+  if (projectSegment === "Vertical housing") {
+    return "Collections coordinator";
+  }
+
+  return "Project controls and billing";
+}
+
+function billingCycleLabelFor(projectSegment: string) {
+  if (projectSegment === "Government housing") {
+    return "Supervision estimate cycle";
+  }
+
+  if (projectSegment === "Vertical housing") {
+    return "Biweekly developer estimate";
+  }
+
+  return "Weekly progress estimate";
+}
+
 function healthWeight(status: "controlled" | "watch" | "critical") {
   switch (status) {
     case "controlled":
@@ -20,153 +44,179 @@ function healthWeight(status: "controlled" | "watch" | "critical") {
   }
 }
 
-export function createEstimationCollectionService(repository: PlatformRepository) {
-  async function buildOverview(companyId: string) {
-    const company = await repository.getCompanyById(companyId);
-    if (!company) {
-      throw notFound("ESTIMATIONS_COMPANY_NOT_FOUND", "Company not found", {
-        companyId
+export async function buildEstimationCollectionOverview(repository: PlatformRepository, companyId: string) {
+  const company = await repository.getCompanyById(companyId);
+  if (!company) {
+    throw notFound("ESTIMATIONS_COMPANY_NOT_FOUND", "Company not found", {
+      companyId
+    });
+  }
+
+  const [projects, projectRisks, procurementPackages, financeItems, financeRisks] = await Promise.all([
+    repository.listProjects(companyId),
+    repository.listProjectRisks(companyId),
+    repository.listProcurementPackages(companyId),
+    repository.listFinanceItems(companyId),
+    repository.listFinanceRisks(companyId)
+  ]);
+
+  const sortedFinanceItems = financeItems.slice().sort((left, right) => left.id.localeCompare(right.id));
+
+  const lines = projects.map((project, index) => {
+    const anchorItem = sortedFinanceItems[index % Math.max(sortedFinanceItems.length, 1)];
+    if (!anchorItem) {
+      throw notFound("ESTIMATIONS_FINANCE_SIGNAL_NOT_FOUND", "Finance signal not found", {
+        companyId,
+        projectId: project.id
       });
     }
 
-    const [projects, projectRisks, procurementPackages, financeItems, financeRisks] = await Promise.all([
-      repository.listProjects(companyId),
-      repository.listProjectRisks(companyId),
-      repository.listProcurementPackages(companyId),
-      repository.listFinanceItems(companyId),
-      repository.listFinanceRisks(companyId)
-    ]);
-
-    const sortedFinanceItems = financeItems.slice().sort((left, right) => left.id.localeCompare(right.id));
-
-    const lines = projects.map((project, index) => {
-      const anchorItem = sortedFinanceItems[index % Math.max(sortedFinanceItems.length, 1)];
-      if (!anchorItem) {
-        throw notFound("ESTIMATIONS_FINANCE_SIGNAL_NOT_FOUND", "Finance signal not found", {
-          companyId,
-          projectId: project.id
-        });
-      }
-
-      const matchingPackages = procurementPackages.filter((pkg) => pkg.projectName === project.name);
-      const baseContractValue =
-        matchingPackages.length > 0
-          ? matchingPackages.reduce((sum, pkg) => sum + pkg.budgetAmount, 0) * 1.22
-          : project.activeFronts * 1250000;
-      const evidenceProgress = clamp(
-        project.progress - project.qualityHolds * 1.3 - Math.max(project.scheduleVarianceDays, 0) * 1.1,
-        0,
-        100
-      );
-      const executedAmount = roundCurrency(baseContractValue * (evidenceProgress / 100));
-      const submittedAmount = roundCurrency(executedAmount * healthWeight(anchorItem.satStatus));
-      const collectionFactor = clamp(anchorItem.closeReadiness / 100 - anchorItem.urgentItems * 0.03, 0.18, 1);
-      const collectedAmount = roundCurrency(submittedAmount * collectionFactor);
-      const pendingToBill = Math.max(executedAmount - submittedAmount, 0);
-      const pendingCollection = Math.max(submittedAmount - collectedAmount, 0);
-      const progressGap = Number((project.progress - evidenceProgress).toFixed(1));
-
-      return {
-        id: `est_${project.id}`,
-        companyId: project.companyId,
-        projectId: project.id,
-        financeLedgerId: anchorItem.id,
-        code: project.code,
-        projectName: project.name,
-        client: project.client,
-        segment: project.segment,
-        projectStatus: project.status,
-        collectionHealth:
-          pendingCollection > baseContractValue * 0.22 || progressGap > 10
-            ? "critical"
-            : pendingCollection > baseContractValue * 0.1 || anchorItem.satStatus === "watch"
-              ? "watch"
-              : anchorItem.satStatus,
-        estimatedAmount: roundCurrency(baseContractValue),
-        executedAmount,
-        submittedAmount,
-        collectedAmount,
-        pendingToBill,
-        pendingCollection,
-        evidenceProgress,
-        projectProgress: project.progress,
-        progressGap,
-        scheduleVarianceDays: project.scheduleVarianceDays,
-        closeReadiness: anchorItem.closeReadiness,
-        nextAction: anchorItem.note,
-        updatedAt: [project.updatedAt, anchorItem.updatedAt].sort().reverse()[0]
-      };
-    });
-
-    const lineIds = new Map(lines.map((line) => [line.projectId, line.id]));
-
-    const exceptions = [
-      ...projectRisks
-        .map((risk) => {
-          const lineId = lineIds.get(risk.projectId);
-          if (!lineId) {
-            return null;
-          }
-
-          return {
-            id: risk.id,
-            lineId,
-            title: risk.title,
-            category: risk.category,
-            severity: risk.severity,
-            owner: risk.owner,
-            status: risk.status
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null),
-      ...financeRisks
-        .map((risk) => {
-          const line = lines.find((item) => item.financeLedgerId === risk.ledgerId);
-          if (!line) {
-            return null;
-          }
-
-          return {
-            id: risk.id,
-            lineId: line.id,
-            title: risk.title,
-            category: risk.category,
-            severity: risk.severity,
-            owner: risk.owner,
-            status: risk.status
-          };
-        })
-        .filter((item): item is NonNullable<typeof item> => item !== null)
-    ];
-
-    const focusLine =
-      lines
-        .slice()
-        .sort((left, right) => {
-          if (left.collectionHealth === "critical" && right.collectionHealth !== "critical") {
-            return -1;
-          }
-
-          if (left.collectionHealth !== "critical" && right.collectionHealth === "critical") {
-            return 1;
-          }
-
-          return right.pendingCollection - left.pendingCollection;
-        })[0] ?? null;
+    const matchingPackages = procurementPackages.filter((pkg) => pkg.projectName === project.name);
+    const baseContractValue =
+      matchingPackages.length > 0
+        ? matchingPackages.reduce((sum, pkg) => sum + pkg.budgetAmount, 0) * 1.22
+        : project.activeFronts * 1250000;
+    const evidenceProgress = clamp(
+      project.progress - project.qualityHolds * 1.3 - Math.max(project.scheduleVarianceDays, 0) * 1.1,
+      0,
+      100
+    );
+    const executedAmount = roundCurrency(baseContractValue * (evidenceProgress / 100));
+    const submittedAmount = roundCurrency(executedAmount * healthWeight(anchorItem.satStatus));
+    const collectionFactor = clamp(anchorItem.closeReadiness / 100 - anchorItem.urgentItems * 0.03, 0.18, 1);
+    const collectedAmount = roundCurrency(submittedAmount * collectionFactor);
+    const pendingToBill = Math.max(executedAmount - submittedAmount, 0);
+    const pendingCollection = Math.max(submittedAmount - collectedAmount, 0);
+    const pendingApprovalAmount = roundCurrency(pendingToBill * clamp(1 - anchorItem.closeReadiness / 100, 0.08, 0.6));
+    const progressGap = Number((project.progress - evidenceProgress).toFixed(1));
+    const collectionWindowDays =
+      project.segment === "Government housing" ? 45 : project.segment === "Vertical housing" ? 30 : 21;
+    const oldestPendingDays = Math.round(
+      clamp(
+        pendingCollection / Math.max(submittedAmount, 1) * collectionWindowDays +
+          Math.max(project.scheduleVarianceDays, 0) * 2 +
+          anchorItem.urgentItems * 2,
+        3,
+        75
+      )
+    );
 
     return {
-      summary: {
-        trackedProjects: lines.length,
-        estimatedPortfolio: roundCurrency(lines.reduce((sum, item) => sum + item.estimatedAmount, 0)),
-        submittedPortfolio: roundCurrency(lines.reduce((sum, item) => sum + item.submittedAmount, 0)),
-        collectedPortfolio: roundCurrency(lines.reduce((sum, item) => sum + item.collectedAmount, 0)),
-        pendingCollection: roundCurrency(lines.reduce((sum, item) => sum + item.pendingCollection, 0)),
-        criticalCollections: lines.filter((item) => item.collectionHealth === "critical").length
-      },
-      lines,
-      exceptions,
-      focusLine
+      id: `est_${project.id}`,
+      companyId: project.companyId,
+      projectId: project.id,
+      financeLedgerId: anchorItem.id,
+      code: project.code,
+      projectName: project.name,
+      client: project.client,
+      segment: project.segment,
+      collectionOwner: collectionOwnerFor(project.segment, project.client),
+      billingCycleLabel: billingCycleLabelFor(project.segment),
+      projectStatus: project.status,
+      collectionHealth:
+        pendingCollection > baseContractValue * 0.22 || progressGap > 10
+          ? "critical"
+          : pendingCollection > baseContractValue * 0.1 || anchorItem.satStatus === "watch"
+            ? "watch"
+            : anchorItem.satStatus,
+      estimatedAmount: roundCurrency(baseContractValue),
+      executedAmount,
+      submittedAmount,
+      collectedAmount,
+      pendingToBill,
+      pendingCollection,
+      pendingApprovalAmount,
+      evidenceProgress,
+      projectProgress: project.progress,
+      progressGap,
+      scheduleVarianceDays: project.scheduleVarianceDays,
+      closeReadiness: anchorItem.closeReadiness,
+      oldestPendingDays,
+      collectionWindowDays,
+      nextAction: anchorItem.note,
+      updatedAt: [project.updatedAt, anchorItem.updatedAt].sort().reverse()[0]
     };
+  });
+
+  const lineIds = new Map(lines.map((line) => [line.projectId, line.id]));
+
+  const exceptions = [
+    ...projectRisks
+      .map((risk) => {
+        const lineId = lineIds.get(risk.projectId);
+        if (!lineId) {
+          return null;
+        }
+
+        return {
+          id: risk.id,
+          lineId,
+          title: risk.title,
+          category: risk.category,
+          severity: risk.severity,
+          owner: risk.owner,
+          status: risk.status
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null),
+    ...financeRisks
+      .map((risk) => {
+        const line = lines.find((item) => item.financeLedgerId === risk.ledgerId);
+        if (!line) {
+          return null;
+        }
+
+        return {
+          id: risk.id,
+          lineId: line.id,
+          title: risk.title,
+          category: risk.category,
+          severity: risk.severity,
+          owner: risk.owner,
+          status: risk.status
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+  ];
+
+  const focusLine =
+    lines
+      .slice()
+      .sort((left, right) => {
+        if (left.collectionHealth === "critical" && right.collectionHealth !== "critical") {
+          return -1;
+        }
+
+        if (left.collectionHealth !== "critical" && right.collectionHealth === "critical") {
+          return 1;
+        }
+
+        if (right.oldestPendingDays !== left.oldestPendingDays) {
+          return right.oldestPendingDays - left.oldestPendingDays;
+        }
+
+        return right.pendingCollection - left.pendingCollection;
+      })[0] ?? null;
+
+  return {
+    summary: {
+      trackedProjects: lines.length,
+      estimatedPortfolio: roundCurrency(lines.reduce((sum, item) => sum + item.estimatedAmount, 0)),
+      submittedPortfolio: roundCurrency(lines.reduce((sum, item) => sum + item.submittedAmount, 0)),
+      collectedPortfolio: roundCurrency(lines.reduce((sum, item) => sum + item.collectedAmount, 0)),
+      pendingCollection: roundCurrency(lines.reduce((sum, item) => sum + item.pendingCollection, 0)),
+      criticalCollections: lines.filter((item) => item.collectionHealth === "critical").length,
+      overdueCollections: lines.filter((item) => item.oldestPendingDays > item.collectionWindowDays).length
+    },
+    lines,
+    exceptions,
+    focusLine
+  };
+}
+
+export function createEstimationCollectionService(repository: PlatformRepository) {
+  async function buildOverview(companyId: string) {
+    return buildEstimationCollectionOverview(repository, companyId);
   }
 
   return {
@@ -207,6 +257,18 @@ export function createEstimationCollectionService(repository: PlatformRepository
             {
               lineId: line.id,
               progressGap: line.progressGap
+            }
+          );
+        }
+
+        if (line.oldestPendingDays > line.collectionWindowDays) {
+          throw validationError(
+            "ESTIMATIONS_OVERDUE_COLLECTION_OPEN",
+            "Collection health cannot move to controlled while the oldest pending collection remains overdue",
+            {
+              lineId: line.id,
+              oldestPendingDays: line.oldestPendingDays,
+              collectionWindowDays: line.collectionWindowDays
             }
           );
         }

@@ -1,5 +1,6 @@
 import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
+import { buildDerivedFinanceState } from "./finance-derived.js";
 
 function roundMetric(value: number) {
   return Number(value.toFixed(1));
@@ -18,9 +19,8 @@ export function createCloseControlService(repository: PlatformRepository) {
       });
     }
 
-    const [financeItems, financeRisks, complianceCases, complianceRisks, documents, documentRisks] = await Promise.all([
-      repository.listFinanceItems(companyId),
-      repository.listFinanceRisks(companyId),
+    const [{ items: financeItems, risks: financeRisks, payableInvoices, payableRisks, supplierProfiles, supplierRisks }, complianceCases, complianceRisks, documents, documentRisks] = await Promise.all([
+      buildDerivedFinanceState(repository, companyId),
       repository.listComplianceCases(companyId),
       repository.listComplianceRisks(companyId),
       repository.listDocumentControlItems(companyId),
@@ -78,7 +78,65 @@ export function createCloseControlService(repository: PlatformRepository) {
       updatedAt: item.updatedAt
     }));
 
-    const lines = [...financeLines, ...complianceLines, ...documentLines];
+    const payableLines = payableInvoices.map((invoice) => {
+      if (invoice.status === "paid") {
+        return {
+          id: `close_ap_${invoice.id}`,
+          sourceId: invoice.id,
+          companyId: invoice.companyId,
+          code: invoice.code,
+          streamName: `${invoice.supplierName} / ${invoice.invoiceNumber}`,
+          streamType: "finance" as const,
+          closeHealth: "controlled" as const,
+          closeReadiness: 100,
+          blockingItems: 0,
+          slaHoursRemaining: 24,
+          evidenceCompletion: 100,
+          fiscalExposure: 0,
+          nextAction: invoice.nextAction,
+          updatedAt: invoice.updatedAt
+        };
+      }
+
+      const invoiceRisks = payableRisks.filter((risk) => risk.invoiceId === invoice.id);
+      const supplierProfile = invoice.supplierProfileId
+        ? supplierProfiles.find((profile) => profile.id === invoice.supplierProfileId) ?? null
+        : null;
+      const supplierPacketGap = supplierProfile ? Math.max(0, 100 - supplierProfile.fiscalPacketCompletion) : Math.max(0, 100 - invoice.packetCompletion);
+      const evidenceCompletion =
+        invoice.receiptEvidenceStatus === "complete" ? 100 : invoice.receiptEvidenceStatus === "partial" ? 72 : 30;
+      const complementCompletion =
+        invoice.complementStatus === "complete" || invoice.complementStatus === "not_required"
+          ? 100
+          : invoice.complementStatus === "pending"
+            ? 64
+            : 20;
+      const closeReadiness = roundMetric(invoice.packetCompletion * 0.45 + evidenceCompletion * 0.3 + complementCompletion * 0.25);
+
+      return {
+        id: `close_ap_${invoice.id}`,
+        sourceId: invoice.id,
+        companyId: invoice.companyId,
+        code: invoice.code,
+        streamName: `${invoice.supplierName} / ${invoice.invoiceNumber}`,
+        streamType: "finance" as const,
+        closeHealth:
+          invoice.status === "blocked" || invoice.satStatus === "critical" || invoice.complementStatus === "risk"
+            ? "critical"
+            : invoice.status === "scheduled" || invoice.status === "matched"
+              ? "watch"
+              : "controlled",
+        closeReadiness,
+        blockingItems: invoiceRisks.length + (supplierPacketGap > 0 ? 1 : 0),
+        slaHoursRemaining: invoice.status === "scheduled" ? 12 : invoice.status === "blocked" ? -24 : -6,
+        evidenceCompletion: roundMetric((invoice.packetCompletion + evidenceCompletion) / 2),
+        fiscalExposure: roundCurrency(invoice.pendingAmount + supplierPacketGap * 1200),
+        nextAction: invoice.nextAction,
+        updatedAt: invoice.updatedAt
+      };
+    });
+
+    const lines = [...financeLines, ...payableLines, ...complianceLines, ...documentLines];
 
     const risks = [
       ...financeRisks
@@ -123,6 +181,44 @@ export function createCloseControlService(repository: PlatformRepository) {
           }
           return {
             id: risk.id,
+            lineId: line.id,
+            title: risk.title,
+            category: risk.category,
+            severity: risk.severity,
+            owner: risk.owner,
+            status: risk.status
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null),
+      ...payableRisks
+        .map((risk) => {
+          const line = lines.find((item) => item.sourceId === risk.invoiceId && item.code.startsWith("AP-"));
+          if (!line) {
+            return null;
+          }
+          return {
+            id: risk.id,
+            lineId: line.id,
+            title: risk.title,
+            category: risk.category,
+            severity: risk.severity,
+            owner: risk.owner,
+            status: risk.status
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null),
+      ...supplierRisks
+        .map((risk) => {
+          const supplierProfile = supplierProfiles.find((profile) => profile.id === risk.supplierProfileId);
+          const linkedInvoice = supplierProfile
+            ? payableInvoices.find((invoice) => invoice.supplierProfileId === supplierProfile.id && invoice.status !== "paid") ?? null
+            : null;
+          const line = linkedInvoice ? lines.find((item) => item.sourceId === linkedInvoice.id && item.code.startsWith("AP-")) : null;
+          if (!line) {
+            return null;
+          }
+          return {
+            id: `supplier-${risk.id}`,
             lineId: line.id,
             title: risk.title,
             category: risk.category,
@@ -182,6 +278,18 @@ export function createCloseControlService(repository: PlatformRepository) {
         });
       }
 
+      const nextAction = input.nextAction.trim();
+      if (nextAction.length < 8) {
+        throw validationError("CLOSE_CONTROL_INVALID_NEXT_ACTION", "Next action must be specific", {
+          lineId: line.id,
+          nextActionLength: nextAction.length
+        });
+      }
+
+      if (input.closeHealth === line.closeHealth && nextAction === line.nextAction) {
+        return line;
+      }
+
       if (input.closeHealth === "controlled") {
         if (line.blockingItems > 0) {
           throw validationError(
@@ -204,6 +312,17 @@ export function createCloseControlService(repository: PlatformRepository) {
             }
           );
         }
+
+        if (line.evidenceCompletion < 90) {
+          throw validationError(
+            "CLOSE_CONTROL_EVIDENCE_LOW",
+            "Close stream cannot move to controlled while evidence completion remains below 90%",
+            {
+              lineId: line.id,
+              evidenceCompletion: line.evidenceCompletion
+            }
+          );
+        }
       }
 
       if (input.closeHealth === "watch" && line.slaHoursRemaining < -8) {
@@ -217,11 +336,35 @@ export function createCloseControlService(repository: PlatformRepository) {
         );
       }
 
-      if (line.streamType === "finance") {
+      if (line.streamType === "finance" && line.code.startsWith("AP-")) {
+        const payableStatus =
+          input.closeHealth === "controlled" ? "paid" : input.closeHealth === "critical" ? "blocked" : "scheduled";
+        const updated = await repository.updateAccountsPayableInvoice({
+          invoiceId: line.sourceId,
+          status: payableStatus,
+          satStatus: input.closeHealth,
+          complementStatus: input.closeHealth === "controlled" ? "complete" : input.closeHealth === "critical" ? "risk" : "pending",
+          scheduledPaymentDate: input.closeHealth === "critical" ? null : new Date().toISOString().slice(0, 10),
+          nextAction
+        });
+
+        await repository.addAuditEvent({
+          companyId: input.companyId,
+          actorUserId: undefined,
+          aggregateType: "close_control_line",
+          aggregateId: line.id,
+          action: "close-control.line.updated",
+          metadata: {
+            closeHealth: input.closeHealth,
+            invoiceStatus: updated.status,
+            nextAction: updated.nextAction
+          }
+        });
+      } else if (line.streamType === "finance") {
         const updated = await repository.updateFinanceLedgerItem({
           ledgerId: line.sourceId,
           satStatus: input.closeHealth,
-          note: input.nextAction
+          note: nextAction
         });
 
         await repository.addAuditEvent({
@@ -241,7 +384,7 @@ export function createCloseControlService(repository: PlatformRepository) {
         const updated = await repository.updateComplianceCase({
           caseId: line.sourceId,
           status,
-          nextAction: input.nextAction
+          nextAction
         });
 
         await repository.addAuditEvent({
@@ -262,7 +405,7 @@ export function createCloseControlService(repository: PlatformRepository) {
         const updated = await repository.updateDocumentControlItem({
           itemId: line.sourceId,
           status,
-          nextAction: input.nextAction
+          nextAction
         });
 
         await repository.addAuditEvent({

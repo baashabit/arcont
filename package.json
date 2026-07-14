@@ -1,6 +1,10 @@
 {
   "name": "arcont",
   "private": true,
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=10.0.0"
+  },
   "workspaces": [
     "apps/*",
     "frontend/arcont-suite",
@@ -10,6 +14,9 @@
     "dev:api": "npm run dev -w @arcont/api",
     "build:api": "npm run build -w @arcont/api",
     "lint:api": "npm run lint -w @arcont/api",
+    "env:doctor": "npm run env:doctor -w @arcont/api",
+    "demo:prepare": "npm run db:prepare-demo-local -w @arcont/api",
+    "demo:verify": "ARCONT_DATA_DRIVER=postgres npm run db:verify-demo-operations -w @arcont/api",
     "dev:web": "npm run dev -w arcont-suite",
     "build:web": "npm run build -w arcont-suite",
     "lint:web": "npm run lint -w arcont-suite",

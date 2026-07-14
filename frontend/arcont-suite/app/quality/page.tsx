@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { QualityInspectionContract, QualityOverviewContract } from "@/lib/contracts";
-import { fetchQualityOverview, updateQualityInspection } from "@/lib/platform-api";
+import { createQualityInspection, fetchEquipmentOverview, fetchQualityOverview, updateQualityInspection } from "@/lib/platform-api";
 
 function severityTone(severity: QualityInspectionContract["severity"]) {
   switch (severity) {
@@ -78,9 +78,57 @@ function qualityActionOptions(inspection: QualityInspectionContract) {
   }
 }
 
+function recomputeSummary(inspectionsBoard: QualityInspectionContract[]) {
+  const openFindings = inspectionsBoard.reduce((sum, inspection) => sum + inspection.openFindings, 0);
+  const releaseReadiness =
+    inspectionsBoard.length > 0
+      ? Number((inspectionsBoard.reduce((sum, inspection) => sum + inspection.releaseReadiness, 0) / inspectionsBoard.length).toFixed(1))
+      : 0;
+  const averageReworkRate =
+    inspectionsBoard.length > 0
+      ? Number((inspectionsBoard.reduce((sum, inspection) => sum + inspection.reworkRate, 0) / inspectionsBoard.length).toFixed(1))
+      : 0;
+
+  return {
+    inspections: inspectionsBoard.length,
+    openFindings,
+    releaseReadiness,
+    averageReworkRate,
+    executionRiskInspections: inspectionsBoard.filter(
+      (item) => item.latestDailyLogStatus === "flagged" || item.projectStatus === "blocked" || item.openFindings > 3
+    ).length
+  };
+}
+
+type QualityBridgeContext = {
+  equipment: NonNullable<Awaited<ReturnType<typeof fetchEquipmentOverview>>>;
+} | null;
+
+function buildQualityStory(inspection: QualityInspectionContract | null, bridge: QualityBridgeContext) {
+  if (!inspection) {
+    return null;
+  }
+
+  const machineSignal = bridge?.equipment.focusMachine ?? null;
+
+  return {
+    equipmentReadiness: machineSignal
+      ? `${machineSignal.machineName} is the current asset anchor with status ${machineSignal.status}, health ${machineSignal.health} and ${machineSignal.availabilityPercent}% availability.`
+      : "No equipment anchor is currently visible for this inspection lane.",
+    fieldCorrectionSupport:
+      inspection.status === "blocked"
+        ? `${inspection.contractorName} still needs an immediate correction push before release can resume.`
+        : `${inspection.contractorName} is moving under ${inspection.openFindings} open findings and ${inspection.evidenceCompletion}% evidence completion.`,
+    releaseConstraint: machineSignal
+      ? `${inspection.code} and ${machineSignal.machineName} together define today's release posture: ${inspection.releaseReadiness}% readiness with ${machineSignal.criticalOpenFailures} critical failures still open on the asset side.`
+      : `${inspection.code} currently carries a standalone release constraint with ${inspection.openFindings} open findings.`
+  };
+}
+
 export default function QualityPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<QualityOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<QualityBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedInspectionId, setSelectedInspectionId] = useState<string | null>(null);
@@ -88,6 +136,21 @@ export default function QualityPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    projectName: "Proyecto central",
+    areaName: "Frente 1",
+    checklistName: "Inspeccion de calidad",
+    contractorName: "Contratista principal",
+    severity: "major" as QualityInspectionContract["severity"],
+    openFindings: "2",
+    evidenceCompletion: "70",
+    releaseReadiness: "65",
+    reworkRate: "8",
+    status: "in_progress" as QualityInspectionContract["status"],
+    nextAction: ""
+  });
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -99,11 +162,17 @@ export default function QualityPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchQualityOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchQualityOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchEquipmentOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, equipment]) => {
         if (cancelled) {
           return;
         }
@@ -115,6 +184,7 @@ export default function QualityPage() {
 
         setOverview(result);
         setSelectedInspectionId((current) => current ?? result.focusInspection?.id ?? result.inspectionsBoard[0]?.id ?? null);
+        setBridgeContext(equipment ? { equipment } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -142,6 +212,8 @@ export default function QualityPage() {
     [selectedInspection]
   );
 
+  const selectedStory = useMemo(() => buildQualityStory(selectedInspection, bridgeContext), [bridgeContext, selectedInspection]);
+
   useEffect(() => {
     setNextActionDraft(selectedInspection?.nextAction ?? "");
     setActionError(null);
@@ -156,6 +228,11 @@ export default function QualityPage() {
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
       setActionError("Next action must be more specific before updating the inspection.");
+      return;
+    }
+
+    if (status === "pending_release" && (selectedInspection.openFindings > 3 || selectedInspection.evidenceCompletion < 85)) {
+      setActionError("Release review requires at most 3 open findings and at least 85% evidence.");
       return;
     }
 
@@ -190,26 +267,9 @@ export default function QualityPage() {
       const inspectionsBoard = current.inspectionsBoard.map((inspection) =>
         inspection.id === response.data?.id ? response.data : inspection
       );
-      const openFindings = inspectionsBoard.reduce((sum, inspection) => sum + inspection.openFindings, 0);
-      const releaseReadiness =
-        inspectionsBoard.length > 0
-          ? Number(
-              (inspectionsBoard.reduce((sum, inspection) => sum + inspection.releaseReadiness, 0) / inspectionsBoard.length).toFixed(1)
-            )
-          : 0;
-      const averageReworkRate =
-        inspectionsBoard.length > 0
-          ? Number((inspectionsBoard.reduce((sum, inspection) => sum + inspection.reworkRate, 0) / inspectionsBoard.length).toFixed(1))
-          : 0;
-
       return {
         ...current,
-        summary: {
-          inspections: inspectionsBoard.length,
-          openFindings,
-          releaseReadiness,
-          averageReworkRate
-        },
+        summary: recomputeSummary(inspectionsBoard),
         inspectionsBoard,
         focusInspection: current.focusInspection?.id === response.data?.id ? response.data : current.focusInspection
       };
@@ -217,6 +277,127 @@ export default function QualityPage() {
     setNextActionDraft(response.data.nextAction);
     setActionMessage(`Inspection moved to ${response.data.status}.`);
     setIsSaving(false);
+  }
+
+  async function handleCreateInspection() {
+    if (!overview || !session.accessToken) {
+      return;
+    }
+
+    const projectName = createForm.projectName.trim();
+    const areaName = createForm.areaName.trim();
+    const checklistName = createForm.checklistName.trim();
+    const contractorName = createForm.contractorName.trim();
+    const nextAction = createForm.nextAction.trim();
+
+    if (projectName.length < 3 || areaName.length < 3 || checklistName.length < 3 || contractorName.length < 3) {
+      setActionError("Project, area, checklist and contractor must be specific before creating the inspection.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before creating the inspection.");
+      setCreateMessage(null);
+      return;
+    }
+
+    const openFindings = Number(createForm.openFindings);
+    const evidenceCompletion = Number(createForm.evidenceCompletion);
+    const releaseReadiness = Number(createForm.releaseReadiness);
+    const reworkRate = Number(createForm.reworkRate);
+
+    if (!Number.isFinite(openFindings) || openFindings < 0) {
+      setActionError("Open findings must be a valid non-negative number.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (!Number.isFinite(evidenceCompletion) || evidenceCompletion < 0 || evidenceCompletion > 100) {
+      setActionError("Evidence completion must be between 0 and 100.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (!Number.isFinite(releaseReadiness) || releaseReadiness < 0 || releaseReadiness > 100) {
+      setActionError("Release readiness must be between 0 and 100.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (!Number.isFinite(reworkRate) || reworkRate < 0) {
+      setActionError("Rework rate must be a valid non-negative number.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (createForm.status === "pending_release" && (openFindings > 3 || evidenceCompletion < 85)) {
+      setActionError("Pending release inspections require at most 3 findings and at least 85% evidence.");
+      setCreateMessage(null);
+      return;
+    }
+
+    setIsCreating(true);
+    setActionError(null);
+    setCreateMessage(null);
+
+    const response = await createQualityInspection(
+      activeCompany.id,
+      {
+        areaName: `${projectName} · ${areaName}`,
+        checklistName,
+        contractorName,
+        severity: createForm.severity,
+        openFindings,
+        evidenceCompletion,
+        releaseReadiness,
+        reworkRate,
+        status: createForm.status,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Inspection creation failed.");
+      setIsCreating(false);
+      return;
+    }
+
+    const created = response.data;
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const inspectionsBoard = [created, ...current.inspectionsBoard];
+      return {
+        ...current,
+        summary: recomputeSummary(inspectionsBoard),
+        inspectionsBoard,
+        focusInspection: created
+      };
+    });
+    setSelectedInspectionId(created.id);
+    setNextActionDraft(created.nextAction);
+    setCreateMessage(`${created.code} added to the quality board.`);
+    setCreateForm({
+      projectName,
+      areaName,
+      checklistName: "Inspeccion de calidad",
+      contractorName,
+      severity: "major",
+      openFindings: "2",
+      evidenceCompletion: "70",
+      releaseReadiness: "65",
+      reworkRate: "8",
+      status: "in_progress",
+      nextAction: ""
+    });
+    setIsCreating(false);
   }
 
   return (
@@ -249,6 +430,29 @@ export default function QualityPage() {
                 value={`${overview.summary.averageReworkRate}%`}
                 footnote="Average rework rate across the current inspection board."
               />
+              <KpiCard
+                label="Execution risk"
+                value={String(overview.summary.executionRiskInspections)}
+                footnote="Inspections already under project blockage, flagged field logs or heavy findings."
+              />
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Equipment readiness" description="Current fleet posture attached to quality release.">
+                <p className="sectionText">
+                  {selectedStory?.equipmentReadiness ?? "Choose an inspection to inspect equipment readiness."}
+                </p>
+              </Card>
+              <Card title="Field correction support" description="How the contractor correction flow is behaving right now.">
+                <p className="sectionText">
+                  {selectedStory?.fieldCorrectionSupport ?? "Choose an inspection to inspect correction support."}
+                </p>
+              </Card>
+              <Card title="Release constraint" description="Joint constraint between asset readiness and inspection closure.">
+                <p className="sectionText">
+                  {selectedStory?.releaseConstraint ?? "Choose an inspection to inspect release constraints."}
+                </p>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -318,6 +522,15 @@ export default function QualityPage() {
                 {selectedInspection ? (
                   <div className="detailGrid">
                     <div className="detailRow">
+                      <div className="detailLabel">Project</div>
+                      <div className="tableCellStack">
+                        <span>{selectedInspection.projectName}</span>
+                        <span className="tableCellMuted">
+                          {selectedInspection.projectStatus} · latest log {selectedInspection.latestDailyLogStatus}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Checklist</div>
                       <div>{selectedInspection.checklistName}</div>
                     </div>
@@ -386,42 +599,108 @@ export default function QualityPage() {
               </Card>
             </section>
 
-            <Card title="Quality risks and blockers" description="Issues still blocking release, correction or quality closure.">
-              <DataTable
-                rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
-                columns={[
-                  {
-                    key: "risk",
-                    label: "Risk",
-                    render: (risk) => (
-                      <div className="tableCellStack">
-                        <strong>{risk.title}</strong>
-                        <span className="tableCellMuted">{risk.category}</span>
-                      </div>
-                    )
-                  },
-                  {
-                    key: "severity",
-                    label: "Severity",
-                    render: (risk) => (
-                      <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
-                        {risk.severity}
-                      </Badge>
-                    )
-                  },
-                  {
-                    key: "owner",
-                    label: "Owner",
-                    render: (risk) => risk.owner
-                  },
-                  {
-                    key: "status",
-                    label: "Current action",
-                    render: (risk) => risk.status
-                  }
-                ]}
-              />
-            </Card>
+            <section className="grid cols2">
+              <Card title="Register inspection" description="Create a live quality incident directly in the tenant backend.">
+                <div className="detailGrid">
+                  <label className="detailRow">
+                    <div className="detailLabel">Project</div>
+                    <input className="field" value={createForm.projectName} onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Area</div>
+                    <input className="field" value={createForm.areaName} onChange={(event) => setCreateForm((current) => ({ ...current, areaName: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Checklist</div>
+                    <input className="field" value={createForm.checklistName} onChange={(event) => setCreateForm((current) => ({ ...current, checklistName: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Contractor</div>
+                    <input className="field" value={createForm.contractorName} onChange={(event) => setCreateForm((current) => ({ ...current, contractorName: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Severity</div>
+                    <select className="selectField" value={createForm.severity} onChange={(event) => setCreateForm((current) => ({ ...current, severity: event.target.value as QualityInspectionContract["severity"] }))}>
+                      <option value="minor">minor</option>
+                      <option value="major">major</option>
+                      <option value="critical">critical</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Status</div>
+                    <select className="selectField" value={createForm.status} onChange={(event) => setCreateForm((current) => ({ ...current, status: event.target.value as QualityInspectionContract["status"] }))}>
+                      <option value="scheduled">scheduled</option>
+                      <option value="in_progress">in_progress</option>
+                      <option value="pending_release">pending_release</option>
+                      <option value="blocked">blocked</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Open findings</div>
+                    <input className="field" type="number" min="0" value={createForm.openFindings} onChange={(event) => setCreateForm((current) => ({ ...current, openFindings: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Evidence %</div>
+                    <input className="field" type="number" min="0" max="100" value={createForm.evidenceCompletion} onChange={(event) => setCreateForm((current) => ({ ...current, evidenceCompletion: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Release %</div>
+                    <input className="field" type="number" min="0" max="100" value={createForm.releaseReadiness} onChange={(event) => setCreateForm((current) => ({ ...current, releaseReadiness: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Rework %</div>
+                    <input className="field" type="number" min="0" value={createForm.reworkRate} onChange={(event) => setCreateForm((current) => ({ ...current, reworkRate: event.target.value }))} />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Next action</div>
+                    <input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} placeholder="Describe the correction or release action required" />
+                  </label>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateInspection()}>
+                    {isCreating ? "Saving..." : "Add inspection"}
+                  </button>
+                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                </div>
+              </Card>
+
+              <Card title="Quality risks and blockers" description="Issues still blocking release, correction or quality closure.">
+                <DataTable
+                  rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
+                  columns={[
+                    {
+                      key: "risk",
+                      label: "Risk",
+                      render: (risk) => (
+                        <div className="tableCellStack">
+                          <strong>{risk.title}</strong>
+                          <span className="tableCellMuted">{risk.category}</span>
+                        </div>
+                      )
+                    },
+                    {
+                      key: "severity",
+                      label: "Severity",
+                      render: (risk) => (
+                        <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
+                          {risk.severity}
+                        </Badge>
+                      )
+                    },
+                    {
+                      key: "owner",
+                      label: "Owner",
+                      render: (risk) => risk.owner
+                    },
+                    {
+                      key: "status",
+                      label: "Current action",
+                      render: (risk) => risk.status
+                    }
+                  ]}
+                />
+              </Card>
+            </section>
           </>
         ) : error ? (
           <EmptyState

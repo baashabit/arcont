@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -73,6 +74,20 @@ function actionOptions(line: SubcontractLineContract) {
         }
       ];
   }
+}
+
+function recomputeSummary(lines: SubcontractLineContract[]) {
+  return {
+    activeSubcontracts: lines.length,
+    contractedAmount: lines.reduce((sum, item) => sum + item.contractAmount, 0),
+    earnedAmount: lines.reduce((sum, item) => sum + item.earnedAmount, 0),
+    paidAmount: lines.reduce((sum, item) => sum + item.paidAmount, 0),
+    pendingDestajo: lines.reduce((sum, item) => sum + item.pendingDestajo, 0),
+    criticalSubcontracts: lines.filter((item) => item.subcontractHealth === "critical").length,
+    executionRiskSubcontracts: lines.filter(
+      (item) => item.latestDailyLogStatus === "flagged" || item.qualityReleaseReadiness < 75 || item.subcontractHealth === "critical"
+    ).length
+  };
 }
 
 export default function SubcontractsPage() {
@@ -188,14 +203,7 @@ export default function SubcontractsPage() {
 
       return {
         ...current,
-        summary: {
-          activeSubcontracts: lines.length,
-          contractedAmount: lines.reduce((sum, item) => sum + item.contractAmount, 0),
-          earnedAmount: lines.reduce((sum, item) => sum + item.earnedAmount, 0),
-          paidAmount: lines.reduce((sum, item) => sum + item.paidAmount, 0),
-          pendingDestajo: lines.reduce((sum, item) => sum + item.pendingDestajo, 0),
-          criticalSubcontracts: lines.filter((item) => item.subcontractHealth === "critical").length
-        },
+        summary: recomputeSummary(lines),
         lines,
         focusLine:
           lines
@@ -248,6 +256,11 @@ export default function SubcontractsPage() {
                 label="Pending destajo"
                 value={`MXN ${overview.summary.pendingDestajo.toLocaleString()}`}
                 footnote="Value still pending to settle between invoiced and paid progress."
+              />
+              <KpiCard
+                label="Execution risk"
+                value={String(overview.summary.executionRiskSubcontracts)}
+                footnote="Subcontracts already under flagged field logs, poor quality readiness or critical posture."
               />
             </section>
 
@@ -345,6 +358,13 @@ export default function SubcontractsPage() {
                       <div>{selectedLine.progressGap}% against contractor productivity</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Field / quality posture</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">latest log {selectedLine.latestDailyLogStatus}</span>
+                        <span className="tableCellMuted">quality release readiness {selectedLine.qualityReleaseReadiness}%</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Retention</div>
                       <div>MXN {selectedLine.retentionAmount.toLocaleString()}</div>
                     </div>
@@ -360,10 +380,29 @@ export default function SubcontractsPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/field">
+                          Open field
+                        </Link>
+                        <Link className="buttonGhost" href="/quality">
+                          Open quality
+                        </Link>
+                        <Link className="buttonGhost" href="/projects">
+                          Open projects
+                        </Link>
+                        <Link className="buttonGhost" href="/hr">
+                          Open hr
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Business rules</div>
                       <div className="tableCellStack">
                         <span className="tableCellMuted">Controlled is blocked while pending destajo remains high.</span>
                         <span className="tableCellMuted">Controlled is blocked while expirations or incidents remain open.</span>
+                        <span className="tableCellMuted">Controlled now also requires quality readiness of at least 85%.</span>
+                        <span className="tableCellMuted">Watch is blocked while attendance is below 85% or the latest field log remains flagged.</span>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -383,7 +422,16 @@ export default function SubcontractsPage() {
                               key={option.label}
                               className={option.subcontractHealth === "critical" ? "buttonGhost" : "button"}
                               type="button"
-                              disabled={isSaving}
+                              disabled={
+                                isSaving ||
+                                (option.subcontractHealth === "controlled" &&
+                                  (selectedLine.pendingDestajo > selectedLine.contractAmount * 0.1 ||
+                                    selectedLine.complianceExpirations > 0 ||
+                                    selectedLine.incidentCount > 0 ||
+                                    selectedLine.qualityReleaseReadiness < 85)) ||
+                                (option.subcontractHealth === "watch" &&
+                                  (selectedLine.attendanceRate < 85 || selectedLine.latestDailyLogStatus === "flagged"))
+                              }
                               onClick={() => void handleAction(option.subcontractHealth, option.nextAction)}
                             >
                               {isSaving ? "Saving..." : option.label}

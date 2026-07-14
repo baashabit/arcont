@@ -8,7 +8,12 @@
     "predev": "npm run build -w @arcont/contracts",
     "build": "tsc -p tsconfig.json",
     "lint": "tsc --noEmit",
+    "env:doctor": "tsx src/scripts/env-doctor.ts",
     "db:migrate": "tsx src/scripts/migrate.ts",
+    "db:bootstrap-local": "tsx src/scripts/bootstrap-local.ts",
+    "db:seed-demo-operations": "tsx src/scripts/seed-demo-operations.ts",
+    "db:prepare-demo-local": "npm run db:migrate && npm run db:bootstrap-local && npm run db:seed-demo-operations",
+    "db:verify-demo-operations": "tsx src/scripts/verify-demo-operations.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {

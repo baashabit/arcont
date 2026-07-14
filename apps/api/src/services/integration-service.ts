@@ -81,7 +81,15 @@ export function createIntegrationService(repository: PlatformRepository) {
         });
       }
 
-      if (stream.health === input.health && stream.nextAction === input.nextAction) {
+      const nextAction = input.nextAction.trim();
+      if (nextAction.length < 8) {
+        throw validationError("INTEGRATION_INVALID_NEXT_ACTION", "Next action must be specific", {
+          streamId: stream.id,
+          nextActionLength: nextAction.length
+        });
+      }
+
+      if (stream.health === input.health && stream.nextAction === nextAction) {
         return stream;
       }
 
@@ -123,12 +131,45 @@ export function createIntegrationService(repository: PlatformRepository) {
             }
           );
         }
+
+        if (stream.automationCoverage < 75) {
+          throw validationError(
+            "INTEGRATION_COVERAGE_TOO_LOW",
+            "Integration stream cannot be marked healthy while automation coverage remains too low",
+            {
+              streamId: stream.id,
+              automationCoverage: stream.automationCoverage
+            }
+          );
+        }
+      }
+
+      if (input.health === "watch" && stream.openAlerts > 8) {
+        throw validationError(
+          "INTEGRATION_SHOULD_REMAIN_CRITICAL",
+          "Integration stream should remain critical while alert volume stays too high",
+          {
+            streamId: stream.id,
+            openAlerts: stream.openAlerts
+          }
+        );
+      }
+
+      if (input.health === "watch" && stream.freshnessMinutes > 120) {
+        throw validationError(
+          "INTEGRATION_FRESHNESS_TOO_STALE_FOR_WATCH",
+          "Integration stream should remain critical while freshness is severely stale",
+          {
+            streamId: stream.id,
+            freshnessMinutes: stream.freshnessMinutes
+          }
+        );
       }
 
       const updatedStream = await repository.updateIntegrationStream({
         streamId: input.streamId,
         health: input.health,
-        nextAction: input.nextAction
+        nextAction
       });
 
       await repository.addAuditEvent({

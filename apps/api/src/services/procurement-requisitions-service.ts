@@ -28,6 +28,7 @@ export function createProcurementRequisitionsService(repository: PlatformReposit
         repository.listProcurementRequisitions(companyId),
         repository.listProcurementRequisitionRisks(companyId)
       ]);
+      const fieldMaterialRequests = await repository.listFieldMaterialRequests(companyId);
 
       const openRequisitions = requisitions.filter((item) => item.status !== "sourcing");
       const focusRequisition =
@@ -65,8 +66,62 @@ export function createProcurementRequisitionsService(repository: PlatformReposit
         },
         requisitions,
         risks,
+        origins: fieldMaterialRequests
+          .filter((item) => item.requisitionId)
+          .map((item) => ({
+            requisitionId: item.requisitionId!,
+            fieldRequestId: item.id,
+            projectName: item.projectName,
+            frontName: item.frontName,
+            requestedBy: item.requestedBy,
+            summary: item.summary,
+            detail: item.detail,
+            requestedVolume: item.requestedVolume,
+            urgency: item.urgency,
+            status: item.status,
+            nextAction: item.nextAction,
+            createdAt: item.createdAt
+          })),
         focusRequisition
       };
+    },
+    async createRequisition(input: {
+      companyId: string;
+      projectName: string;
+      frontName: string;
+      requestedBy: string;
+      category: string;
+      status: "draft" | "submitted" | "approved" | "sourcing" | "blocked";
+      requestedItems: number;
+      budgetAmount: number;
+      urgency: "planned" | "watch" | "critical";
+      approvalHours: number;
+      supplierCoverage: number;
+      nextAction: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("PROCUREMENT_REQUISITIONS_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const createdRequisition = await repository.createProcurementRequisition(input);
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "procurement_requisition",
+        aggregateId: createdRequisition.id,
+        action: "procurement.requisition.created",
+        metadata: {
+          code: createdRequisition.code,
+          status: createdRequisition.status,
+          urgency: createdRequisition.urgency
+        }
+      });
+
+      return createdRequisition;
     },
     async updateRequisition(input: {
       companyId: string;

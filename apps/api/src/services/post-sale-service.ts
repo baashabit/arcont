@@ -86,7 +86,15 @@ export function createPostSaleService(repository: PlatformRepository) {
         });
       }
 
-      if (postSaleCase.status === input.status && postSaleCase.nextAction === input.nextAction) {
+      const nextAction = input.nextAction.trim();
+      if (nextAction.length < 8) {
+        throw validationError("POST_SALE_INVALID_NEXT_ACTION", "Next action must be specific", {
+          caseId: postSaleCase.id,
+          nextActionLength: nextAction.length
+        });
+      }
+
+      if (postSaleCase.status === input.status && postSaleCase.nextAction === nextAction) {
         return postSaleCase;
       }
 
@@ -120,12 +128,47 @@ export function createPostSaleService(repository: PlatformRepository) {
             }
           );
         }
+
+        if (postSaleCase.status !== "customer_validation") {
+          throw validationError(
+            "POST_SALE_REQUIRES_CUSTOMER_VALIDATION",
+            "Post-sale case must pass through customer validation before closing",
+            {
+              caseId: postSaleCase.id,
+              currentStatus: postSaleCase.status
+            }
+          );
+        }
+      }
+
+      if (input.status === "customer_validation") {
+        if (postSaleCase.openFindings > 0) {
+          throw validationError(
+            "POST_SALE_FINDINGS_STILL_OPEN",
+            "Post-sale case cannot move to customer validation while findings remain open",
+            {
+              caseId: postSaleCase.id,
+              openFindings: postSaleCase.openFindings
+            }
+          );
+        }
+
+        if (postSaleCase.health === "critical") {
+          throw validationError(
+            "POST_SALE_HEALTH_TOO_CRITICAL_FOR_VALIDATION",
+            "Post-sale case cannot move to customer validation while health remains critical",
+            {
+              caseId: postSaleCase.id,
+              health: postSaleCase.health
+            }
+          );
+        }
       }
 
       const updatedCase = await repository.updatePostSaleCase({
         caseId: input.caseId,
         status: input.status,
-        nextAction: input.nextAction
+        nextAction
       });
 
       await repository.addAuditEvent({

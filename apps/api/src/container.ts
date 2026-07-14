@@ -5,6 +5,7 @@ import {
   createPostgresPlatformRepository
 } from "./repositories/platform-repository.js";
 import { createAuthService } from "./services/auth-service.js";
+import { createAccountsPayableService } from "./services/accounts-payable-service.js";
 import { createBudgetBookService } from "./services/budget-book-service.js";
 import { createCashFlowService } from "./services/cash-flow-service.js";
 import { createCloseControlService } from "./services/close-control-service.js";
@@ -15,6 +16,7 @@ import { createDocumentControlService } from "./services/document-control-servic
 import { createDailyLogService } from "./services/daily-log-service.js";
 import { createEquipmentService } from "./services/equipment-service.js";
 import { createEstimationCollectionService } from "./services/estimation-collection-service.js";
+import { createFieldMaterialRequestsService } from "./services/field-material-requests-service.js";
 import { createFinanceService } from "./services/finance-service.js";
 import { createHrService } from "./services/hr-service.js";
 import { createIntegrationService } from "./services/integration-service.js";
@@ -22,6 +24,7 @@ import { createInventoryService } from "./services/inventory-service.js";
 import { createInventoryMovementsService } from "./services/inventory-movements-service.js";
 import { createInventoryReceivingService } from "./services/inventory-receiving-service.js";
 import { createProcurementService } from "./services/procurement-service.js";
+import { createProcurementPurchaseOrdersService } from "./services/procurement-purchase-orders-service.js";
 import { createProcurementRequisitionsService } from "./services/procurement-requisitions-service.js";
 import { createProjectsService } from "./services/projects-service.js";
 import { createQualityService } from "./services/quality-service.js";
@@ -29,6 +32,8 @@ import { createPlatformService } from "./services/platform-service.js";
 import { createSubcontractsService } from "./services/subcontracts-service.js";
 import { createPostSaleService } from "./services/post-sale-service.js";
 import { createSupplierControlService } from "./services/supplier-control-service.js";
+import { createSupplierMasterService } from "./services/supplier-master-service.js";
+import { createTreasuryPaymentRunsService } from "./services/treasury-payment-runs-service.js";
 
 export function createContainer() {
   const platformRepository =
@@ -39,7 +44,9 @@ export function createContainer() {
   const authService = createAuthService(platformRepository);
   const projectsService = createProjectsService(platformRepository);
   const dailyLogService = createDailyLogService(platformRepository);
+  const fieldMaterialRequestsService = createFieldMaterialRequestsService(platformRepository);
   const procurementService = createProcurementService(platformRepository);
+  const procurementPurchaseOrdersService = createProcurementPurchaseOrdersService(platformRepository);
   const procurementRequisitionsService = createProcurementRequisitionsService(platformRepository);
   const budgetBookService = createBudgetBookService(platformRepository);
   const cashFlowService = createCashFlowService(platformRepository);
@@ -49,6 +56,7 @@ export function createContainer() {
   const inventoryReceivingService = createInventoryReceivingService(platformRepository);
   const equipmentService = createEquipmentService(platformRepository);
   const financeService = createFinanceService(platformRepository);
+  const accountsPayableService = createAccountsPayableService(platformRepository);
   const estimationCollectionService = createEstimationCollectionService(platformRepository);
   const costControlService = createCostControlService(platformRepository, procurementService);
   const crmService = createCrmService(platformRepository);
@@ -60,6 +68,8 @@ export function createContainer() {
   const subcontractsService = createSubcontractsService(platformRepository);
   const postSaleService = createPostSaleService(platformRepository);
   const supplierControlService = createSupplierControlService(platformRepository);
+  const supplierMasterService = createSupplierMasterService(platformRepository);
+  const treasuryPaymentRunsService = createTreasuryPaymentRunsService(platformRepository);
 
   return {
     platformRepository,
@@ -67,7 +77,9 @@ export function createContainer() {
     authService,
     projectsService,
     dailyLogService,
+    fieldMaterialRequestsService,
     procurementService,
+    procurementPurchaseOrdersService,
     procurementRequisitionsService,
     budgetBookService,
     cashFlowService,
@@ -77,6 +89,7 @@ export function createContainer() {
     inventoryReceivingService,
     equipmentService,
     financeService,
+    accountsPayableService,
     estimationCollectionService,
     costControlService,
     crmService,
@@ -87,6 +100,8 @@ export function createContainer() {
     qualityService,
     postSaleService,
     subcontractsService,
-    supplierControlService
+    supplierControlService,
+    supplierMasterService,
+    treasuryPaymentRunsService
   };
 }

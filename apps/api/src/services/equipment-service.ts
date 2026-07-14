@@ -232,6 +232,228 @@ export function createEquipmentService(repository: PlatformRepository) {
       });
 
       return updatedMachine;
+    },
+    async createMachine(input: {
+      companyId: string;
+      machineName: string;
+      machineType: string;
+      projectName: string;
+      frontName: string;
+      status: "available" | "maintenance" | "down";
+      health: "healthy" | "watch" | "critical";
+      availabilityPercent: number;
+      utilizationPercent: number;
+      hourMeter: number;
+      nextMaintenanceHours: number;
+      maintenanceBacklog: number;
+      openFailures: number;
+      criticalOpenFailures: number;
+      nextAction: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("EQUIPMENT_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const machines = await repository.listMachines(input.companyId);
+      const machineName = input.machineName.trim();
+      const machineType = input.machineType.trim();
+      const projectName = input.projectName.trim();
+      const frontName = input.frontName.trim();
+      const nextAction = input.nextAction.trim();
+
+      if (machineName.length < 3 || machineType.length < 3 || projectName.length < 3 || frontName.length < 3) {
+        throw validationError(
+          "EQUIPMENT_INVALID_INPUT",
+          "Machine, type, project and front must be specific",
+          {
+            machineNameLength: machineName.length,
+            machineTypeLength: machineType.length,
+            projectNameLength: projectName.length,
+            frontNameLength: frontName.length
+          }
+        );
+      }
+
+      if (
+        input.availabilityPercent < 0 ||
+        input.availabilityPercent > 100 ||
+        input.utilizationPercent < 0 ||
+        input.utilizationPercent > 100
+      ) {
+        throw validationError(
+          "EQUIPMENT_INVALID_PERCENTAGES",
+          "Availability and utilization must stay between 0 and 100",
+          {
+            availabilityPercent: input.availabilityPercent,
+            utilizationPercent: input.utilizationPercent
+          }
+        );
+      }
+
+      if (
+        [input.hourMeter, input.nextMaintenanceHours, input.maintenanceBacklog, input.openFailures, input.criticalOpenFailures].some(
+          (value) => !Number.isFinite(value) || value < 0
+        )
+      ) {
+        throw validationError(
+          "EQUIPMENT_INVALID_METRICS",
+          "Hours, backlog and failure counters must be zero or greater",
+          {
+            hourMeter: input.hourMeter,
+            nextMaintenanceHours: input.nextMaintenanceHours,
+            maintenanceBacklog: input.maintenanceBacklog,
+            openFailures: input.openFailures,
+            criticalOpenFailures: input.criticalOpenFailures
+          }
+        );
+      }
+
+      if (nextAction.length < 8) {
+        throw validationError(
+          "EQUIPMENT_INVALID_NEXT_ACTION",
+          "Next action must be specific before creating a machine",
+          {
+            nextActionLength: nextAction.length
+          }
+        );
+      }
+
+      if (
+        machines.some(
+          (item) =>
+            item.machineName.trim().toLowerCase() === machineName.toLowerCase() &&
+            item.projectName.trim().toLowerCase() === projectName.toLowerCase() &&
+            item.frontName.trim().toLowerCase() === frontName.toLowerCase()
+        )
+      ) {
+        throw validationError(
+          "EQUIPMENT_MACHINE_DUPLICATE",
+          "A machine with the same name already exists on this project front",
+          {
+            companyId: input.companyId,
+            machineName,
+            projectName,
+            frontName
+          }
+        );
+      }
+
+      if (input.criticalOpenFailures > input.openFailures) {
+        throw validationError(
+          "EQUIPMENT_CRITICAL_FAILURES_INVALID",
+          "Critical failures cannot exceed total open failures",
+          {
+            criticalOpenFailures: input.criticalOpenFailures,
+            openFailures: input.openFailures
+          }
+        );
+      }
+
+      if (input.status === "available" && input.criticalOpenFailures > 0) {
+        throw validationError(
+          "EQUIPMENT_CRITICAL_FAILURE_OPEN",
+          "Machine cannot start as available while a critical failure remains open",
+          {
+            criticalOpenFailures: input.criticalOpenFailures
+          }
+        );
+      }
+
+      if (input.status === "available" && (input.maintenanceBacklog > 0 || input.nextMaintenanceHours <= 0)) {
+        throw validationError(
+          "EQUIPMENT_MAINTENANCE_OVERDUE",
+          "Machine cannot start as available while maintenance is overdue",
+          {
+            maintenanceBacklog: input.maintenanceBacklog,
+            nextMaintenanceHours: input.nextMaintenanceHours
+          }
+        );
+      }
+
+      if (input.health === "healthy" && input.status !== "available") {
+        throw validationError(
+          "EQUIPMENT_HEALTHY_REQUIRES_AVAILABLE",
+          "Machine can only start as healthy when it is available",
+          {
+            status: input.status
+          }
+        );
+      }
+
+      if (input.health === "healthy" && (input.maintenanceBacklog > 0 || input.nextMaintenanceHours <= 0)) {
+        throw validationError(
+          "EQUIPMENT_HEALTHY_BLOCKED_BY_MAINTENANCE",
+          "Machine cannot start as healthy while maintenance is overdue",
+          {
+            maintenanceBacklog: input.maintenanceBacklog,
+            nextMaintenanceHours: input.nextMaintenanceHours
+          }
+        );
+      }
+
+      if (input.health === "healthy" && input.criticalOpenFailures > 0) {
+        throw validationError(
+          "EQUIPMENT_HEALTHY_BLOCKED_BY_FAILURE",
+          "Machine cannot start as healthy while a critical failure remains open",
+          {
+            criticalOpenFailures: input.criticalOpenFailures
+          }
+        );
+      }
+
+      if (input.status === "available" && input.health === "critical") {
+        throw validationError(
+          "EQUIPMENT_AVAILABLE_CRITICAL_CONFLICT",
+          "Machine cannot start as available while health remains critical",
+          {
+            health: input.health
+          }
+        );
+      }
+
+      const now = new Date();
+      const createdMachine = await repository.createMachineItem({
+        companyId: input.companyId,
+        code: `EQ-${String(machines.length + 1).padStart(3, "0")}`,
+        machineName,
+        machineType,
+        projectName,
+        frontName,
+        status: input.status,
+        health: input.health,
+        availabilityPercent: input.availabilityPercent,
+        utilizationPercent: input.utilizationPercent,
+        hourMeter: input.hourMeter,
+        nextMaintenanceHours: input.nextMaintenanceHours,
+        maintenanceDueDate: new Date(
+          now.getTime() + Math.max(input.nextMaintenanceHours, 1) * 60 * 60 * 1000
+        ).toISOString(),
+        maintenanceBacklog: input.maintenanceBacklog,
+        openFailures: input.openFailures,
+        criticalOpenFailures: input.criticalOpenFailures,
+        lastServiceAt: now.toISOString(),
+        nextAction
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "machine_item",
+        aggregateId: createdMachine.id,
+        action: "equipment.machine.created",
+        metadata: {
+          code: createdMachine.code,
+          status: createdMachine.status,
+          health: createdMachine.health,
+          projectName: createdMachine.projectName,
+          frontName: createdMachine.frontName
+        }
+      });
+
+      return createdMachine;
     }
   };
 }

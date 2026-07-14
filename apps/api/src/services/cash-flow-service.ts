@@ -1,5 +1,7 @@
 import { notFound, validationError } from "../lib/domain-error.js";
 import type { PlatformRepository } from "../repositories/platform-repository.js";
+import { buildDerivedFinanceState } from "./finance-derived.js";
+import { buildEstimationCollectionOverview } from "./estimation-collection-service.js";
 
 function roundCurrency(value: number) {
   return Math.round(value);
@@ -35,15 +37,30 @@ export function createCashFlowService(repository: PlatformRepository) {
       });
     }
 
-    const [financeItems, financeRisks, estimationOverview, costPackages] = await Promise.all([
-      repository.listFinanceItems(companyId),
-      repository.listFinanceRisks(companyId),
-      repository.listProjects(companyId).then(() => repository.listFinanceItems(companyId)),
-      repository.listProcurementPackages(companyId)
+    const [{ items: financeItems, risks: financeRisks, payableInvoices }, costPackages, treasuryRuns, estimationOverview] = await Promise.all([
+      buildDerivedFinanceState(repository, companyId),
+      repository.listProcurementPackages(companyId),
+      repository.listTreasuryPaymentRuns(companyId),
+      buildEstimationCollectionOverview(repository, companyId)
     ]);
 
-    const pendingCollectionBase = roundCurrency(
-      costPackages.reduce((sum, item) => sum + item.budgetAmount * (item.status === "awarded" ? 0.18 : 0.09), 0)
+    const scheduledPayables = payableInvoices
+      .filter((invoice) => invoice.status === "scheduled")
+      .reduce((sum, invoice) => sum + invoice.pendingAmount, 0);
+    const matchedPayables = payableInvoices
+      .filter((invoice) => invoice.status === "matched" || invoice.status === "received")
+      .reduce((sum, invoice) => sum + invoice.pendingAmount, 0);
+    const blockedPayables = payableInvoices
+      .filter((invoice) => invoice.status === "blocked")
+      .reduce((sum, invoice) => sum + invoice.pendingAmount, 0);
+    const activeTreasuryRuns = treasuryRuns.filter((run) => run.status !== "executed");
+    const blockedTreasuryRuns = treasuryRuns.filter((run) => run.status === "blocked");
+    const scheduledTreasuryAmount = activeTreasuryRuns.reduce((sum, run) => sum + run.totalAmount, 0);
+    const treasuryCriticalInvoices = activeTreasuryRuns.reduce((sum, run) => sum + run.criticalInvoices, 0);
+
+    const pendingCollectionBase = Math.max(
+      estimationOverview.summary.pendingCollection,
+      roundCurrency(costPackages.reduce((sum, item) => sum + item.budgetAmount * (item.status === "awarded" ? 0.18 : 0.09), 0))
     );
     const projectedCostBase = roundCurrency(
       costPackages.reduce(
@@ -51,31 +68,61 @@ export function createCashFlowService(repository: PlatformRepository) {
         0
       )
     );
+    const pendingApprovalBase = roundCurrency(
+      estimationOverview.lines.reduce((sum, line) => sum + line.pendingApprovalAmount, 0)
+    );
 
     const lines = financeItems.map((item, index) => {
       const sourceType = sourceTypeFromMetric(item.metricName);
       const packageAnchor = costPackages[index % Math.max(costPackages.length, 1)];
       const projectedInflows =
         sourceType === "collections" || sourceType === "cash"
-          ? roundCurrency(Math.max(item.cashImpact, 0) * 0.16 + pendingCollectionBase * (sourceType === "cash" ? 0.18 : 0.27))
-          : roundCurrency(pendingCollectionBase * 0.08);
+          ? roundCurrency(
+              Math.max(item.cashImpact, 0) * 0.16 +
+                pendingCollectionBase * (sourceType === "cash" ? 0.18 : 0.27) +
+                estimationOverview.summary.collectedPortfolio * (sourceType === "collections" ? 0.06 : 0.03)
+            )
+          : roundCurrency(pendingCollectionBase * 0.08 + estimationOverview.summary.submittedPortfolio * 0.02);
       const projectedOutflows =
         sourceType === "payables"
-          ? roundCurrency(Math.abs(item.cashImpact) * 0.34 + projectedCostBase * 0.18)
+          ? roundCurrency(
+              Math.abs(item.cashImpact) * 0.18 +
+                scheduledPayables * 0.7 +
+                matchedPayables * 0.26 +
+                blockedPayables * 0.08 +
+                scheduledTreasuryAmount * 0.11
+            )
           : sourceType === "tax"
-            ? roundCurrency(Math.abs(item.cashImpact) * 0.7 + item.urgentItems * 25000)
+            ? roundCurrency(
+                Math.abs(item.cashImpact) * 0.7 +
+                  blockedPayables * 0.15 +
+                  item.urgentItems * 25000 +
+                  treasuryCriticalInvoices * 18000
+              )
             : sourceType === "close"
-              ? roundCurrency(projectedCostBase * 0.12 + item.urgentItems * 18000)
-              : roundCurrency(projectedCostBase * 0.2);
+              ? roundCurrency(
+                  projectedCostBase * 0.12 +
+                    item.urgentItems * 18000 +
+                    pendingApprovalBase * 0.22
+                )
+              : roundCurrency(projectedCostBase * 0.2 + scheduledTreasuryAmount * 0.05);
       const startingCash = roundCurrency(item.cashImpact);
       const weeklyNet = startingCash + projectedInflows - projectedOutflows;
       const liquidityCoverageWeeks =
         projectedOutflows > 0 ? Number((Math.max(startingCash + projectedInflows, 0) / projectedOutflows).toFixed(1)) : 0;
-      const openPressureItems = item.urgentItems + (packageAnchor?.approvalHours && packageAnchor.approvalHours > 24 ? 1 : 0);
+      const openPressureItems =
+        item.urgentItems +
+        (packageAnchor?.approvalHours && packageAnchor.approvalHours > 24 ? 1 : 0) +
+        (sourceType === "payables" ? payableInvoices.filter((invoice) => invoice.status === "blocked").length : 0) +
+        blockedTreasuryRuns.length +
+        estimationOverview.summary.overdueCollections;
       const confidencePercent = clamp(
         item.closeReadiness -
           item.urgentItems * 4 -
-          (packageAnchor?.status === "blocked" ? 18 : packageAnchor?.status === "awaiting_approval" ? 8 : 0),
+          (sourceType === "payables" ? payableInvoices.filter((invoice) => invoice.receiptEvidenceStatus === "missing").length * 6 : 0) -
+          (packageAnchor?.status === "blocked" ? 18 : packageAnchor?.status === "awaiting_approval" ? 8 : 0) -
+          blockedTreasuryRuns.length * 5 -
+          estimationOverview.summary.overdueCollections * 3,
         18,
         98
       );

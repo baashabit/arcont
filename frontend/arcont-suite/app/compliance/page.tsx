@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -11,7 +12,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { ComplianceCaseContract, ComplianceOverviewContract } from "@/lib/contracts";
-import { fetchComplianceOverview, updateComplianceCase } from "@/lib/platform-api";
+import {
+  fetchComplianceOverview,
+  fetchDocumentControlOverview,
+  fetchPostSaleOverview,
+  updateComplianceCase
+} from "@/lib/platform-api";
 
 function healthTone(health: ComplianceCaseContract["health"]) {
   switch (health) {
@@ -88,9 +94,54 @@ function complianceActionOptions(complianceCase: ComplianceCaseContract) {
   }
 }
 
+type ComplianceBridgeContext = {
+  postSale: NonNullable<Awaited<ReturnType<typeof fetchPostSaleOverview>>>;
+  documents: NonNullable<Awaited<ReturnType<typeof fetchDocumentControlOverview>>>;
+} | null;
+
+function buildComplianceBridge(complianceCase: ComplianceCaseContract | null, bridge: ComplianceBridgeContext) {
+  if (!complianceCase) {
+    return null;
+  }
+
+  const relatedPostSale =
+    bridge?.postSale.items.find(
+      (item) =>
+        complianceCase.subject.includes(item.assetLabel) ||
+        complianceCase.unitOrContract.includes(item.assetLabel) ||
+        complianceCase.subject.includes(item.customerName) ||
+        complianceCase.unitOrContract.includes(item.customerName)
+    ) ??
+    bridge?.postSale.focusItem ??
+    null;
+  const relatedDocument =
+    bridge?.documents.items.find(
+      (item) =>
+        item.projectName.includes(complianceCase.unitOrContract) ||
+        complianceCase.subject.includes(item.projectName) ||
+        item.subject.includes(complianceCase.queueName)
+    ) ??
+    bridge?.documents.focusItem ??
+    null;
+
+  return {
+    closureSignal:
+      complianceCase.openFindings > 0
+        ? `${complianceCase.openFindings} findings still keep this folder under closure pressure.`
+        : "Open findings are contained; closure depends mainly on signatures and evidence quality.",
+    customerSignal: relatedPostSale
+      ? `${relatedPostSale.customerName} still carries a ${relatedPostSale.status} ${relatedPostSale.caseType} case with ${relatedPostSale.slaHoursRemaining} SLA hours remaining.`
+      : "No linked post-sale case is mapped for this compliance folder yet.",
+    documentSignal: relatedDocument
+      ? `${relatedDocument.documentType} "${relatedDocument.subject}" remains at ${relatedDocument.status} with ${relatedDocument.openComments} comments open.`
+      : "No linked document-control signal is mapped for this compliance folder yet."
+  };
+}
+
 export default function CompliancePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<ComplianceOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<ComplianceBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -109,11 +160,21 @@ export default function CompliancePage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchComplianceOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchComplianceOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchPostSaleOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchDocumentControlOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, postSale, documents]) => {
         if (cancelled) {
           return;
         }
@@ -125,6 +186,7 @@ export default function CompliancePage() {
 
         setOverview(result);
         setSelectedCaseId((current) => current ?? result.focusCase?.id ?? result.cases[0]?.id ?? null);
+        setBridgeContext(postSale && documents ? { postSale, documents } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -146,6 +208,8 @@ export default function CompliancePage() {
     () => overview?.risks.filter((risk) => risk.caseId === selectedCase?.id) ?? [],
     [overview, selectedCase]
   );
+
+  const selectedStory = useMemo(() => buildComplianceBridge(selectedCase, bridgeContext), [bridgeContext, selectedCase]);
 
   const actionOptions = useMemo(() => (selectedCase ? complianceActionOptions(selectedCase) : []), [selectedCase]);
 
@@ -347,6 +411,23 @@ export default function CompliancePage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/post-sale">
+                          Open post-sale
+                        </Link>
+                        <Link className="buttonGhost" href="/document-control">
+                          Open document control
+                        </Link>
+                        <Link className="buttonGhost" href="/close-control">
+                          Open close control
+                        </Link>
+                        <Link className="buttonGhost" href="/projects">
+                          Open projects
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedCase.updatedAt).toLocaleString()}</div>
                     </div>
@@ -355,6 +436,8 @@ export default function CompliancePage() {
                       <div className="tableCellStack">
                         <span className="tableCellMuted">Closure requires zero open findings.</span>
                         <span className="tableCellMuted">Closure also requires at least 95% document completion and no breached SLA.</span>
+                        <span className="tableCellMuted">In-progress now requires at least 40% document baseline.</span>
+                        <span className="tableCellMuted">At-risk should not be used when the folder is healthy and has zero findings.</span>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -366,7 +449,17 @@ export default function CompliancePage() {
                               key={option.label}
                               className={option.status === "blocked" ? "buttonGhost" : "button"}
                               type="button"
-                              disabled={isSaving}
+                              disabled={
+                                isSaving ||
+                                (option.status === "closed" &&
+                                  (selectedCase.openFindings > 0 ||
+                                    selectedCase.documentCompletion < 95 ||
+                                    selectedCase.slaHoursRemaining < 0)) ||
+                                (option.status === "in_progress" && selectedCase.documentCompletion < 40) ||
+                                (option.status === "at_risk" &&
+                                  selectedCase.health === "healthy" &&
+                                  selectedCase.openFindings === 0)
+                              }
                               onClick={() => void handleCaseAction(option.status, option.nextAction)}
                             >
                               {isSaving ? "Saving..." : option.label}
@@ -385,6 +478,24 @@ export default function CompliancePage() {
                     primaryAction={{ label: "Stay on compliance", href: "/compliance" }}
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Closure signal" description="What still keeps the selected folder from a clean closure posture.">
+                <p className="sectionText">
+                  {selectedStory?.closureSignal ?? "Choose a case to inspect closure signal."}
+                </p>
+              </Card>
+              <Card title="Customer continuity" description="How this folder is already affecting handover or post-sale continuity.">
+                <p className="sectionText">
+                  {selectedStory?.customerSignal ?? "Choose a case to inspect customer continuity."}
+                </p>
+              </Card>
+              <Card title="Document dependency" description="Controlled-document signal still attached to the selected folder.">
+                <p className="sectionText">
+                  {selectedStory?.documentSignal ?? "Choose a case to inspect document dependency."}
+                </p>
               </Card>
             </section>
 

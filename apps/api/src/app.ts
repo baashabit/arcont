@@ -5,6 +5,7 @@ import { createContainer } from "./container.js";
 import { env } from "./config/env.js";
 import { DomainError } from "./lib/domain-error.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerAccountsPayableRoutes } from "./routes/accounts-payable.js";
 import { registerBudgetBookRoutes } from "./routes/budget-book.js";
 import { registerCashFlowRoutes } from "./routes/cash-flow.js";
 import { registerCloseControlRoutes } from "./routes/close-control.js";
@@ -15,6 +16,7 @@ import { registerDailyLogRoutes } from "./routes/daily-log.js";
 import { registerDocumentControlRoutes } from "./routes/document-control.js";
 import { registerEquipmentRoutes } from "./routes/equipment.js";
 import { registerEstimationsRoutes } from "./routes/estimations.js";
+import { registerFieldMaterialRequestsRoutes } from "./routes/field-material-requests.js";
 import { registerFinanceRoutes } from "./routes/finance.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerHrRoutes } from "./routes/hr.js";
@@ -25,11 +27,14 @@ import { registerInventoryMovementsRoutes } from "./routes/inventory-movements.j
 import { registerPlatformRoutes } from "./routes/platform.js";
 import { registerPostSaleRoutes } from "./routes/post-sale.js";
 import { registerProcurementRoutes } from "./routes/procurement.js";
+import { registerProcurementPurchaseOrdersRoutes } from "./routes/procurement-purchase-orders.js";
 import { registerProcurementRequisitionsRoutes } from "./routes/procurement-requisitions.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
 import { registerQualityRoutes } from "./routes/quality.js";
 import { registerSupplierControlRoutes } from "./routes/supplier-control.js";
+import { registerSupplierMasterRoutes } from "./routes/supplier-master.js";
 import { registerSubcontractsRoutes } from "./routes/subcontracts.js";
+import { registerTreasuryPaymentRunsRoutes } from "./routes/treasury-payment-runs.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -77,15 +82,20 @@ export async function buildApp() {
 
   await registerHealthRoutes(app);
   await registerAuthRoutes(app);
+  await registerAccountsPayableRoutes(app);
   await registerPlatformRoutes(app);
   await registerProjectsRoutes(app);
   await registerDailyLogRoutes(app);
+  await registerFieldMaterialRequestsRoutes(app);
   await registerProcurementRoutes(app);
+  await registerProcurementPurchaseOrdersRoutes(app);
   await registerProcurementRequisitionsRoutes(app);
   await registerBudgetBookRoutes(app);
   await registerCashFlowRoutes(app);
   await registerCloseControlRoutes(app);
   await registerSupplierControlRoutes(app);
+  await registerSupplierMasterRoutes(app);
+  await registerTreasuryPaymentRunsRoutes(app);
   await registerCostControlRoutes(app);
   await registerInventoryRoutes(app);
   await registerInventoryReceivingRoutes(app);

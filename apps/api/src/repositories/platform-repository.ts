@@ -92,6 +92,58 @@ type UpdateDailyLogEntryInput = {
   nextAction: string;
 };
 
+type CreateDailyLogEntryInput = {
+  companyId: string;
+  projectName: string;
+  frontName: string;
+  supervisor: string;
+  logDate: string;
+  shift: "morning" | "mixed" | "night";
+  weather: "clear" | "windy" | "rain" | "storm";
+  status: "draft" | "submitted" | "approved" | "flagged";
+  progressPercent: number;
+  workforceCount: number;
+  incidentsCount: number;
+  blockersCount: number;
+  evidenceCount: number;
+  concretePourM3: number;
+  nextAction: string;
+};
+
+type FieldMaterialRequestRecord = {
+  id: string;
+  companyId: string;
+  requisitionId: string | null;
+  projectName: string;
+  frontName: string;
+  requestedBy: string;
+  summary: string;
+  detail: string;
+  requestedVolume: string;
+  urgency: "planned" | "watch" | "critical";
+  nextAction: string;
+  status: "requested" | "converted" | "cancelled";
+  createdAt: string;
+  updatedAt: string;
+};
+
+type CreateFieldMaterialRequestInput = {
+  companyId: string;
+  projectName: string;
+  frontName: string;
+  requestedBy: string;
+  summary: string;
+  detail: string;
+  requestedVolume: string;
+  category: string;
+  requestedItems: number;
+  budgetAmount: number;
+  approvalHours: number;
+  supplierCoverage: number;
+  urgency: "planned" | "watch" | "critical";
+  nextAction: string;
+};
+
 type ProcurementPackageRecord = {
   id: string;
   companyId: string;
@@ -122,6 +174,78 @@ type ProcurementRiskRecord = {
 type UpdateProcurementPackageInput = {
   packageId: string;
   status: "draft" | "sourcing" | "awaiting_approval" | "awarded" | "blocked";
+  nextAction: string;
+};
+
+type SupplierControlLineRecord = {
+  id: string;
+  supplierId: string;
+  companyId: string;
+  supplierName: string;
+  owner: string;
+  awardedPackages: number;
+  activePackages: number;
+  contractedAmount: number;
+  concentrationPercent: number;
+  bidCoverage: number;
+  deliveryHealth: "controlled" | "watch" | "critical";
+  approvalPressureHours: number;
+  complianceAlerts: number;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type CreateSupplierControlLineInput = Omit<SupplierControlLineRecord, "id" | "supplierId" | "updatedAt">;
+
+type UpdateSupplierControlLineInput = {
+  lineId: string;
+  deliveryHealth: "controlled" | "watch" | "critical";
+  nextAction: string;
+};
+
+type SupplierMasterProfileRecord = {
+  id: string;
+  supplierId: string;
+  companyId: string;
+  supplierName: string;
+  tradeName: string;
+  rfc: string;
+  fiscalRegime: string;
+  cfdiUse: string;
+  paymentMethod: string;
+  paymentTermsDays: number;
+  bankAccountMasked: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone: string;
+  complianceStatus: "complete" | "watch" | "blocked";
+  satStatus: "controlled" | "watch" | "critical";
+  fiscalPacketCompletion: number;
+  lastValidatedAt: string | null;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type SupplierMasterRiskRecord = {
+  id: string;
+  supplierProfileId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type CreateSupplierMasterProfileInput = Omit<
+  SupplierMasterProfileRecord,
+  "id" | "supplierId" | "lastValidatedAt" | "updatedAt"
+>;
+
+type UpdateSupplierMasterProfileInput = {
+  profileId: string;
+  complianceStatus: "complete" | "watch" | "blocked";
+  satStatus: "controlled" | "watch" | "critical";
+  fiscalPacketCompletion: number;
   nextAction: string;
 };
 
@@ -157,6 +281,76 @@ type UpdateProcurementRequisitionInput = {
   requisitionId: string;
   status: "draft" | "submitted" | "approved" | "sourcing" | "blocked";
   nextAction: string;
+};
+
+type CreateProcurementRequisitionInput = {
+  companyId: string;
+  projectName: string;
+  frontName: string;
+  requestedBy: string;
+  category: string;
+  status: "draft" | "submitted" | "approved" | "sourcing" | "blocked";
+  requestedItems: number;
+  budgetAmount: number;
+  urgency: "planned" | "watch" | "critical";
+  approvalHours: number;
+  supplierCoverage: number;
+  nextAction: string;
+};
+
+type ProcurementPurchaseOrderRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  requisitionCode: string;
+  projectName: string;
+  supplierName: string;
+  buyer: string;
+  category: string;
+  status: "issued" | "confirmed" | "in_transit" | "partial" | "received" | "blocked";
+  totalAmount: number;
+  committedEta: string;
+  receivedPercent: number;
+  invoiceMatchStatus: "matched" | "pending" | "risk";
+  logisticsMode: string;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type ProcurementPurchaseOrderRiskRecord = {
+  id: string;
+  purchaseOrderId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type CreateProcurementPurchaseOrderInput = {
+  companyId: string;
+  requisitionCode: string;
+  projectName: string;
+  supplierName: string;
+  buyer: string;
+  category: string;
+  totalAmount: number;
+  committedEta: string;
+  logisticsMode: string;
+  nextAction: string;
+};
+
+type UpdateProcurementPurchaseOrderInput = {
+  purchaseOrderId: string;
+  status: "issued" | "confirmed" | "in_transit" | "partial" | "received" | "blocked";
+  nextAction: string;
+};
+
+type SyncProcurementPurchaseOrderReceiptInput = {
+  purchaseOrderId: string;
+  receivedPercent: number;
+  status?: "issued" | "confirmed" | "in_transit" | "partial" | "received" | "blocked";
+  nextAction?: string;
 };
 
 type InventoryLocationRecord = {
@@ -228,6 +422,20 @@ type UpdateInventoryReceiptInput = {
   nextAction: string;
 };
 
+type CreateInventoryReceiptInput = {
+  companyId: string;
+  supplierName: string;
+  destinationName: string;
+  destinationType: string;
+  purchaseReference: string;
+  etaDate: string;
+  orderedUnits: number;
+  receivedUnits: number;
+  pendingEvidence: number;
+  rejectedUnits: number;
+  nextAction: string;
+};
+
 type InventoryMovementRecord = {
   id: string;
   companyId: string;
@@ -237,6 +445,8 @@ type InventoryMovementRecord = {
   sourceName: string;
   destinationName: string;
   requestedBy: string;
+  upstreamReceiptCode: string | null;
+  purchaseReference: string | null;
   status: "draft" | "in_transit" | "received" | "blocked";
   requestedUnits: number;
   movedUnits: number;
@@ -260,6 +470,22 @@ type InventoryMovementRiskRecord = {
 type UpdateInventoryMovementInput = {
   movementId: string;
   status: "draft" | "in_transit" | "received" | "blocked";
+  nextAction: string;
+};
+
+type CreateInventoryMovementInput = {
+  companyId: string;
+  movementType: "transfer" | "issue" | "return";
+  skuName: string;
+  sourceName: string;
+  destinationName: string;
+  requestedBy: string;
+  upstreamReceiptCode: string | null;
+  purchaseReference: string | null;
+  requestedUnits: number;
+  movedUnits: number;
+  pendingEvidence: number;
+  impactLevel: "controlled" | "watch" | "critical";
   nextAction: string;
 };
 
@@ -303,6 +529,27 @@ type UpdateMachineItemInput = {
   nextAction: string;
 };
 
+type CreateMachineItemInput = {
+  companyId: string;
+  code: string;
+  machineName: string;
+  machineType: string;
+  projectName: string;
+  frontName: string;
+  status: "available" | "maintenance" | "down";
+  health: "healthy" | "watch" | "critical";
+  availabilityPercent: number;
+  utilizationPercent: number;
+  hourMeter: number;
+  nextMaintenanceHours: number;
+  maintenanceDueDate: string;
+  maintenanceBacklog: number;
+  openFailures: number;
+  criticalOpenFailures: number;
+  lastServiceAt: string;
+  nextAction: string;
+};
+
 type FinanceLedgerItemRecord = {
   id: string;
   companyId: string;
@@ -332,6 +579,150 @@ type UpdateFinanceLedgerItemInput = {
   ledgerId: string;
   satStatus: "controlled" | "watch" | "critical";
   note: string;
+};
+
+type AccountsPayableInvoiceRecord = {
+  id: string;
+  companyId: string;
+  supplierProfileId: string | null;
+  supplierName: string;
+  code: string;
+  invoiceNumber: string;
+  invoiceUuid: string;
+  projectName: string;
+  purchaseOrderCode: string | null;
+  receiptCode: string | null;
+  status: "received" | "matched" | "scheduled" | "blocked" | "paid";
+  satStatus: "controlled" | "watch" | "critical";
+  complementStatus: "pending" | "complete" | "not_required" | "risk";
+  receiptEvidenceStatus: "complete" | "partial" | "missing";
+  paymentMethod: string;
+  dueDate: string;
+  scheduledPaymentDate: string | null;
+  receivedAt: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  pendingAmount: number;
+  packetCompletion: number;
+  nextAction: string;
+  updatedAt: string;
+};
+
+type AccountsPayableRiskRecord = {
+  id: string;
+  invoiceId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type CreateAccountsPayableInvoiceInput = {
+  companyId: string;
+  supplierProfileId?: string | null;
+  supplierName: string;
+  invoiceNumber: string;
+  invoiceUuid: string;
+  projectName: string;
+  purchaseOrderCode?: string | null;
+  receiptCode?: string | null;
+  status: "received" | "matched" | "scheduled" | "blocked" | "paid";
+  satStatus: "controlled" | "watch" | "critical";
+  complementStatus: "pending" | "complete" | "not_required" | "risk";
+  receiptEvidenceStatus: "complete" | "partial" | "missing";
+  paymentMethod: string;
+  dueDate: string;
+  scheduledPaymentDate?: string | null;
+  subtotal: number;
+  tax: number;
+  total: number;
+  packetCompletion: number;
+  nextAction: string;
+};
+
+type UpdateAccountsPayableInvoiceInput = {
+  invoiceId: string;
+  status: "received" | "matched" | "scheduled" | "blocked" | "paid";
+  satStatus: "controlled" | "watch" | "critical";
+  complementStatus: "pending" | "complete" | "not_required" | "risk";
+  scheduledPaymentDate: string | null;
+  nextAction: string;
+};
+
+type TreasuryPaymentRunInvoiceRecord = {
+  invoiceId: string;
+  invoiceCode: string;
+  supplierName: string;
+  total: number;
+  scheduledPaymentDate: string | null;
+  satStatus: "controlled" | "watch" | "critical";
+  complementStatus: "pending" | "complete" | "not_required" | "risk";
+  receiptEvidenceStatus: "complete" | "partial" | "missing";
+};
+
+type TreasuryPaymentRunRecord = {
+  id: string;
+  companyId: string;
+  code: string;
+  bankAccountLabel: string;
+  scheduledDate: string;
+  status: "draft" | "ready" | "blocked" | "executed";
+  totalInvoices: number;
+  totalAmount: number;
+  criticalInvoices: number;
+  owner: string;
+  nextAction: string;
+  updatedAt: string;
+  invoices: TreasuryPaymentRunInvoiceRecord[];
+};
+
+type TreasuryPaymentRunRiskRecord = {
+  id: string;
+  paymentRunId: string;
+  title: string;
+  category: string;
+  severity: "info" | "warning" | "critical";
+  owner: string;
+  status: string;
+};
+
+type CreateTreasuryPaymentRunInput = {
+  companyId: string;
+  bankAccountLabel: string;
+  scheduledDate: string;
+  owner: string;
+  nextAction: string;
+  invoiceIds: string[];
+};
+
+type UpdateTreasuryPaymentRunInput = {
+  paymentRunId: string;
+  status: "draft" | "ready" | "blocked" | "executed";
+  nextAction: string;
+};
+
+type RemoveTreasuryPaymentRunInvoiceInput = {
+  companyId: string;
+  paymentRunId: string;
+  invoiceId: string;
+  nextAction: string;
+};
+
+type AddTreasuryPaymentRunInvoiceInput = {
+  companyId: string;
+  paymentRunId: string;
+  invoiceId: string;
+  nextAction: string;
+};
+
+type MoveTreasuryPaymentRunInvoiceInput = {
+  companyId: string;
+  sourcePaymentRunId: string;
+  targetPaymentRunId: string;
+  invoiceId: string;
+  nextAction: string;
 };
 
 type CrmLeadBucketRecord = {
@@ -532,6 +923,21 @@ type UpdateDocumentControlItemInput = {
   nextAction: string;
 };
 
+type CreateDocumentControlItemInput = {
+  companyId: string;
+  code: string;
+  documentType: string;
+  subject: string;
+  projectName: string;
+  owner: string;
+  status: "issued" | "in_review" | "awaiting_response" | "approved" | "blocked";
+  revisionCount: number;
+  turnaroundDays: number;
+  openComments: number;
+  health: "healthy" | "watch" | "critical";
+  nextAction: string;
+};
+
 type QualityInspectionRecord = {
   id: string;
   companyId: string;
@@ -565,6 +971,21 @@ type UpdateQualityInspectionInput = {
   nextAction: string;
 };
 
+type CreateQualityInspectionInput = {
+  companyId: string;
+  code: string;
+  areaName: string;
+  checklistName: string;
+  contractorName: string;
+  severity: "minor" | "major" | "critical";
+  openFindings: number;
+  evidenceCompletion: number;
+  releaseReadiness: number;
+  reworkRate: number;
+  status: "scheduled" | "in_progress" | "pending_release" | "released" | "blocked";
+  nextAction: string;
+};
+
 export type PlatformRepository = {
   listCompanies(): Promise<CompanyRecord[]>;
   listModules(): Promise<typeof moduleCatalog>;
@@ -574,20 +995,49 @@ export type PlatformRepository = {
   listProjectRisks(companyId: string): Promise<ProjectRiskRecord[]>;
   listDailyLogEntries(companyId: string): Promise<DailyLogEntryRecord[]>;
   listDailyLogRisks(companyId: string): Promise<DailyLogRiskRecord[]>;
+  createDailyLogEntry(input: CreateDailyLogEntryInput): Promise<DailyLogEntryRecord>;
+  listFieldMaterialRequests(companyId: string): Promise<FieldMaterialRequestRecord[]>;
+  createFieldMaterialRequestAndRequisition(input: CreateFieldMaterialRequestInput): Promise<{
+    fieldRequest: FieldMaterialRequestRecord;
+    requisition: ProcurementRequisitionRecord;
+  }>;
   listProcurementPackages(companyId: string): Promise<ProcurementPackageRecord[]>;
   listProcurementRisks(companyId: string): Promise<ProcurementRiskRecord[]>;
+  listSupplierControlLines(companyId: string): Promise<SupplierControlLineRecord[]>;
+  listSupplierMasterProfiles(companyId: string): Promise<SupplierMasterProfileRecord[]>;
+  listSupplierMasterRisks(companyId: string): Promise<SupplierMasterRiskRecord[]>;
   listProcurementRequisitions(companyId: string): Promise<ProcurementRequisitionRecord[]>;
   listProcurementRequisitionRisks(companyId: string): Promise<ProcurementRequisitionRiskRecord[]>;
+  createProcurementRequisition(input: CreateProcurementRequisitionInput): Promise<ProcurementRequisitionRecord>;
+  createSupplierControlLine(input: CreateSupplierControlLineInput): Promise<SupplierControlLineRecord>;
+  createSupplierMasterProfile(input: CreateSupplierMasterProfileInput): Promise<SupplierMasterProfileRecord>;
+  createQualityInspection(input: CreateQualityInspectionInput): Promise<QualityInspectionRecord>;
+  listProcurementPurchaseOrders(companyId: string): Promise<ProcurementPurchaseOrderRecord[]>;
+  listProcurementPurchaseOrderRisks(companyId: string): Promise<ProcurementPurchaseOrderRiskRecord[]>;
+  createProcurementPurchaseOrder(input: CreateProcurementPurchaseOrderInput): Promise<ProcurementPurchaseOrderRecord>;
+  syncProcurementPurchaseOrderReceipt(input: SyncProcurementPurchaseOrderReceiptInput): Promise<ProcurementPurchaseOrderRecord>;
   listInventoryLocations(companyId: string): Promise<InventoryLocationRecord[]>;
   listInventoryRisks(companyId: string): Promise<InventoryRiskRecord[]>;
   listInventoryReceipts(companyId: string): Promise<InventoryReceiptRecord[]>;
   listInventoryReceiptRisks(companyId: string): Promise<InventoryReceiptRiskRecord[]>;
+  createInventoryReceipt(input: CreateInventoryReceiptInput): Promise<InventoryReceiptRecord>;
   listInventoryMovements(companyId: string): Promise<InventoryMovementRecord[]>;
   listInventoryMovementRisks(companyId: string): Promise<InventoryMovementRiskRecord[]>;
+  createInventoryMovement(input: CreateInventoryMovementInput): Promise<InventoryMovementRecord>;
   listMachines(companyId: string): Promise<MachineItemRecord[]>;
   listMachineRisks(companyId: string): Promise<MachineRiskRecord[]>;
+  createMachineItem(input: CreateMachineItemInput): Promise<MachineItemRecord>;
   listFinanceItems(companyId: string): Promise<FinanceLedgerItemRecord[]>;
   listFinanceRisks(companyId: string): Promise<FinanceRiskRecord[]>;
+  listAccountsPayableInvoices(companyId: string): Promise<AccountsPayableInvoiceRecord[]>;
+  listAccountsPayableRisks(companyId: string): Promise<AccountsPayableRiskRecord[]>;
+  createAccountsPayableInvoice(input: CreateAccountsPayableInvoiceInput): Promise<AccountsPayableInvoiceRecord>;
+  listTreasuryPaymentRuns(companyId: string): Promise<TreasuryPaymentRunRecord[]>;
+  listTreasuryPaymentRunRisks(companyId: string): Promise<TreasuryPaymentRunRiskRecord[]>;
+  createTreasuryPaymentRun(input: CreateTreasuryPaymentRunInput): Promise<TreasuryPaymentRunRecord>;
+  removeTreasuryPaymentRunInvoice(input: RemoveTreasuryPaymentRunInvoiceInput): Promise<TreasuryPaymentRunRecord>;
+  addTreasuryPaymentRunInvoice(input: AddTreasuryPaymentRunInvoiceInput): Promise<TreasuryPaymentRunRecord>;
+  moveTreasuryPaymentRunInvoice(input: MoveTreasuryPaymentRunInvoiceInput): Promise<TreasuryPaymentRunRecord>;
   listCrmLeadBuckets(companyId: string): Promise<CrmLeadBucketRecord[]>;
   listCrmRisks(companyId: string): Promise<CrmRiskRecord[]>;
   listHrWorkforces(companyId: string): Promise<HrWorkforceItemRecord[]>;
@@ -600,6 +1050,7 @@ export type PlatformRepository = {
   listIntegrationRisks(companyId: string): Promise<IntegrationRiskRecord[]>;
   listDocumentControlItems(companyId: string): Promise<DocumentControlItemRecord[]>;
   listDocumentControlRisks(companyId: string): Promise<DocumentControlRiskRecord[]>;
+  createDocumentControlItem(input: CreateDocumentControlItemInput): Promise<DocumentControlItemRecord>;
   listQualityInspections(companyId: string): Promise<QualityInspectionRecord[]>;
   listQualityRisks(companyId: string): Promise<QualityRiskRecord[]>;
   getCompanyById(companyId: string): Promise<CompanyRecord | undefined>;
@@ -633,8 +1084,11 @@ export type PlatformRepository = {
   updateProjectPortfolioItem(input: UpdateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
   updateDailyLogEntry(input: UpdateDailyLogEntryInput): Promise<DailyLogEntryRecord>;
   updateProcurementRequisition(input: UpdateProcurementRequisitionInput): Promise<ProcurementRequisitionRecord>;
+  updateProcurementPurchaseOrder(input: UpdateProcurementPurchaseOrderInput): Promise<ProcurementPurchaseOrderRecord>;
   updateCrmLeadBucket(input: UpdateCrmLeadBucketInput): Promise<CrmLeadBucketRecord>;
   updateFinanceLedgerItem(input: UpdateFinanceLedgerItemInput): Promise<FinanceLedgerItemRecord>;
+  updateAccountsPayableInvoice(input: UpdateAccountsPayableInvoiceInput): Promise<AccountsPayableInvoiceRecord>;
+  updateTreasuryPaymentRun(input: UpdateTreasuryPaymentRunInput): Promise<TreasuryPaymentRunRecord>;
   updateHrWorkforceItem(input: UpdateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
   updatePostSaleCase(input: UpdatePostSaleCaseInput): Promise<PostSaleCaseRecord>;
   updateComplianceCase(input: UpdateComplianceCaseInput): Promise<ComplianceCaseRecord>;
@@ -645,6 +1099,8 @@ export type PlatformRepository = {
   updateInventoryMovement(input: UpdateInventoryMovementInput): Promise<InventoryMovementRecord>;
   updateMachineItem(input: UpdateMachineItemInput): Promise<MachineItemRecord>;
   updateProcurementPackage(input: UpdateProcurementPackageInput): Promise<ProcurementPackageRecord>;
+  updateSupplierControlLine(input: UpdateSupplierControlLineInput): Promise<SupplierControlLineRecord>;
+  updateSupplierMasterProfile(input: UpdateSupplierMasterProfileInput): Promise<SupplierMasterProfileRecord>;
   updateQualityInspection(input: UpdateQualityInspectionInput): Promise<QualityInspectionRecord>;
   listAuditEvents(companyId?: string, limit?: number): Promise<AuditEventRecord[]>;
 };
@@ -942,6 +1398,9 @@ function createSeedState() {
     }
   ];
 
+  const fieldMaterialRequests: FieldMaterialRequestRecord[] = [];
+  const supplierControlLines: SupplierControlLineRecord[] = [];
+
   const procurementPackages: ProcurementPackageRecord[] = [
     {
       id: "pkg_steel_demo",
@@ -1131,6 +1590,102 @@ function createSeedState() {
     }
   ];
 
+  const procurementPurchaseOrders: ProcurementPurchaseOrderRecord[] = [
+    {
+      id: "po_rebar_demo",
+      companyId: "cmp_arcont_demo",
+      code: "PO-RBR-18",
+      requisitionCode: "REQ-RBR-01",
+      projectName: "Torre B Residencial",
+      supplierName: "Aceros del Caribe",
+      buyer: "Mariana Salazar",
+      category: "Steel",
+      status: "confirmed",
+      totalAmount: 812000,
+      committedEta: "2026-07-18",
+      receivedPercent: 0,
+      invoiceMatchStatus: "pending",
+      logisticsMode: "Direct to jobsite",
+      nextAction: "Confirm mill release and secure unloading slot before the first truck departs.",
+      updatedAt: "2026-07-13T10:40:00.000Z"
+    },
+    {
+      id: "po_finish_demo",
+      companyId: "cmp_arcont_demo",
+      code: "PO-FNS-22",
+      requisitionCode: "REQ-FRM-02",
+      projectName: "Etapa 2 Urbanizacion",
+      supplierName: "Concretos Peninsulares",
+      buyer: "Felipe Duarte",
+      category: "Formwork",
+      status: "partial",
+      totalAmount: 265000,
+      committedEta: "2026-07-15",
+      receivedPercent: 68,
+      invoiceMatchStatus: "matched",
+      logisticsMode: "Cross-dock yard",
+      nextAction: "Receive the balance of formwork panels and close the pending quantity variance.",
+      updatedAt: "2026-07-13T09:05:00.000Z"
+    },
+    {
+      id: "po_prefab_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "PO-PRF-07",
+      requisitionCode: "REQ-PRF-03",
+      projectName: "Paquete Bienestar Norte",
+      supplierName: "Modulo Norte Industrial",
+      buyer: "Lorena Pech",
+      category: "Prefabricated modules",
+      status: "blocked",
+      totalAmount: 1745000,
+      committedEta: "2026-07-24",
+      receivedPercent: 0,
+      invoiceMatchStatus: "risk",
+      logisticsMode: "Factory dispatch",
+      nextAction: "Unlock signed technical annex and fiscal packet before authorizing production dispatch.",
+      updatedAt: "2026-07-13T08:30:00.000Z"
+    },
+    {
+      id: "po_plumbing_gov",
+      companyId: "cmp_bienestar_gov",
+      code: "PO-PLM-11",
+      requisitionCode: "REQ-PLM-04",
+      projectName: "Infraestructura Vial y Vivienda",
+      supplierName: "Hidraulica Maya",
+      buyer: "Ricardo Uicab",
+      category: "Plumbing kits",
+      status: "in_transit",
+      totalAmount: 328000,
+      committedEta: "2026-07-16",
+      receivedPercent: 36,
+      invoiceMatchStatus: "pending",
+      logisticsMode: "Regional carrier",
+      nextAction: "Track the second truck and validate delivery evidence against the dispatch manifest.",
+      updatedAt: "2026-07-13T07:40:00.000Z"
+    }
+  ];
+
+  const procurementPurchaseOrderRisks: ProcurementPurchaseOrderRiskRecord[] = [
+    {
+      id: "ppo_rebar_eta",
+      purchaseOrderId: "po_rebar_demo",
+      title: "Mill confirmation still missing on the rebar order",
+      category: "Logistics",
+      severity: "warning",
+      owner: "Buyer lead",
+      status: "Supplier confirmation pending"
+    },
+    {
+      id: "ppo_prefab_fiscal",
+      purchaseOrderId: "po_prefab_gov",
+      title: "Blocked prefab order still lacks a compliant fiscal packet",
+      category: "Compliance",
+      severity: "critical",
+      owner: "Procurement controller",
+      status: "SAT package under review"
+    }
+  ];
+
   const inventoryLocations: InventoryLocationRecord[] = [
     {
       id: "inv_central_demo",
@@ -1232,7 +1787,7 @@ function createSeedState() {
       supplierName: "Aceros del Sureste",
       destinationName: "Central warehouse",
       destinationType: "Warehouse",
-      purchaseReference: "PO-STEEL-01",
+      purchaseReference: "PO-RBR-18",
       etaDate: "2026-07-12T13:00:00.000Z",
       receivedDate: null,
       status: "in_transit",
@@ -1252,7 +1807,7 @@ function createSeedState() {
       supplierName: "Acabados Peninsulares",
       destinationName: "Jobsite B",
       destinationType: "Jobsite",
-      purchaseReference: "PO-FIN-07",
+      purchaseReference: "PO-FNS-22",
       etaDate: "2026-07-11T16:00:00.000Z",
       receivedDate: null,
       status: "blocked",
@@ -1272,7 +1827,7 @@ function createSeedState() {
       supplierName: "Concretos Peninsulares",
       destinationName: "Frontline staging area",
       destinationType: "Field staging",
-      purchaseReference: "PO-CONC-09",
+      purchaseReference: "PO-PLM-11",
       etaDate: "2026-07-12T10:30:00.000Z",
       receivedDate: "2026-07-12T11:05:00.000Z",
       status: "received",
@@ -1292,7 +1847,7 @@ function createSeedState() {
       supplierName: "Modulos Habitables Norte",
       destinationName: "Prefabrication yard",
       destinationType: "Yard",
-      purchaseReference: "PO-PREF-12",
+      purchaseReference: "PO-PRF-07",
       etaDate: "2026-07-13T14:00:00.000Z",
       receivedDate: null,
       status: "draft",
@@ -1347,6 +1902,8 @@ function createSeedState() {
       sourceName: "Central warehouse",
       destinationName: "Jobsite B",
       requestedBy: "Monica Compras",
+      upstreamReceiptCode: "RCV-STEEL-01",
+      purchaseReference: "PO-RBR-18",
       status: "in_transit",
       requestedUnits: 180,
       movedUnits: 180,
@@ -1365,6 +1922,8 @@ function createSeedState() {
       sourceName: "Jobsite B",
       destinationName: "Central warehouse",
       requestedBy: "Nora Pacheco",
+      upstreamReceiptCode: "RCV-FIN-02",
+      purchaseReference: "PO-FNS-22",
       status: "blocked",
       requestedUnits: 24,
       movedUnits: 16,
@@ -1383,6 +1942,8 @@ function createSeedState() {
       sourceName: "Prefabrication yard",
       destinationName: "Frontline staging area",
       requestedBy: "Cesar Chan",
+      upstreamReceiptCode: "RCV-CONC-03",
+      purchaseReference: "PO-PLM-11",
       status: "received",
       requestedUnits: 42,
       movedUnits: 42,
@@ -1401,6 +1962,8 @@ function createSeedState() {
       sourceName: "Prefabrication yard",
       destinationName: "Paquete Bienestar Norte",
       requestedBy: "Lucia Herrera",
+      upstreamReceiptCode: "RCV-PREF-04",
+      purchaseReference: "PO-PRF-07",
       status: "draft",
       requestedUnits: 32,
       movedUnits: 0,
@@ -1649,6 +2212,203 @@ function createSeedState() {
       severity: "warning",
       owner: "Controller",
       status: "Pending final supervision signature"
+    }
+  ];
+
+  const accountsPayableInvoices: AccountsPayableInvoiceRecord[] = [
+    {
+      id: "apinv_steel_demo",
+      companyId: "cmp_arcont_demo",
+      supplierProfileId: "supm_steel_demo",
+      supplierName: "Aceros del Sureste",
+      code: "AP-0001",
+      invoiceNumber: "FAS-1842",
+      invoiceUuid: "0D4B2E47-5C1A-48CC-A503-000000000111",
+      projectName: "Torre B Residencial",
+      purchaseOrderCode: "PO-RBR-18",
+      receiptCode: "RCV-STEEL-01",
+      status: "matched",
+      satStatus: "watch",
+      complementStatus: "pending",
+      receiptEvidenceStatus: "partial",
+      paymentMethod: "Transferencia",
+      dueDate: "2026-07-22",
+      scheduledPaymentDate: null,
+      receivedAt: "2026-07-12T15:10:00.000Z",
+      subtotal: 700000,
+      tax: 112000,
+      total: 812000,
+      pendingAmount: 812000,
+      packetCompletion: 86,
+      nextAction: "Cerrar evidencia de recepcion firmada y validar complemento antes del siguiente corte de pagos.",
+      updatedAt: "2026-07-13T11:10:00.000Z"
+    },
+    {
+      id: "apinv_finish_demo",
+      companyId: "cmp_arcont_demo",
+      supplierProfileId: null,
+      supplierName: "Acabados Peninsulares",
+      code: "AP-0002",
+      invoiceNumber: "AP-9921",
+      invoiceUuid: "7A91F6D1-8234-4B62-9F90-000000000222",
+      projectName: "Etapa 2 Urbanizacion",
+      purchaseOrderCode: "PO-FNS-22",
+      receiptCode: "RCV-FIN-02",
+      status: "blocked",
+      satStatus: "critical",
+      complementStatus: "risk",
+      receiptEvidenceStatus: "missing",
+      paymentMethod: "Transferencia",
+      dueDate: "2026-07-16",
+      scheduledPaymentDate: null,
+      receivedAt: "2026-07-11T17:00:00.000Z",
+      subtotal: 228448.28,
+      tax: 36551.72,
+      total: 265000,
+      pendingAmount: 265000,
+      packetCompletion: 62,
+      nextAction: "Resolver pallets danados, CFDI observado y evidencia de recepcion antes de liberar pago.",
+      updatedAt: "2026-07-13T10:20:00.000Z"
+    }
+  ];
+
+  const accountsPayableRisks: AccountsPayableRiskRecord[] = [
+    {
+      id: "apr_demo_steel_packet",
+      invoiceId: "apinv_steel_demo",
+      title: "Complemento de pago y evidencia de recepcion aun no cierran el expediente",
+      category: "SAT / evidence",
+      severity: "warning",
+      owner: "Fiscal controller",
+      status: "Waiting for signed receiving packet"
+    },
+    {
+      id: "apr_demo_finish_block",
+      invoiceId: "apinv_finish_demo",
+      title: "Factura bloqueada por devolucion parcial y CFDI observado",
+      category: "Commercial / fiscal",
+      severity: "critical",
+      owner: "Treasury lead",
+      status: "Blocked until supplier correction and receipt reconciliation"
+    }
+  ];
+
+  const treasuryPaymentRuns: TreasuryPaymentRunRecord[] = [
+    {
+      id: "tpr_demo_friday",
+      companyId: "cmp_arcont_demo",
+      code: "TPR-0001",
+      bankAccountLabel: "Banorte Operacion ****4451",
+      scheduledDate: "2026-07-24",
+      status: "blocked",
+      totalInvoices: 2,
+      totalAmount: 986000,
+      criticalInvoices: 1,
+      owner: "Treasury lead",
+      nextAction: "Separar factura bloqueada y liberar corrida parcial solo con expediente fiscal y evidencia completos.",
+      updatedAt: "2026-07-13T12:10:00.000Z",
+      invoices: [
+        {
+          invoiceId: "apinv_steel_demo",
+          invoiceCode: "AP-0001",
+          supplierName: "Aceros del Sureste",
+          total: 812000,
+          scheduledPaymentDate: null,
+          satStatus: "watch",
+          complementStatus: "pending",
+          receiptEvidenceStatus: "partial"
+        },
+        {
+          invoiceId: "apinv_finish_demo",
+          invoiceCode: "AP-0002",
+          supplierName: "Acabados Peninsulares",
+          total: 265000,
+          scheduledPaymentDate: null,
+          satStatus: "critical",
+          complementStatus: "risk",
+          receiptEvidenceStatus: "missing"
+        }
+      ]
+    }
+  ];
+
+  const treasuryPaymentRunRisks: TreasuryPaymentRunRiskRecord[] = [
+    {
+      id: "tprr_demo_blocked_invoice",
+      paymentRunId: "tpr_demo_friday",
+      title: "La corrida incluye una factura bloqueada por CFDI y evidencia incompleta",
+      category: "Release rule",
+      severity: "critical",
+      owner: "Treasury lead",
+      status: "Split required before execution"
+    }
+  ];
+
+  const supplierMasterProfiles: SupplierMasterProfileRecord[] = [
+    {
+      id: "supm_steel_demo",
+      supplierId: "sup_aceros_del_sureste",
+      companyId: "cmp_arcont_demo",
+      supplierName: "Aceros del Sureste",
+      tradeName: "Aceros del Sureste SA de CV",
+      rfc: "ASU240101AB1",
+      fiscalRegime: "601",
+      cfdiUse: "G03",
+      paymentMethod: "Transferencia",
+      paymentTermsDays: 30,
+      bankAccountMasked: "****9012",
+      contactName: "Monica Fiscal",
+      contactEmail: "fiscal@acerosdelsureste.mx",
+      contactPhone: "9991234567",
+      complianceStatus: "watch",
+      satStatus: "watch",
+      fiscalPacketCompletion: 82,
+      lastValidatedAt: "2026-07-10T12:00:00.000Z",
+      nextAction: "Cerrar validacion de constancia fiscal y complemento de pago antes de la adjudicacion final.",
+      updatedAt: "2026-07-11T18:00:00.000Z"
+    },
+    {
+      id: "supm_mep_demo",
+      supplierId: "sup_electromec_mx",
+      companyId: "cmp_arcont_demo",
+      supplierName: "Electromec MX",
+      tradeName: "Electromec MX Integraciones",
+      rfc: "EMX240101BC2",
+      fiscalRegime: "601",
+      cfdiUse: "I01",
+      paymentMethod: "Transferencia",
+      paymentTermsDays: 21,
+      bankAccountMasked: "****4455",
+      contactName: "Laura Cuentas",
+      contactEmail: "cuentas@electromecmx.com",
+      contactPhone: "9997654321",
+      complianceStatus: "blocked",
+      satStatus: "critical",
+      fiscalPacketCompletion: 64,
+      lastValidatedAt: "2026-07-09T16:30:00.000Z",
+      nextAction: "Bloquear alta contable hasta recibir opinion SAT y expediente bancario actualizado.",
+      updatedAt: "2026-07-11T17:20:00.000Z"
+    }
+  ];
+
+  const supplierMasterRisks: SupplierMasterRiskRecord[] = [
+    {
+      id: "smr_steel_constancia",
+      supplierProfileId: "supm_steel_demo",
+      title: "Constancia de situacion fiscal pendiente de validacion final",
+      category: "SAT",
+      severity: "warning",
+      owner: "Fiscal controller",
+      status: "Awaiting refreshed document"
+    },
+    {
+      id: "smr_mep_opinion",
+      supplierProfileId: "supm_mep_demo",
+      title: "Opinion de cumplimiento SAT y expediente bancario incompletos",
+      category: "Vendor compliance",
+      severity: "critical",
+      owner: "Procurement controller",
+      status: "Vendor blocked until packet is complete"
     }
   ];
 
@@ -2426,8 +3186,14 @@ function createSeedState() {
       dailyLogRisks,
       procurementPackages,
       procurementRisks,
+      supplierControlLines,
+      supplierMasterProfiles,
+      supplierMasterRisks,
+      fieldMaterialRequests,
       procurementRequisitions,
       procurementRequisitionRisks,
+      procurementPurchaseOrders,
+      procurementPurchaseOrderRisks,
       inventoryLocations,
       inventoryRisks,
       inventoryReceipts,
@@ -2438,6 +3204,10 @@ function createSeedState() {
       machineRisks,
       financeItems,
       financeRisks,
+      accountsPayableInvoices,
+      accountsPayableRisks,
+      treasuryPaymentRuns,
+      treasuryPaymentRunRisks,
       crmLeadBuckets,
       crmRisks,
       hrWorkforces,
@@ -2489,6 +3259,72 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       );
       return state.dailyLogRisks.filter((risk) => logIds.has(risk.logId));
     },
+    async listFieldMaterialRequests(companyId: string) {
+      return state.fieldMaterialRequests.filter((request) => request.companyId === companyId);
+    },
+    async createFieldMaterialRequestAndRequisition(input) {
+      const now = new Date().toISOString();
+      const requisition: ProcurementRequisitionRecord = {
+        id: createPrefixedId("req"),
+        companyId: input.companyId,
+        code: `REQ-FLD-${String(state.procurementRequisitions.filter((item) => item.companyId === input.companyId).length + 1).padStart(3, "0")}`,
+        projectName: input.projectName,
+        frontName: input.frontName,
+        requestedBy: input.requestedBy,
+        category: input.category,
+        status: "draft",
+        requestedItems: input.requestedItems,
+        budgetAmount: input.budgetAmount,
+        urgency: input.urgency,
+        approvalHours: input.approvalHours,
+        supplierCoverage: input.supplierCoverage,
+        nextAction: `${input.nextAction} · ${input.requestedVolume}`,
+        updatedAt: now
+      };
+      const fieldRequest: FieldMaterialRequestRecord = {
+        id: createPrefixedId("fmr"),
+        companyId: input.companyId,
+        requisitionId: requisition.id,
+        projectName: input.projectName,
+        frontName: input.frontName,
+        requestedBy: input.requestedBy,
+        summary: input.summary,
+        detail: input.detail,
+        requestedVolume: input.requestedVolume,
+        urgency: input.urgency,
+        nextAction: input.nextAction,
+        status: "converted",
+        createdAt: now,
+        updatedAt: now
+      };
+
+      state.procurementRequisitions.unshift(requisition);
+      state.fieldMaterialRequests.unshift(fieldRequest);
+      if (input.supplierCoverage === 0) {
+        state.procurementRequisitionRisks.unshift({
+          id: createPrefixedId("reqrisk"),
+          requisitionId: requisition.id,
+          title: "No supplier route confirmed from field intake",
+          category: "Coverage",
+          severity: input.urgency === "critical" ? "critical" : "warning",
+          owner: "Procurement lead",
+          status: "Supplier mapping pending before release"
+        });
+      }
+      if (input.urgency === "critical") {
+        state.procurementRequisitionRisks.unshift({
+          id: createPrefixedId("reqrisk"),
+          requisitionId: requisition.id,
+          title: "Critical field request requires same-day procurement triage",
+          category: "Urgency",
+          severity: "critical",
+          owner: "Procurement lead",
+          status: "Escalate sourcing decision in current operating window"
+        });
+      }
+
+      return { fieldRequest, requisition };
+    },
     async listProcurementPackages(companyId: string) {
       return state.procurementPackages.filter((item) => item.companyId === companyId);
     },
@@ -2498,6 +3334,18 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       );
       return state.procurementRisks.filter((risk) => packageIds.has(risk.packageId));
     },
+    async listSupplierControlLines(companyId: string) {
+      return state.supplierControlLines.filter((item) => item.companyId === companyId);
+    },
+    async listSupplierMasterProfiles(companyId: string) {
+      return state.supplierMasterProfiles.filter((item) => item.companyId === companyId);
+    },
+    async listSupplierMasterRisks(companyId: string) {
+      const profileIds = new Set(
+        state.supplierMasterProfiles.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.supplierMasterRisks.filter((risk) => profileIds.has(risk.supplierProfileId));
+    },
     async listProcurementRequisitions(companyId: string) {
       return state.procurementRequisitions.filter((item) => item.companyId === companyId);
     },
@@ -2506,6 +3354,269 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.procurementRequisitions.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.procurementRequisitionRisks.filter((risk) => requisitionIds.has(risk.requisitionId));
+    },
+    async createProcurementRequisition(input) {
+      const requisition: ProcurementRequisitionRecord = {
+        id: createPrefixedId("req"),
+        companyId: input.companyId,
+        code: `REQ-MNL-${String(state.procurementRequisitions.filter((item) => item.companyId === input.companyId).length + 1).padStart(3, "0")}`,
+        projectName: input.projectName,
+        frontName: input.frontName,
+        requestedBy: input.requestedBy,
+        category: input.category,
+        status: input.status,
+        requestedItems: input.requestedItems,
+        budgetAmount: input.budgetAmount,
+        urgency: input.urgency,
+        approvalHours: input.approvalHours,
+        supplierCoverage: input.supplierCoverage,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.procurementRequisitions.unshift(requisition);
+      return requisition;
+    },
+    async createSupplierControlLine(input) {
+      const supplierId = `sup_${input.supplierName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+      const line: SupplierControlLineRecord = {
+        id: createPrefixedId("scl"),
+        supplierId,
+        companyId: input.companyId,
+        supplierName: input.supplierName,
+        owner: input.owner,
+        awardedPackages: input.awardedPackages,
+        activePackages: input.activePackages,
+        contractedAmount: input.contractedAmount,
+        concentrationPercent: input.concentrationPercent,
+        bidCoverage: input.bidCoverage,
+        deliveryHealth: input.deliveryHealth,
+        approvalPressureHours: input.approvalPressureHours,
+        complianceAlerts: input.complianceAlerts,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.supplierControlLines.unshift(line);
+      return line;
+    },
+    async createSupplierMasterProfile(input) {
+      const supplierId = `sup_${input.supplierName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+      const profile: SupplierMasterProfileRecord = {
+        id: createPrefixedId("supm"),
+        supplierId,
+        companyId: input.companyId,
+        supplierName: input.supplierName,
+        tradeName: input.tradeName,
+        rfc: input.rfc,
+        fiscalRegime: input.fiscalRegime,
+        cfdiUse: input.cfdiUse,
+        paymentMethod: input.paymentMethod,
+        paymentTermsDays: input.paymentTermsDays,
+        bankAccountMasked: input.bankAccountMasked,
+        contactName: input.contactName,
+        contactEmail: input.contactEmail,
+        contactPhone: input.contactPhone,
+        complianceStatus: input.complianceStatus,
+        satStatus: input.satStatus,
+        fiscalPacketCompletion: input.fiscalPacketCompletion,
+        lastValidatedAt: new Date().toISOString(),
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.supplierMasterProfiles.unshift(profile);
+      return profile;
+    },
+    async createAccountsPayableInvoice(input) {
+      const sequence = state.accountsPayableInvoices.filter((invoice) => invoice.companyId === input.companyId).length + 1;
+      const invoice: AccountsPayableInvoiceRecord = {
+        id: createPrefixedId("apin"),
+        companyId: input.companyId,
+        supplierProfileId: input.supplierProfileId ?? null,
+        supplierName: input.supplierName,
+        code: `AP-${String(sequence).padStart(4, "0")}`,
+        invoiceNumber: input.invoiceNumber,
+        invoiceUuid: input.invoiceUuid,
+        projectName: input.projectName,
+        purchaseOrderCode: input.purchaseOrderCode ?? null,
+        receiptCode: input.receiptCode ?? null,
+        status: input.status,
+        satStatus: input.satStatus,
+        complementStatus: input.complementStatus,
+        receiptEvidenceStatus: input.receiptEvidenceStatus,
+        paymentMethod: input.paymentMethod,
+        dueDate: input.dueDate,
+        scheduledPaymentDate: input.scheduledPaymentDate ?? null,
+        receivedAt: new Date().toISOString(),
+        subtotal: input.subtotal,
+        tax: input.tax,
+        total: input.total,
+        pendingAmount: input.status === "paid" ? 0 : input.total,
+        packetCompletion: input.packetCompletion,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.accountsPayableInvoices.unshift(invoice);
+      return invoice;
+    },
+    async createTreasuryPaymentRun(input) {
+      const sequence = state.treasuryPaymentRuns.filter((run) => run.companyId === input.companyId).length + 1;
+      const linkedInvoices = state.accountsPayableInvoices.filter((invoice) => input.invoiceIds.includes(invoice.id));
+      const run: TreasuryPaymentRunRecord = {
+        id: createPrefixedId("tpr"),
+        companyId: input.companyId,
+        code: `TPR-${String(sequence).padStart(4, "0")}`,
+        bankAccountLabel: input.bankAccountLabel,
+        scheduledDate: input.scheduledDate,
+        status: "draft",
+        totalInvoices: linkedInvoices.length,
+        totalAmount: linkedInvoices.reduce((sum, invoice) => sum + invoice.pendingAmount, 0),
+        criticalInvoices: linkedInvoices.filter((invoice) => invoice.status === "blocked" || invoice.satStatus === "critical").length,
+        owner: input.owner,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString(),
+        invoices: linkedInvoices.map((invoice) => ({
+          invoiceId: invoice.id,
+          invoiceCode: invoice.code,
+          supplierName: invoice.supplierName,
+          total: invoice.pendingAmount,
+          scheduledPaymentDate: invoice.scheduledPaymentDate,
+          satStatus: invoice.satStatus,
+          complementStatus: invoice.complementStatus,
+          receiptEvidenceStatus: invoice.receiptEvidenceStatus
+        }))
+      };
+
+      state.treasuryPaymentRuns.unshift(run);
+      return run;
+    },
+    async removeTreasuryPaymentRunInvoice(input) {
+      const run = state.treasuryPaymentRuns.find((candidate) => candidate.id === input.paymentRunId && candidate.companyId === input.companyId);
+      if (!run) {
+        throw new Error("Treasury payment run not found in repository");
+      }
+
+      run.invoices = run.invoices.filter((invoice) => invoice.invoiceId !== input.invoiceId);
+      run.totalInvoices = run.invoices.length;
+      run.totalAmount = run.invoices.reduce((sum, invoice) => sum + invoice.total, 0);
+      run.criticalInvoices = run.invoices.filter((invoice) => invoice.satStatus === "critical" || invoice.complementStatus === "risk").length;
+      run.status = "draft";
+      run.nextAction = input.nextAction;
+      run.updatedAt = new Date().toISOString();
+      return run;
+    },
+    async addTreasuryPaymentRunInvoice(input) {
+      const run = state.treasuryPaymentRuns.find((candidate) => candidate.id === input.paymentRunId && candidate.companyId === input.companyId);
+      if (!run) {
+        throw new Error("Treasury payment run not found in repository");
+      }
+
+      const invoice = state.accountsPayableInvoices.find((candidate) => candidate.id === input.invoiceId && candidate.companyId === input.companyId);
+      if (!invoice) {
+        throw new Error("Accounts payable invoice not found in repository");
+      }
+
+      run.invoices.push({
+        invoiceId: invoice.id,
+        invoiceCode: invoice.code,
+        supplierName: invoice.supplierName,
+        total: invoice.pendingAmount,
+        scheduledPaymentDate: invoice.scheduledPaymentDate,
+        satStatus: invoice.satStatus,
+        complementStatus: invoice.complementStatus,
+        receiptEvidenceStatus: invoice.receiptEvidenceStatus
+      });
+      run.totalInvoices = run.invoices.length;
+      run.totalAmount = run.invoices.reduce((sum, item) => sum + item.total, 0);
+      run.criticalInvoices = run.invoices.filter((item) => item.satStatus === "critical" || item.complementStatus === "risk").length;
+      run.status = "draft";
+      run.nextAction = input.nextAction;
+      run.updatedAt = new Date().toISOString();
+      return run;
+    },
+    async moveTreasuryPaymentRunInvoice(input) {
+      const sourceRun = state.treasuryPaymentRuns.find(
+        (candidate) => candidate.id === input.sourcePaymentRunId && candidate.companyId === input.companyId
+      );
+      const targetRun = state.treasuryPaymentRuns.find(
+        (candidate) => candidate.id === input.targetPaymentRunId && candidate.companyId === input.companyId
+      );
+      if (!sourceRun || !targetRun) {
+        throw new Error("Treasury payment run not found in repository");
+      }
+
+      const movedInvoice = sourceRun.invoices.find((invoice) => invoice.invoiceId === input.invoiceId);
+      if (!movedInvoice) {
+        throw new Error("Treasury payment run invoice not found in repository");
+      }
+
+      sourceRun.invoices = sourceRun.invoices.filter((invoice) => invoice.invoiceId !== input.invoiceId);
+      sourceRun.totalInvoices = sourceRun.invoices.length;
+      sourceRun.totalAmount = sourceRun.invoices.reduce((sum, item) => sum + item.total, 0);
+      sourceRun.criticalInvoices = sourceRun.invoices.filter((item) => item.satStatus === "critical" || item.complementStatus === "risk").length;
+      sourceRun.status = "draft";
+      sourceRun.nextAction = input.nextAction;
+      sourceRun.updatedAt = new Date().toISOString();
+
+      targetRun.invoices.push(movedInvoice);
+      targetRun.totalInvoices = targetRun.invoices.length;
+      targetRun.totalAmount = targetRun.invoices.reduce((sum, item) => sum + item.total, 0);
+      targetRun.criticalInvoices = targetRun.invoices.filter((item) => item.satStatus === "critical" || item.complementStatus === "risk").length;
+      targetRun.status = "draft";
+      targetRun.nextAction = input.nextAction;
+      targetRun.updatedAt = new Date().toISOString();
+      return targetRun;
+    },
+    async listProcurementPurchaseOrders(companyId: string) {
+      return state.procurementPurchaseOrders.filter((item) => item.companyId === companyId);
+    },
+    async listProcurementPurchaseOrderRisks(companyId: string) {
+      const purchaseOrderIds = new Set(
+        state.procurementPurchaseOrders.filter((item) => item.companyId === companyId).map((item) => item.id)
+      );
+      return state.procurementPurchaseOrderRisks.filter((risk) => purchaseOrderIds.has(risk.purchaseOrderId));
+    },
+    async createProcurementPurchaseOrder(input) {
+      const now = new Date().toISOString();
+      const purchaseOrder: ProcurementPurchaseOrderRecord = {
+        id: createPrefixedId("po"),
+        companyId: input.companyId,
+        code: `PO-MNL-${String(state.procurementPurchaseOrders.filter((item) => item.companyId === input.companyId).length + 1).padStart(2, "0")}`,
+        requisitionCode: input.requisitionCode,
+        projectName: input.projectName,
+        supplierName: input.supplierName,
+        buyer: input.buyer,
+        category: input.category,
+        status: "issued",
+        totalAmount: input.totalAmount,
+        committedEta: input.committedEta,
+        receivedPercent: 0,
+        invoiceMatchStatus: "pending",
+        logisticsMode: input.logisticsMode,
+        nextAction: input.nextAction,
+        updatedAt: now
+      };
+
+      state.procurementPurchaseOrders.unshift(purchaseOrder);
+      return purchaseOrder;
+    },
+    async syncProcurementPurchaseOrderReceipt(input) {
+      const purchaseOrder = state.procurementPurchaseOrders.find((item) => item.id === input.purchaseOrderId);
+      if (!purchaseOrder) {
+        throw new Error("Procurement purchase order not found in repository");
+      }
+
+      purchaseOrder.receivedPercent = input.receivedPercent;
+      if (input.status) {
+        purchaseOrder.status = input.status;
+      }
+      if (input.nextAction) {
+        purchaseOrder.nextAction = input.nextAction;
+      }
+      purchaseOrder.updatedAt = new Date().toISOString();
+      return purchaseOrder;
     },
     async listInventoryLocations(companyId: string) {
       return state.inventoryLocations.filter((location) => location.companyId === companyId);
@@ -2525,6 +3636,36 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       );
       return state.inventoryReceiptRisks.filter((risk) => receiptIds.has(risk.receiptId));
     },
+    async createInventoryReceipt(input) {
+      const orderedUnits = input.orderedUnits;
+      const receivedUnits = input.receivedUnits;
+      const varianceUnits = Number((receivedUnits - orderedUnits).toFixed(2));
+      const variancePercent = orderedUnits > 0 ? Number(((varianceUnits / orderedUnits) * 100).toFixed(2)) : 0;
+      const now = new Date().toISOString();
+      const receipt: InventoryReceiptRecord = {
+        id: createPrefixedId("receipt"),
+        companyId: input.companyId,
+        code: `RCV-MNL-${String(state.inventoryReceipts.filter((item) => item.companyId === input.companyId).length + 1).padStart(2, "0")}`,
+        supplierName: input.supplierName,
+        destinationName: input.destinationName,
+        destinationType: input.destinationType,
+        purchaseReference: input.purchaseReference,
+        etaDate: input.etaDate,
+        receivedDate: null,
+        status: "draft",
+        orderedUnits,
+        receivedUnits,
+        varianceUnits,
+        variancePercent,
+        pendingEvidence: input.pendingEvidence,
+        rejectedUnits: input.rejectedUnits,
+        nextAction: input.nextAction,
+        updatedAt: now
+      };
+
+      state.inventoryReceipts.unshift(receipt);
+      return receipt;
+    },
     async listInventoryMovements(companyId: string) {
       return state.inventoryMovements.filter((movement) => movement.companyId === companyId);
     },
@@ -2533,6 +3674,35 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.inventoryMovements.filter((movement) => movement.companyId === companyId).map((movement) => movement.id)
       );
       return state.inventoryMovementRisks.filter((risk) => movementIds.has(risk.movementId));
+    },
+    async createInventoryMovement(input) {
+      const requestedUnits = input.requestedUnits;
+      const movedUnits = input.movedUnits;
+      const varianceUnits = Number((movedUnits - requestedUnits).toFixed(2));
+      const now = new Date().toISOString();
+      const movement: InventoryMovementRecord = {
+        id: createPrefixedId("move"),
+        companyId: input.companyId,
+        code: `MOV-MNL-${String(state.inventoryMovements.filter((item) => item.companyId === input.companyId).length + 1).padStart(2, "0")}`,
+        movementType: input.movementType,
+        skuName: input.skuName,
+        sourceName: input.sourceName,
+        destinationName: input.destinationName,
+        requestedBy: input.requestedBy,
+        upstreamReceiptCode: input.upstreamReceiptCode,
+        purchaseReference: input.purchaseReference,
+        status: "draft",
+        requestedUnits,
+        movedUnits,
+        varianceUnits,
+        pendingEvidence: input.pendingEvidence,
+        impactLevel: input.impactLevel,
+        nextAction: input.nextAction,
+        updatedAt: now
+      };
+
+      state.inventoryMovements.unshift(movement);
+      return movement;
     },
     async listMachines(companyId: string) {
       return state.machines.filter((machine) => machine.companyId === companyId);
@@ -2551,6 +3721,22 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
         state.financeItems.filter((item) => item.companyId === companyId).map((item) => item.id)
       );
       return state.financeRisks.filter((risk) => itemIds.has(risk.ledgerId));
+    },
+    async listAccountsPayableInvoices(companyId: string) {
+      return state.accountsPayableInvoices.filter((invoice) => invoice.companyId === companyId);
+    },
+    async listAccountsPayableRisks(companyId: string) {
+      const invoiceIds = new Set(
+        state.accountsPayableInvoices.filter((invoice) => invoice.companyId === companyId).map((invoice) => invoice.id)
+      );
+      return state.accountsPayableRisks.filter((risk) => invoiceIds.has(risk.invoiceId));
+    },
+    async listTreasuryPaymentRuns(companyId: string) {
+      return state.treasuryPaymentRuns.filter((run) => run.companyId === companyId);
+    },
+    async listTreasuryPaymentRunRisks(companyId: string) {
+      const runIds = new Set(state.treasuryPaymentRuns.filter((run) => run.companyId === companyId).map((run) => run.id));
+      return state.treasuryPaymentRunRisks.filter((risk) => runIds.has(risk.paymentRunId));
     },
     async listCrmLeadBuckets(companyId: string) {
       return state.crmLeadBuckets.filter((bucket) => bucket.companyId === companyId);
@@ -2857,6 +4043,30 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       entry.updatedAt = new Date().toISOString();
       return entry;
     },
+    async createDailyLogEntry(input) {
+      const entry: DailyLogEntryRecord = {
+        id: `daily_log_${state.dailyLogEntries.length + 1}_${Date.now()}`,
+        companyId: input.companyId,
+        projectName: input.projectName,
+        frontName: input.frontName,
+        supervisor: input.supervisor,
+        logDate: input.logDate,
+        shift: input.shift,
+        weather: input.weather,
+        status: input.status,
+        progressPercent: input.progressPercent,
+        workforceCount: input.workforceCount,
+        incidentsCount: input.incidentsCount,
+        blockersCount: input.blockersCount,
+        evidenceCount: input.evidenceCount,
+        concretePourM3: input.concretePourM3,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.dailyLogEntries.unshift(entry);
+      return entry;
+    },
     async updateProcurementRequisition(input) {
       const requisition = state.procurementRequisitions.find((candidate) => candidate.id === input.requisitionId);
       if (!requisition) {
@@ -2867,6 +4077,17 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       requisition.nextAction = input.nextAction;
       requisition.updatedAt = new Date().toISOString();
       return requisition;
+    },
+    async updateProcurementPurchaseOrder(input) {
+      const purchaseOrder = state.procurementPurchaseOrders.find((candidate) => candidate.id === input.purchaseOrderId);
+      if (!purchaseOrder) {
+        throw new Error("Procurement purchase order not found in repository");
+      }
+
+      purchaseOrder.status = input.status;
+      purchaseOrder.nextAction = input.nextAction;
+      purchaseOrder.updatedAt = new Date().toISOString();
+      return purchaseOrder;
     },
     async updateCrmLeadBucket(input) {
       const item = state.crmLeadBuckets.find((candidate) => candidate.id === input.leadBucketId);
@@ -2889,6 +4110,32 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       item.note = input.note;
       item.updatedAt = new Date().toISOString();
       return item;
+    },
+    async updateAccountsPayableInvoice(input) {
+      const item = state.accountsPayableInvoices.find((candidate) => candidate.id === input.invoiceId);
+      if (!item) {
+        throw new Error("Accounts payable invoice not found in repository");
+      }
+
+      item.status = input.status;
+      item.satStatus = input.satStatus;
+      item.complementStatus = input.complementStatus;
+      item.scheduledPaymentDate = input.scheduledPaymentDate;
+      item.pendingAmount = input.status === "paid" ? 0 : item.total;
+      item.nextAction = input.nextAction;
+      item.updatedAt = new Date().toISOString();
+      return item;
+    },
+    async updateTreasuryPaymentRun(input) {
+      const run = state.treasuryPaymentRuns.find((candidate) => candidate.id === input.paymentRunId);
+      if (!run) {
+        throw new Error("Treasury payment run not found in repository");
+      }
+
+      run.status = input.status;
+      run.nextAction = input.nextAction;
+      run.updatedAt = new Date().toISOString();
+      return run;
     },
     async updateHrWorkforceItem(input) {
       const item = state.hrWorkforces.find((candidate) => candidate.id === input.workforceId);
@@ -2982,6 +4229,33 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       machine.updatedAt = new Date().toISOString();
       return machine;
     },
+    async createMachineItem(input) {
+      const machine: MachineItemRecord = {
+        id: `machine_${state.machines.length + 1}_${Date.now()}`,
+        companyId: input.companyId,
+        code: input.code,
+        machineName: input.machineName,
+        machineType: input.machineType,
+        projectName: input.projectName,
+        frontName: input.frontName,
+        status: input.status,
+        health: input.health,
+        availabilityPercent: input.availabilityPercent,
+        utilizationPercent: input.utilizationPercent,
+        hourMeter: input.hourMeter,
+        nextMaintenanceHours: input.nextMaintenanceHours,
+        maintenanceDueDate: input.maintenanceDueDate,
+        maintenanceBacklog: input.maintenanceBacklog,
+        openFailures: input.openFailures,
+        criticalOpenFailures: input.criticalOpenFailures,
+        lastServiceAt: input.lastServiceAt,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.machines.unshift(machine);
+      return machine;
+    },
     async updateDocumentControlItem(input) {
       const item = state.documentControlItems.find((candidate) => candidate.id === input.itemId);
       if (!item) {
@@ -2991,6 +4265,27 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       item.status = input.status;
       item.nextAction = input.nextAction;
       item.updatedAt = new Date().toISOString();
+      return item;
+    },
+    async createDocumentControlItem(input) {
+      const item: DocumentControlItemRecord = {
+        id: `document_control_${state.documentControlItems.length + 1}_${Date.now()}`,
+        companyId: input.companyId,
+        code: input.code,
+        documentType: input.documentType,
+        subject: input.subject,
+        projectName: input.projectName,
+        owner: input.owner,
+        status: input.status,
+        revisionCount: input.revisionCount,
+        turnaroundDays: input.turnaroundDays,
+        openComments: input.openComments,
+        health: input.health,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.documentControlItems.unshift(item);
       return item;
     },
     async updateProcurementPackage(input) {
@@ -3004,6 +4299,31 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       procurementPackage.updatedAt = new Date().toISOString();
       return procurementPackage;
     },
+    async updateSupplierControlLine(input) {
+      const line = state.supplierControlLines.find((item) => item.id === input.lineId);
+      if (!line) {
+        throw new Error("Supplier control line not found in repository");
+      }
+
+      line.deliveryHealth = input.deliveryHealth;
+      line.nextAction = input.nextAction;
+      line.updatedAt = new Date().toISOString();
+      return line;
+    },
+    async updateSupplierMasterProfile(input) {
+      const profile = state.supplierMasterProfiles.find((item) => item.id === input.profileId);
+      if (!profile) {
+        throw new Error("Supplier master profile not found in repository");
+      }
+
+      profile.complianceStatus = input.complianceStatus;
+      profile.satStatus = input.satStatus;
+      profile.fiscalPacketCompletion = input.fiscalPacketCompletion;
+      profile.nextAction = input.nextAction;
+      profile.lastValidatedAt = new Date().toISOString();
+      profile.updatedAt = new Date().toISOString();
+      return profile;
+    },
     async updateQualityInspection(input) {
       const inspection = state.qualityInspections.find((item) => item.id === input.inspectionId);
       if (!inspection) {
@@ -3013,6 +4333,27 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       inspection.status = input.status;
       inspection.nextAction = input.nextAction;
       inspection.updatedAt = new Date().toISOString();
+      return inspection;
+    },
+    async createQualityInspection(input) {
+      const inspection: QualityInspectionRecord = {
+        id: `quality_${state.qualityInspections.length + 1}_${Date.now()}`,
+        companyId: input.companyId,
+        code: input.code,
+        areaName: input.areaName,
+        checklistName: input.checklistName,
+        contractorName: input.contractorName,
+        severity: input.severity,
+        openFindings: input.openFindings,
+        evidenceCompletion: input.evidenceCompletion,
+        releaseReadiness: input.releaseReadiness,
+        reworkRate: input.reworkRate,
+        status: input.status,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.qualityInspections.unshift(inspection);
       return inspection;
     },
     async listAuditEvents(companyId?: string, limit = 50) {
@@ -3074,7 +4415,508 @@ function mapAuditEventRow(row: Record<string, unknown>): AuditEventRecord {
   };
 }
 
-async function seedCatalogs(client: PoolClient) {
+function mapProcurementPackageRow(row: Record<string, unknown>): ProcurementPackageRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    packageName: String(row.package_name),
+    projectName: String(row.project_name),
+    buyer: String(row.buyer),
+    status: row.status as ProcurementPackageRecord["status"],
+    budgetAmount: Number(row.budget_amount),
+    bidCount: Number(row.bid_count),
+    approvalHours: Number(row.approval_hours),
+    strategic: Boolean(row.strategic),
+    supplierContention: Number(row.supplier_contention),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapProcurementRiskRow(row: Record<string, unknown>): ProcurementRiskRecord {
+  return {
+    id: String(row.id),
+    packageId: String(row.package_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as ProcurementRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapSupplierControlLineRow(row: Record<string, unknown>): SupplierControlLineRecord {
+  return {
+    id: String(row.id),
+    supplierId: String(row.supplier_id),
+    companyId: String(row.company_id),
+    supplierName: String(row.supplier_name),
+    owner: String(row.owner_name),
+    awardedPackages: Number(row.awarded_packages),
+    activePackages: Number(row.active_packages),
+    contractedAmount: Number(row.contracted_amount),
+    concentrationPercent: Number(row.concentration_percent),
+    bidCoverage: Number(row.bid_coverage),
+    deliveryHealth: row.delivery_health as SupplierControlLineRecord["deliveryHealth"],
+    approvalPressureHours: Number(row.approval_pressure_hours),
+    complianceAlerts: Number(row.compliance_alerts),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapSupplierMasterProfileRow(row: Record<string, unknown>): SupplierMasterProfileRecord {
+  return {
+    id: String(row.id),
+    supplierId: String(row.supplier_id),
+    companyId: String(row.company_id),
+    supplierName: String(row.supplier_name),
+    tradeName: String(row.trade_name),
+    rfc: String(row.rfc),
+    fiscalRegime: String(row.fiscal_regime),
+    cfdiUse: String(row.cfdi_use),
+    paymentMethod: String(row.payment_method),
+    paymentTermsDays: Number(row.payment_terms_days),
+    bankAccountMasked: String(row.bank_account_masked),
+    contactName: String(row.contact_name),
+    contactEmail: String(row.contact_email),
+    contactPhone: String(row.contact_phone),
+    complianceStatus: row.compliance_status as SupplierMasterProfileRecord["complianceStatus"],
+    satStatus: row.sat_status as SupplierMasterProfileRecord["satStatus"],
+    fiscalPacketCompletion: Number(row.fiscal_packet_completion),
+    lastValidatedAt: row.last_validated_at ? String(row.last_validated_at) : null,
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapSupplierMasterRiskRow(row: Record<string, unknown>): SupplierMasterRiskRecord {
+  return {
+    id: String(row.id),
+    supplierProfileId: String(row.supplier_profile_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as SupplierMasterRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapProcurementRequisitionRow(row: Record<string, unknown>): ProcurementRequisitionRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    projectName: String(row.project_name),
+    frontName: String(row.front_name),
+    requestedBy: String(row.requested_by),
+    category: String(row.category),
+    status: row.status as ProcurementRequisitionRecord["status"],
+    requestedItems: Number(row.requested_items),
+    budgetAmount: Number(row.budget_amount),
+    urgency: row.urgency as ProcurementRequisitionRecord["urgency"],
+    approvalHours: Number(row.approval_hours),
+    supplierCoverage: Number(row.supplier_coverage),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapProcurementRequisitionRiskRow(row: Record<string, unknown>): ProcurementRequisitionRiskRecord {
+  return {
+    id: String(row.id),
+    requisitionId: String(row.requisition_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as ProcurementRequisitionRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapFieldMaterialRequestRow(row: Record<string, unknown>): FieldMaterialRequestRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    requisitionId: row.requisition_id ? String(row.requisition_id) : null,
+    projectName: String(row.project_name),
+    frontName: String(row.front_name),
+    requestedBy: String(row.requested_by),
+    summary: String(row.summary),
+    detail: String(row.detail),
+    requestedVolume: String(row.requested_volume),
+    urgency: row.urgency as FieldMaterialRequestRecord["urgency"],
+    nextAction: String(row.next_action),
+    status: row.status as FieldMaterialRequestRecord["status"],
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapProcurementPurchaseOrderRow(row: Record<string, unknown>): ProcurementPurchaseOrderRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    requisitionCode: String(row.requisition_code),
+    projectName: String(row.project_name),
+    supplierName: String(row.supplier_name),
+    buyer: String(row.buyer),
+    category: String(row.category),
+    status: row.status as ProcurementPurchaseOrderRecord["status"],
+    totalAmount: Number(row.total_amount),
+    committedEta: String(row.committed_eta),
+    receivedPercent: Number(row.received_percent),
+    invoiceMatchStatus: row.invoice_match_status as ProcurementPurchaseOrderRecord["invoiceMatchStatus"],
+    logisticsMode: String(row.logistics_mode),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapProcurementPurchaseOrderRiskRow(row: Record<string, unknown>): ProcurementPurchaseOrderRiskRecord {
+  return {
+    id: String(row.id),
+    purchaseOrderId: String(row.purchase_order_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as ProcurementPurchaseOrderRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapInventoryReceiptRow(row: Record<string, unknown>): InventoryReceiptRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    supplierName: String(row.supplier_name),
+    destinationName: String(row.destination_name),
+    destinationType: String(row.destination_type),
+    purchaseReference: String(row.purchase_reference),
+    etaDate: String(row.eta_date),
+    receivedDate: row.received_date ? String(row.received_date) : null,
+    status: row.status as InventoryReceiptRecord["status"],
+    orderedUnits: Number(row.ordered_units),
+    receivedUnits: Number(row.received_units),
+    varianceUnits: Number(row.variance_units),
+    variancePercent: Number(row.variance_percent),
+    pendingEvidence: Number(row.pending_evidence),
+    rejectedUnits: Number(row.rejected_units),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapInventoryReceiptRiskRow(row: Record<string, unknown>): InventoryReceiptRiskRecord {
+  return {
+    id: String(row.id),
+    receiptId: String(row.receipt_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as InventoryReceiptRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapInventoryMovementRow(row: Record<string, unknown>): InventoryMovementRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    movementType: row.movement_type as InventoryMovementRecord["movementType"],
+    skuName: String(row.sku_name),
+    sourceName: String(row.source_name),
+    destinationName: String(row.destination_name),
+    requestedBy: String(row.requested_by),
+    upstreamReceiptCode: row.upstream_receipt_code ? String(row.upstream_receipt_code) : null,
+    purchaseReference: row.purchase_reference ? String(row.purchase_reference) : null,
+    status: row.status as InventoryMovementRecord["status"],
+    requestedUnits: Number(row.requested_units),
+    movedUnits: Number(row.moved_units),
+    varianceUnits: Number(row.variance_units),
+    pendingEvidence: Number(row.pending_evidence),
+    impactLevel: row.impact_level as InventoryMovementRecord["impactLevel"],
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapInventoryMovementRiskRow(row: Record<string, unknown>): InventoryMovementRiskRecord {
+  return {
+    id: String(row.id),
+    movementId: String(row.movement_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as InventoryMovementRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapDailyLogEntryRow(row: Record<string, unknown>): DailyLogEntryRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    projectName: String(row.project_name),
+    frontName: String(row.front_name),
+    supervisor: String(row.supervisor),
+    logDate: String(row.log_date),
+    shift: row.shift as DailyLogEntryRecord["shift"],
+    weather: row.weather as DailyLogEntryRecord["weather"],
+    status: row.status as DailyLogEntryRecord["status"],
+    progressPercent: Number(row.progress_percent),
+    workforceCount: Number(row.workforce_count),
+    incidentsCount: Number(row.incidents_count),
+    blockersCount: Number(row.blockers_count),
+    evidenceCount: Number(row.evidence_count),
+    concretePourM3: Number(row.concrete_pour_m3),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapDailyLogRiskRow(row: Record<string, unknown>): DailyLogRiskRecord {
+  return {
+    id: String(row.id),
+    logId: String(row.log_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as DailyLogRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapMachineItemRow(row: Record<string, unknown>): MachineItemRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    machineName: String(row.machine_name),
+    machineType: String(row.machine_type),
+    projectName: String(row.project_name),
+    frontName: String(row.front_name),
+    status: row.status as MachineItemRecord["status"],
+    health: row.health as MachineItemRecord["health"],
+    availabilityPercent: Number(row.availability_percent),
+    utilizationPercent: Number(row.utilization_percent),
+    hourMeter: Number(row.hour_meter),
+    nextMaintenanceHours: Number(row.next_maintenance_hours),
+    maintenanceDueDate: String(row.maintenance_due_date),
+    maintenanceBacklog: Number(row.maintenance_backlog),
+    openFailures: Number(row.open_failures),
+    criticalOpenFailures: Number(row.critical_open_failures),
+    lastServiceAt: String(row.last_service_at),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapMachineRiskRow(row: Record<string, unknown>): MachineRiskRecord {
+  return {
+    id: String(row.id),
+    machineId: String(row.machine_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as MachineRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapFinanceLedgerItemRow(row: Record<string, unknown>): FinanceLedgerItemRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    metricName: String(row.metric_name),
+    valueLabel: String(row.value_label),
+    trendLabel: String(row.trend_label),
+    note: String(row.note),
+    cashImpact: Number(row.cash_impact),
+    urgentItems: Number(row.urgent_items),
+    closeReadiness: Number(row.close_readiness),
+    satStatus: row.sat_status as FinanceLedgerItemRecord["satStatus"],
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapDocumentControlItemRow(row: Record<string, unknown>): DocumentControlItemRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    documentType: String(row.document_type),
+    subject: String(row.subject),
+    projectName: String(row.project_name),
+    owner: String(row.owner_name),
+    status: row.status as DocumentControlItemRecord["status"],
+    revisionCount: Number(row.revision_count),
+    turnaroundDays: Number(row.turnaround_days),
+    openComments: Number(row.open_comments),
+    health: row.health as DocumentControlItemRecord["health"],
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapDocumentControlRiskRow(row: Record<string, unknown>): DocumentControlRiskRecord {
+  return {
+    id: String(row.id),
+    itemId: String(row.item_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as DocumentControlRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapFinanceRiskRow(row: Record<string, unknown>): FinanceRiskRecord {
+  return {
+    id: String(row.id),
+    ledgerId: String(row.ledger_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as FinanceRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapAccountsPayableInvoiceRow(row: Record<string, unknown>): AccountsPayableInvoiceRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    supplierProfileId: row.supplier_profile_id ? String(row.supplier_profile_id) : null,
+    supplierName: String(row.supplier_name),
+    code: String(row.code),
+    invoiceNumber: String(row.invoice_number),
+    invoiceUuid: String(row.invoice_uuid),
+    projectName: String(row.project_name),
+    purchaseOrderCode: row.purchase_order_code ? String(row.purchase_order_code) : null,
+    receiptCode: row.receipt_code ? String(row.receipt_code) : null,
+    status: row.status as AccountsPayableInvoiceRecord["status"],
+    satStatus: row.sat_status as AccountsPayableInvoiceRecord["satStatus"],
+    complementStatus: row.complement_status as AccountsPayableInvoiceRecord["complementStatus"],
+    receiptEvidenceStatus: row.receipt_evidence_status as AccountsPayableInvoiceRecord["receiptEvidenceStatus"],
+    paymentMethod: String(row.payment_method),
+    dueDate: String(row.due_date),
+    scheduledPaymentDate: row.scheduled_payment_date ? String(row.scheduled_payment_date) : null,
+    receivedAt: String(row.received_at),
+    subtotal: Number(row.subtotal),
+    tax: Number(row.tax),
+    total: Number(row.total),
+    pendingAmount: Number(row.pending_amount),
+    packetCompletion: Number(row.packet_completion),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapAccountsPayableRiskRow(row: Record<string, unknown>): AccountsPayableRiskRecord {
+  return {
+    id: String(row.id),
+    invoiceId: String(row.invoice_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as AccountsPayableRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapTreasuryPaymentRunRiskRow(row: Record<string, unknown>): TreasuryPaymentRunRiskRecord {
+  return {
+    id: String(row.id),
+    paymentRunId: String(row.payment_run_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as TreasuryPaymentRunRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapTreasuryPaymentRunInvoiceRow(row: Record<string, unknown>): TreasuryPaymentRunInvoiceRecord {
+  return {
+    invoiceId: String(row.invoice_id),
+    invoiceCode: String(row.code),
+    supplierName: String(row.supplier_name),
+    total: Number(row.total),
+    scheduledPaymentDate: row.scheduled_payment_date ? String(row.scheduled_payment_date) : null,
+    satStatus: row.sat_status as TreasuryPaymentRunInvoiceRecord["satStatus"],
+    complementStatus: row.complement_status as TreasuryPaymentRunInvoiceRecord["complementStatus"],
+    receiptEvidenceStatus: row.receipt_evidence_status as TreasuryPaymentRunInvoiceRecord["receiptEvidenceStatus"]
+  };
+}
+
+function mapHrWorkforceRow(row: Record<string, unknown>): HrWorkforceItemRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    contractorName: String(row.contractor_name),
+    frontName: String(row.front_name),
+    activeHeadcount: Number(row.active_headcount),
+    attendanceRate: Number(row.attendance_rate),
+    productivityRate: Number(row.productivity_rate),
+    complianceExpirations: Number(row.compliance_expirations),
+    incidentCount: Number(row.incident_count),
+    safetyStatus: row.safety_status as HrWorkforceItemRecord["safetyStatus"],
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapHrRiskRow(row: Record<string, unknown>): HrRiskRecord {
+  return {
+    id: String(row.id),
+    workforceId: String(row.workforce_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as HrRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+function mapQualityInspectionRow(row: Record<string, unknown>): QualityInspectionRecord {
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    code: String(row.code),
+    areaName: String(row.area_name),
+    checklistName: String(row.checklist_name),
+    contractorName: String(row.contractor_name),
+    severity: row.severity as QualityInspectionRecord["severity"],
+    openFindings: Number(row.open_findings),
+    evidenceCompletion: Number(row.evidence_completion),
+    releaseReadiness: Number(row.release_readiness),
+    reworkRate: Number(row.rework_rate),
+    status: row.status as QualityInspectionRecord["status"],
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapQualityRiskRow(row: Record<string, unknown>): QualityRiskRecord {
+  return {
+    id: String(row.id),
+    inspectionId: String(row.inspection_id),
+    title: String(row.title),
+    category: String(row.category),
+    severity: row.severity as QualityRiskRecord["severity"],
+    owner: String(row.owner_name),
+    status: String(row.status)
+  };
+}
+
+export async function seedCatalogs(client: PoolClient) {
   for (const module of moduleCatalog) {
     await client.query(
       `
@@ -3223,39 +5065,664 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       }));
     },
     async listDailyLogEntries(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            e.id,
+            e.company_id,
+            e.project_name,
+            e.front_name,
+            e.supervisor,
+            e.log_date,
+            e.shift,
+            e.weather,
+            e.status,
+            e.progress_percent,
+            e.workforce_count,
+            e.incidents_count,
+            e.blockers_count,
+            e.evidence_count,
+            e.concrete_pour_m3,
+            e.next_action,
+            e.updated_at
+          from daily_log_entries e
+          where e.company_id = $1
+          order by e.log_date desc, e.updated_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapDailyLogEntryRow);
     },
     async listDailyLogRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.log_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from daily_log_risks r
+          inner join daily_log_entries e on e.id = r.log_id
+          where e.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapDailyLogRiskRow);
+    },
+    async listFieldMaterialRequests(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            company_id,
+            requisition_id,
+            project_name,
+            front_name,
+            requested_by,
+            summary,
+            detail,
+            requested_volume,
+            urgency,
+            next_action,
+            status,
+            created_at,
+            updated_at
+          from field_material_requests
+          where company_id = $1
+          order by created_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapFieldMaterialRequestRow);
+    },
+    async createFieldMaterialRequestAndRequisition(input) {
+      const client = await pool.connect();
+
+      try {
+        await client.query("begin");
+
+        const countResult = await client.query(
+          `select count(*)::int as total from procurement_requisitions where company_id = $1`,
+          [input.companyId]
+        );
+        const requisitionCode = `REQ-FLD-${String(Number(countResult.rows[0]?.total ?? 0) + 1).padStart(3, "0")}`;
+        const requisitionId = createPrefixedId("req");
+        const fieldRequestId = createPrefixedId("fmr");
+
+        const requisitionResult = await client.query(
+          `
+            insert into procurement_requisitions
+              (id, company_id, code, project_name, front_name, requested_by, category, status, requested_items, budget_amount, urgency, approval_hours, supplier_coverage, next_action)
+            values
+              ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10, $11, $12, $13)
+            returning id, company_id, code, project_name, front_name, requested_by, category, status, requested_items, budget_amount, urgency, approval_hours, supplier_coverage, next_action, updated_at
+          `,
+          [
+            requisitionId,
+            input.companyId,
+            requisitionCode,
+            input.projectName,
+            input.frontName,
+            input.requestedBy,
+            input.category,
+            input.requestedItems,
+            input.budgetAmount,
+            input.urgency,
+            input.approvalHours,
+            input.supplierCoverage,
+            `${input.nextAction} · ${input.requestedVolume}`
+          ]
+        );
+
+        const fieldRequestResult = await client.query(
+          `
+            insert into field_material_requests
+              (id, company_id, requisition_id, project_name, front_name, requested_by, summary, detail, requested_volume, urgency, next_action, status)
+            values
+              ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'converted')
+            returning id, company_id, requisition_id, project_name, front_name, requested_by, summary, detail, requested_volume, urgency, next_action, status, created_at, updated_at
+          `,
+          [
+            fieldRequestId,
+            input.companyId,
+            requisitionId,
+            input.projectName,
+            input.frontName,
+            input.requestedBy,
+            input.summary,
+            input.detail,
+            input.requestedVolume,
+            input.urgency,
+            input.nextAction
+          ]
+        );
+
+        if (input.supplierCoverage === 0) {
+          await client.query(
+            `
+              insert into procurement_requisition_risks
+                (id, requisition_id, title, category, severity, owner_name, status)
+              values
+                ($1, $2, $3, $4, $5, $6, $7)
+            `,
+            [
+              createPrefixedId("reqrisk"),
+              requisitionId,
+              "No supplier route confirmed from field intake",
+              "Coverage",
+              input.urgency === "critical" ? "critical" : "warning",
+              "Procurement lead",
+              "Supplier mapping pending before release"
+            ]
+          );
+        }
+
+        if (input.urgency === "critical") {
+          await client.query(
+            `
+              insert into procurement_requisition_risks
+                (id, requisition_id, title, category, severity, owner_name, status)
+              values
+                ($1, $2, $3, $4, $5, $6, $7)
+            `,
+            [
+              createPrefixedId("reqrisk"),
+              requisitionId,
+              "Critical field request requires same-day procurement triage",
+              "Urgency",
+              "critical",
+              "Procurement lead",
+              "Escalate sourcing decision in current operating window"
+            ]
+          );
+        }
+
+        await client.query("commit");
+
+        return {
+          fieldRequest: mapFieldMaterialRequestRow(fieldRequestResult.rows[0]),
+          requisition: mapProcurementRequisitionRow(requisitionResult.rows[0])
+        };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
     async listProcurementPackages(companyId: string) {
-      const items = await this.listCompanies();
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            id,
+            company_id,
+            code,
+            package_name,
+            project_name,
+            buyer,
+            status,
+            budget_amount,
+            bid_count,
+            approval_hours,
+            strategic,
+            supplier_contention,
+            next_action,
+            updated_at
+          from procurement_packages
+          where company_id = $1
+          order by updated_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapProcurementPackageRow);
     },
     async listProcurementRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.package_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from procurement_package_risks r
+          inner join procurement_packages p on p.id = r.package_id
+          where p.company_id = $1
+          order by r.created_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapProcurementRiskRow);
+    },
+    async listSupplierControlLines(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            supplier_id,
+            company_id,
+            supplier_name,
+            owner_name,
+            awarded_packages,
+            active_packages,
+            contracted_amount,
+            concentration_percent,
+            bid_coverage,
+            delivery_health,
+            approval_pressure_hours,
+            compliance_alerts,
+            next_action,
+            updated_at
+          from supplier_control_lines
+          where company_id = $1
+          order by updated_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapSupplierControlLineRow);
+    },
+    async listSupplierMasterProfiles(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            supplier_id,
+            company_id,
+            supplier_name,
+            trade_name,
+            rfc,
+            fiscal_regime,
+            cfdi_use,
+            payment_method,
+            payment_terms_days,
+            bank_account_masked,
+            contact_name,
+            contact_email,
+            contact_phone,
+            compliance_status,
+            sat_status,
+            fiscal_packet_completion,
+            last_validated_at,
+            next_action,
+            updated_at
+          from supplier_master_profiles
+          where company_id = $1
+          order by updated_at desc, supplier_name
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapSupplierMasterProfileRow);
+    },
+    async listSupplierMasterRisks(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.supplier_profile_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from supplier_master_risks r
+          inner join supplier_master_profiles p on p.id = r.supplier_profile_id
+          where p.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapSupplierMasterRiskRow);
     },
     async listProcurementRequisitions(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            id,
+            company_id,
+            code,
+            project_name,
+            front_name,
+            requested_by,
+            category,
+            status,
+            requested_items,
+            budget_amount,
+            urgency,
+            approval_hours,
+            supplier_coverage,
+            next_action,
+            updated_at
+          from procurement_requisitions
+          where company_id = $1
+          order by updated_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapProcurementRequisitionRow);
     },
     async listProcurementRequisitionRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.requisition_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from procurement_requisition_risks r
+          inner join procurement_requisitions pr on pr.id = r.requisition_id
+          where pr.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapProcurementRequisitionRiskRow);
+    },
+    async createProcurementRequisition(input) {
+      const countResult = await pool.query(
+        `select count(*)::int as total from procurement_requisitions where company_id = $1`,
+        [input.companyId]
+      );
+      const code = `REQ-MNL-${String(Number(countResult.rows[0]?.total ?? 0) + 1).padStart(3, "0")}`;
+      const result = await pool.query(
+        `
+          insert into procurement_requisitions
+            (id, company_id, code, project_name, front_name, requested_by, category, status, requested_items, budget_amount, urgency, approval_hours, supplier_coverage, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          returning id, company_id, code, project_name, front_name, requested_by, category, status, requested_items, budget_amount, urgency, approval_hours, supplier_coverage, next_action, updated_at
+        `,
+        [
+          createPrefixedId("req"),
+          input.companyId,
+          code,
+          input.projectName,
+          input.frontName,
+          input.requestedBy,
+          input.category,
+          input.status,
+          input.requestedItems,
+          input.budgetAmount,
+          input.urgency,
+          input.approvalHours,
+          input.supplierCoverage,
+          input.nextAction
+        ]
+      );
+
+      return mapProcurementRequisitionRow(result.rows[0]);
+    },
+    async createSupplierControlLine(input) {
+      const supplierId = `sup_${input.supplierName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+      const result = await pool.query(
+        `
+          insert into supplier_control_lines
+            (id, supplier_id, company_id, supplier_name, owner_name, awarded_packages, active_packages, contracted_amount, concentration_percent, bid_coverage, delivery_health, approval_pressure_hours, compliance_alerts, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          returning id, supplier_id, company_id, supplier_name, owner_name, awarded_packages, active_packages, contracted_amount, concentration_percent, bid_coverage, delivery_health, approval_pressure_hours, compliance_alerts, next_action, updated_at
+        `,
+        [
+          createPrefixedId("scl"),
+          supplierId,
+          input.companyId,
+          input.supplierName,
+          input.owner,
+          input.awardedPackages,
+          input.activePackages,
+          input.contractedAmount,
+          input.concentrationPercent,
+          input.bidCoverage,
+          input.deliveryHealth,
+          input.approvalPressureHours,
+          input.complianceAlerts,
+          input.nextAction
+        ]
+      );
+
+      return mapSupplierControlLineRow(result.rows[0]);
+    },
+    async createSupplierMasterProfile(input) {
+      const supplierId = `sup_${input.supplierName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+      const result = await pool.query(
+        `
+          insert into supplier_master_profiles
+            (id, supplier_id, company_id, supplier_name, trade_name, rfc, fiscal_regime, cfdi_use, payment_method, payment_terms_days, bank_account_masked, contact_name, contact_email, contact_phone, compliance_status, sat_status, fiscal_packet_completion, last_validated_at, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), $18)
+          returning id, supplier_id, company_id, supplier_name, trade_name, rfc, fiscal_regime, cfdi_use, payment_method, payment_terms_days, bank_account_masked, contact_name, contact_email, contact_phone, compliance_status, sat_status, fiscal_packet_completion, last_validated_at, next_action, updated_at
+        `,
+        [
+          createPrefixedId("supm"),
+          supplierId,
+          input.companyId,
+          input.supplierName,
+          input.tradeName,
+          input.rfc,
+          input.fiscalRegime,
+          input.cfdiUse,
+          input.paymentMethod,
+          input.paymentTermsDays,
+          input.bankAccountMasked,
+          input.contactName,
+          input.contactEmail,
+          input.contactPhone,
+          input.complianceStatus,
+          input.satStatus,
+          input.fiscalPacketCompletion,
+          input.nextAction
+        ]
+      );
+
+      return mapSupplierMasterProfileRow(result.rows[0]);
+    },
+    async createAccountsPayableInvoice(input) {
+      const countResult = await pool.query(
+        `select count(*)::int as total from accounts_payable_invoices where company_id = $1`,
+        [input.companyId]
+      );
+      const code = `AP-${String(Number(countResult.rows[0]?.total ?? 0) + 1).padStart(4, "0")}`;
+      const result = await pool.query(
+        `
+          insert into accounts_payable_invoices
+            (id, company_id, supplier_profile_id, supplier_name, code, invoice_number, invoice_uuid, project_name, purchase_order_code, receipt_code, status, sat_status, complement_status, receipt_evidence_status, payment_method, due_date, scheduled_payment_date, received_at, subtotal, tax, total, pending_amount, packet_completion, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), $18, $19, $20, $21, $22, $23)
+          returning id, company_id, supplier_profile_id, supplier_name, code, invoice_number, invoice_uuid, project_name, purchase_order_code, receipt_code, status, sat_status, complement_status, receipt_evidence_status, payment_method, due_date, scheduled_payment_date, received_at, subtotal, tax, total, pending_amount, packet_completion, next_action, updated_at
+        `,
+        [
+          createPrefixedId("apin"),
+          input.companyId,
+          input.supplierProfileId ?? null,
+          input.supplierName,
+          code,
+          input.invoiceNumber,
+          input.invoiceUuid,
+          input.projectName,
+          input.purchaseOrderCode ?? null,
+          input.receiptCode ?? null,
+          input.status,
+          input.satStatus,
+          input.complementStatus,
+          input.receiptEvidenceStatus,
+          input.paymentMethod,
+          input.dueDate,
+          input.scheduledPaymentDate ?? null,
+          input.subtotal,
+          input.tax,
+          input.total,
+          input.status === "paid" ? 0 : input.total,
+          input.packetCompletion,
+          input.nextAction
+        ]
+      );
+
+      return mapAccountsPayableInvoiceRow(result.rows[0]);
+    },
+    async createTreasuryPaymentRun(input) {
+      const client = await pool.connect();
+
+      try {
+        await client.query("begin");
+        const countResult = await client.query(
+          `select count(*)::int as total from treasury_payment_runs where company_id = $1`,
+          [input.companyId]
+        );
+        const code = `TPR-${String(Number(countResult.rows[0]?.total ?? 0) + 1).padStart(4, "0")}`;
+        const runResult = await client.query(
+          `
+            insert into treasury_payment_runs
+              (id, company_id, code, bank_account_label, scheduled_date, status, owner_name, next_action)
+            values
+              ($1, $2, $3, $4, $5, 'draft', $6, $7)
+            returning id, company_id, code, bank_account_label, scheduled_date, status, owner_name, next_action, updated_at
+          `,
+          [createPrefixedId("tpr"), input.companyId, code, input.bankAccountLabel, input.scheduledDate, input.owner, input.nextAction]
+        );
+
+        const run = runResult.rows[0];
+        for (const invoiceId of input.invoiceIds) {
+          await client.query(
+            `
+              insert into treasury_payment_run_invoices (payment_run_id, invoice_id)
+              values ($1, $2)
+            `,
+            [String(run.id), invoiceId]
+          );
+        }
+
+        await client.query("commit");
+        const created = (await this.listTreasuryPaymentRuns(input.companyId)).find((candidate) => candidate.id === String(run.id));
+        if (!created) {
+          throw new Error("Treasury payment run not found after creation");
+        }
+        return created;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    async listProcurementPurchaseOrders(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            po.id,
+            po.company_id,
+            po.code,
+            po.requisition_code,
+            po.project_name,
+            po.supplier_name,
+            po.buyer,
+            po.category,
+            po.status,
+            po.total_amount,
+            po.committed_eta,
+            po.received_percent,
+            po.invoice_match_status,
+            po.logistics_mode,
+            po.next_action,
+            po.updated_at
+          from procurement_purchase_orders po
+          where po.company_id = $1
+          order by po.updated_at desc, po.code
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapProcurementPurchaseOrderRow);
+    },
+    async listProcurementPurchaseOrderRisks(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.purchase_order_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from procurement_purchase_order_risks r
+          inner join procurement_purchase_orders po on po.id = r.purchase_order_id
+          where po.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapProcurementPurchaseOrderRiskRow);
+    },
+    async createProcurementPurchaseOrder(input) {
+      const countResult = await pool.query(
+        `select count(*)::int as total from procurement_purchase_orders where company_id = $1`,
+        [input.companyId]
+      );
+      const code = `PO-MNL-${String(Number(countResult.rows[0]?.total ?? 0) + 1).padStart(2, "0")}`;
+      const result = await pool.query(
+        `
+          insert into procurement_purchase_orders
+            (id, company_id, code, requisition_code, project_name, supplier_name, buyer, category, status, total_amount, committed_eta, received_percent, invoice_match_status, logistics_mode, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, 'issued', $9, $10, 0, 'pending', $11, $12)
+          returning id, company_id, code, requisition_code, project_name, supplier_name, buyer, category, status, total_amount, committed_eta, received_percent, invoice_match_status, logistics_mode, next_action, updated_at
+        `,
+        [
+          createPrefixedId("po"),
+          input.companyId,
+          code,
+          input.requisitionCode,
+          input.projectName,
+          input.supplierName,
+          input.buyer,
+          input.category,
+          input.totalAmount,
+          input.committedEta,
+          input.logisticsMode,
+          input.nextAction
+        ]
+      );
+
+      return mapProcurementPurchaseOrderRow(result.rows[0]);
+    },
+    async syncProcurementPurchaseOrderReceipt(input) {
+      const result = await pool.query(
+        `
+          update procurement_purchase_orders
+          set received_percent = $2,
+              status = coalesce($3, status),
+              next_action = coalesce($4, next_action),
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, requisition_code, project_name, supplier_name, buyer, category, status, total_amount, committed_eta, received_percent, invoice_match_status, logistics_mode, next_action, updated_at
+        `,
+        [input.purchaseOrderId, input.receivedPercent, input.status ?? null, input.nextAction ?? null]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Procurement purchase order not found in repository");
+      }
+
+      return mapProcurementPurchaseOrderRow(result.rows[0]);
     },
     async listInventoryLocations(companyId: string) {
       const items = await this.listCompanies();
@@ -3270,52 +5737,434 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listInventoryReceipts(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.company_id,
+            r.code,
+            r.supplier_name,
+            r.destination_name,
+            r.destination_type,
+            r.purchase_reference,
+            r.eta_date,
+            r.received_date,
+            r.status,
+            r.ordered_units,
+            r.received_units,
+            r.variance_units,
+            r.variance_percent,
+            r.pending_evidence,
+            r.rejected_units,
+            r.next_action,
+            r.updated_at
+          from inventory_receipts r
+          where r.company_id = $1
+          order by r.updated_at desc, r.code
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapInventoryReceiptRow);
     },
     async listInventoryReceiptRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.receipt_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from inventory_receipt_risks r
+          inner join inventory_receipts ir on ir.id = r.receipt_id
+          where ir.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapInventoryReceiptRiskRow);
+    },
+    async createInventoryReceipt(input) {
+      const countResult = await pool.query(
+        `select count(*)::int as total from inventory_receipts where company_id = $1`,
+        [input.companyId]
+      );
+      const code = `RCV-MNL-${String(Number(countResult.rows[0]?.total ?? 0) + 1).padStart(2, "0")}`;
+      const varianceUnits = Number((input.receivedUnits - input.orderedUnits).toFixed(2));
+      const variancePercent = input.orderedUnits > 0 ? Number(((varianceUnits / input.orderedUnits) * 100).toFixed(2)) : 0;
+      const result = await pool.query(
+        `
+          insert into inventory_receipts
+            (id, company_id, code, supplier_name, destination_name, destination_type, purchase_reference, eta_date, status, ordered_units, received_units, variance_units, variance_percent, pending_evidence, rejected_units, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10, $11, $12, $13, $14, $15)
+          returning id, company_id, code, supplier_name, destination_name, destination_type, purchase_reference, eta_date, received_date, status, ordered_units, received_units, variance_units, variance_percent, pending_evidence, rejected_units, next_action, updated_at
+        `,
+        [
+          createPrefixedId("receipt"),
+          input.companyId,
+          code,
+          input.supplierName,
+          input.destinationName,
+          input.destinationType,
+          input.purchaseReference,
+          input.etaDate,
+          input.orderedUnits,
+          input.receivedUnits,
+          varianceUnits,
+          variancePercent,
+          input.pendingEvidence,
+          input.rejectedUnits,
+          input.nextAction
+        ]
+      );
+
+      return mapInventoryReceiptRow(result.rows[0]);
     },
     async listInventoryMovements(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            m.id,
+            m.company_id,
+            m.code,
+            m.movement_type,
+            m.sku_name,
+            m.source_name,
+            m.destination_name,
+            m.requested_by,
+            m.upstream_receipt_code,
+            m.purchase_reference,
+            m.status,
+            m.requested_units,
+            m.moved_units,
+            m.variance_units,
+            m.pending_evidence,
+            m.impact_level,
+            m.next_action,
+            m.updated_at
+          from inventory_movements m
+          where m.company_id = $1
+          order by m.updated_at desc, m.code
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapInventoryMovementRow);
     },
     async listInventoryMovementRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.movement_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from inventory_movement_risks r
+          inner join inventory_movements im on im.id = r.movement_id
+          where im.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapInventoryMovementRiskRow);
+    },
+    async createInventoryMovement(input) {
+      const countResult = await pool.query(
+        `select count(*)::int as total from inventory_movements where company_id = $1`,
+        [input.companyId]
+      );
+      const code = `MOV-MNL-${String(Number(countResult.rows[0]?.total ?? 0) + 1).padStart(2, "0")}`;
+      const varianceUnits = Number((input.movedUnits - input.requestedUnits).toFixed(2));
+      const result = await pool.query(
+        `
+          insert into inventory_movements
+            (id, company_id, code, movement_type, sku_name, source_name, destination_name, requested_by, upstream_receipt_code, purchase_reference, status, requested_units, moved_units, variance_units, pending_evidence, impact_level, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'draft', $11, $12, $13, $14, $15, $16)
+          returning id, company_id, code, movement_type, sku_name, source_name, destination_name, requested_by, upstream_receipt_code, purchase_reference, status, requested_units, moved_units, variance_units, pending_evidence, impact_level, next_action, updated_at
+        `,
+        [
+          createPrefixedId("move"),
+          input.companyId,
+          code,
+          input.movementType,
+          input.skuName,
+          input.sourceName,
+          input.destinationName,
+          input.requestedBy,
+          input.upstreamReceiptCode,
+          input.purchaseReference,
+          input.requestedUnits,
+          input.movedUnits,
+          varianceUnits,
+          input.pendingEvidence,
+          input.impactLevel,
+          input.nextAction
+        ]
+      );
+
+      return mapInventoryMovementRow(result.rows[0]);
     },
     async listMachines(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            m.id,
+            m.company_id,
+            m.code,
+            m.machine_name,
+            m.machine_type,
+            m.project_name,
+            m.front_name,
+            m.status,
+            m.health,
+            m.availability_percent,
+            m.utilization_percent,
+            m.hour_meter,
+            m.next_maintenance_hours,
+            m.maintenance_due_date,
+            m.maintenance_backlog,
+            m.open_failures,
+            m.critical_open_failures,
+            m.last_service_at,
+            m.next_action,
+            m.updated_at
+          from machine_items m
+          where m.company_id = $1
+          order by m.updated_at desc, m.code
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapMachineItemRow);
     },
     async listMachineRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.machine_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from machine_risks r
+          inner join machine_items m on m.id = r.machine_id
+          where m.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapMachineRiskRow);
     },
     async listFinanceItems(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            id,
+            company_id,
+            code,
+            metric_name,
+            value_label,
+            trend_label,
+            note,
+            cash_impact,
+            urgent_items,
+            close_readiness,
+            sat_status,
+            updated_at
+          from finance_ledger_items
+          where company_id = $1
+          order by updated_at desc, code
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapFinanceLedgerItemRow);
     },
     async listFinanceRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.ledger_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from finance_risks r
+          inner join finance_ledger_items i on i.id = r.ledger_id
+          where i.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapFinanceRiskRow);
+    },
+    async listAccountsPayableInvoices(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            company_id,
+            supplier_profile_id,
+            supplier_name,
+            code,
+            invoice_number,
+            invoice_uuid,
+            project_name,
+            purchase_order_code,
+            receipt_code,
+            status,
+            sat_status,
+            complement_status,
+            receipt_evidence_status,
+            payment_method,
+            due_date,
+            scheduled_payment_date,
+            received_at,
+            subtotal,
+            tax,
+            total,
+            pending_amount,
+            packet_completion,
+            next_action,
+            updated_at
+          from accounts_payable_invoices
+          where company_id = $1
+          order by updated_at desc, due_date asc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapAccountsPayableInvoiceRow);
+    },
+    async listAccountsPayableRisks(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.invoice_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from accounts_payable_risks r
+          inner join accounts_payable_invoices i on i.id = r.invoice_id
+          where i.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapAccountsPayableRiskRow);
+    },
+    async listTreasuryPaymentRuns(companyId: string) {
+      const runsResult = await pool.query(
+        `
+          select
+            id,
+            company_id,
+            code,
+            bank_account_label,
+            scheduled_date,
+            status,
+            owner_name,
+            next_action,
+            updated_at
+          from treasury_payment_runs
+          where company_id = $1
+          order by scheduled_date desc, updated_at desc
+        `,
+        [companyId]
+      );
+
+      const runIds = runsResult.rows.map((row) => String(row.id));
+      const invoicesByRun = new Map<string, TreasuryPaymentRunInvoiceRecord[]>();
+
+      if (runIds.length > 0) {
+        const invoiceResult = await pool.query(
+          `
+            select
+              tri.payment_run_id,
+              i.id as invoice_id,
+              i.code,
+              i.supplier_name,
+              i.total,
+              i.pending_amount,
+              i.scheduled_payment_date,
+              i.sat_status,
+              i.complement_status,
+              i.receipt_evidence_status
+            from treasury_payment_run_invoices tri
+            inner join accounts_payable_invoices i on i.id = tri.invoice_id
+            where tri.payment_run_id = any($1::text[])
+            order by tri.created_at desc
+          `,
+          [runIds]
+        );
+
+        for (const row of invoiceResult.rows) {
+          const paymentRunId = String(row.payment_run_id);
+          const entry = invoicesByRun.get(paymentRunId) ?? [];
+          entry.push(mapTreasuryPaymentRunInvoiceRow(row));
+          invoicesByRun.set(paymentRunId, entry);
+        }
+      }
+
+      return runsResult.rows.map((row) => {
+        const invoices = invoicesByRun.get(String(row.id)) ?? [];
+        return {
+          id: String(row.id),
+          companyId: String(row.company_id),
+          code: String(row.code),
+          bankAccountLabel: String(row.bank_account_label),
+          scheduledDate: String(row.scheduled_date),
+          status: row.status as TreasuryPaymentRunRecord["status"],
+          totalInvoices: invoices.length,
+          totalAmount: invoices.reduce((sum, invoice) => sum + invoice.total, 0),
+          criticalInvoices: invoices.filter((invoice) => invoice.satStatus === "critical" || invoice.complementStatus === "risk").length,
+          owner: String(row.owner_name),
+          nextAction: String(row.next_action),
+          updatedAt: String(row.updated_at),
+          invoices
+        };
+      });
+    },
+    async listTreasuryPaymentRunRisks(companyId: string) {
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.payment_run_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from treasury_payment_run_risks r
+          inner join treasury_payment_runs pr on pr.id = r.payment_run_id
+          where pr.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapTreasuryPaymentRunRiskRow);
     },
     async listCrmLeadBuckets(companyId: string) {
       const items = await this.listCompanies();
@@ -3330,16 +6179,51 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listHrWorkforces(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            w.id,
+            w.company_id,
+            w.code,
+            w.contractor_name,
+            w.front_name,
+            w.active_headcount,
+            w.attendance_rate,
+            w.productivity_rate,
+            w.compliance_expirations,
+            w.incident_count,
+            w.safety_status,
+            w.next_action,
+            w.updated_at
+          from hr_workforce_items w
+          where w.company_id = $1
+          order by w.updated_at desc, w.code
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapHrWorkforceRow);
     },
     async listHrRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.workforce_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from hr_workforce_risks r
+          inner join hr_workforce_items w on w.id = r.workforce_id
+          where w.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapHrRiskRow);
     },
     async listPostSaleCases(companyId: string) {
       const items = await this.listCompanies();
@@ -3378,28 +6262,100 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return [];
     },
     async listDocumentControlItems(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            d.id,
+            d.company_id,
+            d.code,
+            d.document_type,
+            d.subject,
+            d.project_name,
+            d.owner_name,
+            d.status,
+            d.revision_count,
+            d.turnaround_days,
+            d.open_comments,
+            d.health,
+            d.next_action,
+            d.updated_at
+          from document_control_items d
+          where d.company_id = $1
+          order by d.updated_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapDocumentControlItemRow);
     },
     async listDocumentControlRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.item_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from document_control_risks r
+          inner join document_control_items d on d.id = r.item_id
+          where d.company_id = $1
+          order by r.created_at desc
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapDocumentControlRiskRow);
     },
     async listQualityInspections(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            q.id,
+            q.company_id,
+            q.code,
+            q.area_name,
+            q.checklist_name,
+            q.contractor_name,
+            q.severity,
+            q.open_findings,
+            q.evidence_completion,
+            q.release_readiness,
+            q.rework_rate,
+            q.status,
+            q.next_action,
+            q.updated_at
+          from quality_inspections q
+          where q.company_id = $1
+          order by q.updated_at desc, q.code
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapQualityInspectionRow);
     },
     async listQualityRisks(companyId: string) {
-      const items = await this.listCompanies();
-      void companyId;
-      void items;
-      return [];
+      const result = await pool.query(
+        `
+          select
+            r.id,
+            r.inspection_id,
+            r.title,
+            r.category,
+            r.severity,
+            r.owner_name,
+            r.status
+          from quality_risks r
+          inner join quality_inspections q on q.id = r.inspection_id
+          where q.company_id = $1
+          order by r.severity desc, r.title
+        `,
+        [companyId]
+      );
+
+      return result.rows.map(mapQualityRiskRow);
     },
     async listUsers(companyId?: string) {
       const result = companyId
@@ -3915,28 +6871,411 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       return mapUserRow(result.rows[0]);
     },
     async updateProjectPortfolioItem(input) {
-      void input;
-      throw new Error("Project portfolio updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update project_portfolio
+          set status = $2,
+              next_milestone = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, external_key, name, client_name, segment, status, stage, progress_percent, schedule_variance_days, budget_health, quality_holds, permit_blockers, active_fronts, updated_at, next_milestone
+        `,
+        [input.projectId, input.status, input.nextMilestone]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Project portfolio item not found in repository");
+      }
+
+      const row = result.rows[0];
+      return {
+        id: String(row.id),
+        companyId: String(row.company_id),
+        code: String(row.external_key),
+        name: String(row.name),
+        client: String(row.client_name),
+        segment: String(row.segment),
+        status: row.status as ProjectPortfolioItemRecord["status"],
+        stage: String(row.stage),
+        progress: Number(row.progress_percent),
+        scheduleVarianceDays: Number(row.schedule_variance_days),
+        budgetHealth: row.budget_health as ProjectPortfolioItemRecord["budgetHealth"],
+        qualityHolds: Number(row.quality_holds),
+        permitBlockers: Number(row.permit_blockers),
+        activeFronts: Number(row.active_fronts),
+        updatedAt: String(row.updated_at),
+        nextMilestone: String(row.next_milestone)
+      };
     },
     async updateDailyLogEntry(input) {
-      void input;
-      throw new Error("Daily log updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update daily_log_entries
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, project_name, front_name, supervisor, log_date, shift, weather, status, progress_percent, workforce_count, incidents_count, blockers_count, evidence_count, concrete_pour_m3, next_action, updated_at
+        `,
+        [input.entryId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Daily log entry not found in repository");
+      }
+
+      return mapDailyLogEntryRow(result.rows[0]);
+    },
+    async createDailyLogEntry(input) {
+      const result = await pool.query(
+        `
+          insert into daily_log_entries (
+            id,
+            company_id,
+            project_name,
+            front_name,
+            supervisor,
+            log_date,
+            shift,
+            weather,
+            status,
+            progress_percent,
+            workforce_count,
+            incidents_count,
+            blockers_count,
+            evidence_count,
+            concrete_pour_m3,
+            next_action
+          )
+          values (
+            gen_random_uuid()::text,
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12,
+            $13,
+            $14,
+            $15
+          )
+          returning id, company_id, project_name, front_name, supervisor, log_date, shift, weather, status, progress_percent, workforce_count, incidents_count, blockers_count, evidence_count, concrete_pour_m3, next_action, updated_at
+        `,
+        [
+          input.companyId,
+          input.projectName,
+          input.frontName,
+          input.supervisor,
+          input.logDate,
+          input.shift,
+          input.weather,
+          input.status,
+          input.progressPercent,
+          input.workforceCount,
+          input.incidentsCount,
+          input.blockersCount,
+          input.evidenceCount,
+          input.concretePourM3,
+          input.nextAction
+        ]
+      );
+
+      return mapDailyLogEntryRow(result.rows[0]);
     },
     async updateProcurementRequisition(input) {
-      void input;
-      throw new Error("Procurement requisition updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update procurement_requisitions
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, project_name, front_name, requested_by, category, status, requested_items, budget_amount, urgency, approval_hours, supplier_coverage, next_action, updated_at
+        `,
+        [input.requisitionId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Procurement requisition not found in repository");
+      }
+
+      return mapProcurementRequisitionRow(result.rows[0]);
+    },
+    async updateProcurementPurchaseOrder(input) {
+      const result = await pool.query(
+        `
+          update procurement_purchase_orders
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, requisition_code, project_name, supplier_name, buyer, category, status, total_amount, committed_eta, received_percent, invoice_match_status, logistics_mode, next_action, updated_at
+        `,
+        [input.purchaseOrderId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Procurement purchase order not found in repository");
+      }
+
+      return mapProcurementPurchaseOrderRow(result.rows[0]);
     },
     async updateCrmLeadBucket(input) {
       void input;
       throw new Error("CRM lead bucket updates are not implemented for the postgres repository yet");
     },
     async updateFinanceLedgerItem(input) {
-      void input;
-      throw new Error("Finance ledger updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update finance_ledger_items
+          set sat_status = $2,
+              note = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, metric_name, value_label, trend_label, note, cash_impact, urgent_items, close_readiness, sat_status, updated_at
+        `,
+        [input.ledgerId, input.satStatus, input.note]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Finance ledger item not found in repository");
+      }
+
+      return mapFinanceLedgerItemRow(result.rows[0]);
+    },
+    async updateAccountsPayableInvoice(input) {
+      const result = await pool.query(
+        `
+          update accounts_payable_invoices
+          set status = $2,
+              sat_status = $3,
+              complement_status = $4,
+              scheduled_payment_date = $5,
+              pending_amount = case when $2 = 'paid' then 0 else total end,
+              next_action = $6,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, supplier_profile_id, supplier_name, code, invoice_number, invoice_uuid, project_name, purchase_order_code, receipt_code, status, sat_status, complement_status, receipt_evidence_status, payment_method, due_date, scheduled_payment_date, received_at, subtotal, tax, total, pending_amount, packet_completion, next_action, updated_at
+        `,
+        [
+          input.invoiceId,
+          input.status,
+          input.satStatus,
+          input.complementStatus,
+          input.scheduledPaymentDate,
+          input.nextAction
+        ]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Accounts payable invoice not found in repository");
+      }
+
+      return mapAccountsPayableInvoiceRow(result.rows[0]);
+    },
+    async updateTreasuryPaymentRun(input) {
+      const result = await pool.query(
+        `
+          update treasury_payment_runs
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, bank_account_label, scheduled_date, status, owner_name, next_action, updated_at
+        `,
+        [input.paymentRunId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Treasury payment run not found in repository");
+      }
+
+      const companyId = String(result.rows[0].company_id);
+      const runId = String(result.rows[0].id);
+      const run = (await this.listTreasuryPaymentRuns(companyId)).find((candidate) => candidate.id === runId);
+      if (!run) {
+        throw new Error("Treasury payment run not found after update");
+      }
+      return run;
+    },
+    async removeTreasuryPaymentRunInvoice(input) {
+      const client = await pool.connect();
+
+      try {
+        await client.query("begin");
+        const deleteResult = await client.query(
+          `
+            delete from treasury_payment_run_invoices
+            where payment_run_id = $1 and invoice_id = $2
+          `,
+          [input.paymentRunId, input.invoiceId]
+        );
+
+        if (deleteResult.rowCount === 0) {
+          throw new Error("Treasury payment run invoice not found in repository");
+        }
+
+        const runResult = await client.query(
+          `
+            update treasury_payment_runs
+            set status = 'draft',
+                next_action = $2,
+                updated_at = now()
+            where id = $1 and company_id = $3
+            returning id, company_id
+          `,
+          [input.paymentRunId, input.nextAction, input.companyId]
+        );
+
+        if (!runResult.rows[0]) {
+          throw new Error("Treasury payment run not found in repository");
+        }
+
+        await client.query("commit");
+        const run = (await this.listTreasuryPaymentRuns(input.companyId)).find((candidate) => candidate.id === input.paymentRunId);
+        if (!run) {
+          throw new Error("Treasury payment run not found after invoice removal");
+        }
+        return run;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    async addTreasuryPaymentRunInvoice(input) {
+      const client = await pool.connect();
+
+      try {
+        await client.query("begin");
+        await client.query(
+          `
+            insert into treasury_payment_run_invoices (payment_run_id, invoice_id)
+            values ($1, $2)
+          `,
+          [input.paymentRunId, input.invoiceId]
+        );
+
+        const runResult = await client.query(
+          `
+            update treasury_payment_runs
+            set status = 'draft',
+                next_action = $2,
+                updated_at = now()
+            where id = $1 and company_id = $3
+            returning id, company_id
+          `,
+          [input.paymentRunId, input.nextAction, input.companyId]
+        );
+
+        if (!runResult.rows[0]) {
+          throw new Error("Treasury payment run not found in repository");
+        }
+
+        await client.query("commit");
+        const run = (await this.listTreasuryPaymentRuns(input.companyId)).find((candidate) => candidate.id === input.paymentRunId);
+        if (!run) {
+          throw new Error("Treasury payment run not found after invoice add");
+        }
+        return run;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    async moveTreasuryPaymentRunInvoice(input) {
+      const client = await pool.connect();
+
+      try {
+        await client.query("begin");
+        const deleteResult = await client.query(
+          `
+            delete from treasury_payment_run_invoices
+            where payment_run_id = $1 and invoice_id = $2
+          `,
+          [input.sourcePaymentRunId, input.invoiceId]
+        );
+
+        if (deleteResult.rowCount === 0) {
+          throw new Error("Treasury payment run invoice not found in repository");
+        }
+
+        await client.query(
+          `
+            insert into treasury_payment_run_invoices (payment_run_id, invoice_id)
+            values ($1, $2)
+          `,
+          [input.targetPaymentRunId, input.invoiceId]
+        );
+
+        const sourceResult = await client.query(
+          `
+            update treasury_payment_runs
+            set status = 'draft',
+                next_action = $2,
+                updated_at = now()
+            where id = $1 and company_id = $3
+            returning id
+          `,
+          [input.sourcePaymentRunId, input.nextAction, input.companyId]
+        );
+
+        const targetResult = await client.query(
+          `
+            update treasury_payment_runs
+            set status = 'draft',
+                next_action = $2,
+                updated_at = now()
+            where id = $1 and company_id = $3
+            returning id
+          `,
+          [input.targetPaymentRunId, input.nextAction, input.companyId]
+        );
+
+        if (!sourceResult.rows[0] || !targetResult.rows[0]) {
+          throw new Error("Treasury payment run not found in repository");
+        }
+
+        await client.query("commit");
+        const run = (await this.listTreasuryPaymentRuns(input.companyId)).find((candidate) => candidate.id === input.targetPaymentRunId);
+        if (!run) {
+          throw new Error("Treasury payment run not found after invoice move");
+        }
+        return run;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
     async updateHrWorkforceItem(input) {
-      void input;
-      throw new Error("HR workforce updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update hr_workforce_items
+          set safety_status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, contractor_name, front_name, active_headcount, attendance_rate, productivity_rate, compliance_expirations, incident_count, safety_status, next_action, updated_at
+        `,
+        [input.workforceId, input.safetyStatus, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("HR workforce item not found in repository");
+      }
+
+      return mapHrWorkforceRow(result.rows[0]);
     },
     async updatePostSaleCase(input) {
       void input;
@@ -3955,28 +7294,338 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       throw new Error("Inventory location updates are not implemented for the postgres repository yet");
     },
     async updateInventoryReceipt(input) {
-      void input;
-      throw new Error("Inventory receipt updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update inventory_receipts
+          set status = $2,
+              next_action = $3,
+              received_date = case when $2 = 'received' then coalesce(received_date, now()) else received_date end,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, supplier_name, destination_name, destination_type, purchase_reference, eta_date, received_date, status, ordered_units, received_units, variance_units, variance_percent, pending_evidence, rejected_units, next_action, updated_at
+        `,
+        [input.receiptId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Inventory receipt not found in repository");
+      }
+
+      return mapInventoryReceiptRow(result.rows[0]);
     },
     async updateInventoryMovement(input) {
-      void input;
-      throw new Error("Inventory movement updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update inventory_movements
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, movement_type, sku_name, source_name, destination_name, requested_by, upstream_receipt_code, purchase_reference, status, requested_units, moved_units, variance_units, pending_evidence, impact_level, next_action, updated_at
+        `,
+        [input.movementId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Inventory movement not found in repository");
+      }
+
+      return mapInventoryMovementRow(result.rows[0]);
     },
     async updateMachineItem(input) {
-      void input;
-      throw new Error("Machine item updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update machine_items
+          set status = $2,
+              health = $3,
+              next_action = $4,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, machine_name, machine_type, project_name, front_name, status, health, availability_percent, utilization_percent, hour_meter, next_maintenance_hours, maintenance_due_date, maintenance_backlog, open_failures, critical_open_failures, last_service_at, next_action, updated_at
+        `,
+        [input.machineId, input.status, input.health, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Machine item not found in repository");
+      }
+
+      return mapMachineItemRow(result.rows[0]);
+    },
+    async createMachineItem(input) {
+      const result = await pool.query(
+        `
+          insert into machine_items (
+            id,
+            company_id,
+            code,
+            machine_name,
+            machine_type,
+            project_name,
+            front_name,
+            status,
+            health,
+            availability_percent,
+            utilization_percent,
+            hour_meter,
+            next_maintenance_hours,
+            maintenance_due_date,
+            maintenance_backlog,
+            open_failures,
+            critical_open_failures,
+            last_service_at,
+            next_action
+          )
+          values (
+            gen_random_uuid()::text,
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12,
+            $13,
+            $14,
+            $15,
+            $16,
+            $17,
+            $18
+          )
+          returning id, company_id, code, machine_name, machine_type, project_name, front_name, status, health, availability_percent, utilization_percent, hour_meter, next_maintenance_hours, maintenance_due_date, maintenance_backlog, open_failures, critical_open_failures, last_service_at, next_action, updated_at
+        `,
+        [
+          input.companyId,
+          input.code,
+          input.machineName,
+          input.machineType,
+          input.projectName,
+          input.frontName,
+          input.status,
+          input.health,
+          input.availabilityPercent,
+          input.utilizationPercent,
+          input.hourMeter,
+          input.nextMaintenanceHours,
+          input.maintenanceDueDate,
+          input.maintenanceBacklog,
+          input.openFailures,
+          input.criticalOpenFailures,
+          input.lastServiceAt,
+          input.nextAction
+        ]
+      );
+
+      return mapMachineItemRow(result.rows[0]);
     },
     async updateDocumentControlItem(input) {
-      void input;
-      throw new Error("Document control item updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update document_control_items
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, document_type, subject, project_name, owner_name, status, revision_count, turnaround_days, open_comments, health, next_action, updated_at
+        `,
+        [input.itemId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Document control item not found in repository");
+      }
+
+      return mapDocumentControlItemRow(result.rows[0]);
+    },
+    async createDocumentControlItem(input) {
+      const result = await pool.query(
+        `
+          insert into document_control_items (
+            id,
+            company_id,
+            code,
+            document_type,
+            subject,
+            project_name,
+            owner_name,
+            status,
+            revision_count,
+            turnaround_days,
+            open_comments,
+            health,
+            next_action
+          )
+          values (
+            gen_random_uuid()::text,
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12
+          )
+          returning id, company_id, code, document_type, subject, project_name, owner_name, status, revision_count, turnaround_days, open_comments, health, next_action, updated_at
+        `,
+        [
+          input.companyId,
+          input.code,
+          input.documentType,
+          input.subject,
+          input.projectName,
+          input.owner,
+          input.status,
+          input.revisionCount,
+          input.turnaroundDays,
+          input.openComments,
+          input.health,
+          input.nextAction
+        ]
+      );
+
+      return mapDocumentControlItemRow(result.rows[0]);
     },
     async updateProcurementPackage(input) {
-      void input;
-      throw new Error("Procurement package updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update procurement_packages
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, package_name, project_name, buyer, status, budget_amount, bid_count, approval_hours, strategic, supplier_contention, next_action, updated_at
+        `,
+        [input.packageId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Procurement package not found in repository");
+      }
+
+      return mapProcurementPackageRow(result.rows[0]);
+    },
+    async updateSupplierControlLine(input) {
+      const result = await pool.query(
+        `
+          update supplier_control_lines
+          set delivery_health = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, supplier_id, company_id, supplier_name, owner_name, awarded_packages, active_packages, contracted_amount, concentration_percent, bid_coverage, delivery_health, approval_pressure_hours, compliance_alerts, next_action, updated_at
+        `,
+        [input.lineId, input.deliveryHealth, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Supplier control line not found in repository");
+      }
+
+      return mapSupplierControlLineRow(result.rows[0]);
+    },
+    async updateSupplierMasterProfile(input) {
+      const result = await pool.query(
+        `
+          update supplier_master_profiles
+          set compliance_status = $2,
+              sat_status = $3,
+              fiscal_packet_completion = $4,
+              next_action = $5,
+              last_validated_at = now(),
+              updated_at = now()
+          where id = $1
+          returning id, supplier_id, company_id, supplier_name, trade_name, rfc, fiscal_regime, cfdi_use, payment_method, payment_terms_days, bank_account_masked, contact_name, contact_email, contact_phone, compliance_status, sat_status, fiscal_packet_completion, last_validated_at, next_action, updated_at
+        `,
+        [input.profileId, input.complianceStatus, input.satStatus, input.fiscalPacketCompletion, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Supplier master profile not found in repository");
+      }
+
+      return mapSupplierMasterProfileRow(result.rows[0]);
     },
     async updateQualityInspection(input) {
-      void input;
-      throw new Error("Quality inspection updates are not implemented for the postgres repository yet");
+      const result = await pool.query(
+        `
+          update quality_inspections
+          set status = $2,
+              next_action = $3,
+              updated_at = now()
+          where id = $1
+          returning id, company_id, code, area_name, checklist_name, contractor_name, severity, open_findings, evidence_completion, release_readiness, rework_rate, status, next_action, updated_at
+        `,
+        [input.inspectionId, input.status, input.nextAction]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Quality inspection not found in repository");
+      }
+
+      return mapQualityInspectionRow(result.rows[0]);
+    },
+    async createQualityInspection(input) {
+      const result = await pool.query(
+        `
+          insert into quality_inspections (
+            id,
+            company_id,
+            code,
+            area_name,
+            checklist_name,
+            contractor_name,
+            severity,
+            open_findings,
+            evidence_completion,
+            release_readiness,
+            rework_rate,
+            status,
+            next_action
+          )
+          values (
+            gen_random_uuid()::text,
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12
+          )
+          returning id, company_id, code, area_name, checklist_name, contractor_name, severity, open_findings, evidence_completion, release_readiness, rework_rate, status, next_action, updated_at
+        `,
+        [
+          input.companyId,
+          input.code,
+          input.areaName,
+          input.checklistName,
+          input.contractorName,
+          input.severity,
+          input.openFindings,
+          input.evidenceCompletion,
+          input.releaseReadiness,
+          input.reworkRate,
+          input.status,
+          input.nextAction
+        ]
+      );
+
+      return mapQualityInspectionRow(result.rows[0]);
     },
     async listAuditEvents(companyId?: string, limit = 50) {
       const result = companyId

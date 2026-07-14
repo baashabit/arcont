@@ -1,0 +1,27 @@
+Antonio - asignacion activa PC2
+Fecha: 2026-07-13
+Rama: main
+
+Objetivo actual
+Refinar el vertical web de tesoreria sin tocar backend, contratos ni migraciones.
+
+Alcance
+- Mejorar la UX de `/treasury/payment-runs`.
+- Agregar accesos rapidos hacia tesoreria desde dashboard y/o finance.
+- Mejorar estados vacios, badges de estatus y claridad de riesgos por corrida.
+- Mantener compatibilidad con los contratos y endpoints existentes.
+
+No tocar
+- `apps/api/**`
+- `packages/contracts/**`
+- `apps/api/db/**`
+- `docs/coordination/handoff.md`
+
+Entregables
+- UI mas clara para corridas: seleccion, riesgos, acciones.
+- Enlaces visibles desde vistas ejecutivas a `Payment Runs`.
+- `npm run build:web` en verde.
+
+Validacion
+- Probar con datos reales del backend local ya integrado.
+- Si detectas que falta algun campo, documentarlo sin romper contratos.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -15,7 +16,11 @@ import type {
   EstimationCollectionOverviewContract
 } from "@/lib/contracts";
 import {
+  fetchAccountsPayableOverview,
+  fetchCashFlowOverview,
+  fetchCrmOverview,
   fetchEstimationCollectionOverview,
+  fetchTreasuryPaymentRunsOverview,
   updateEstimationCollectionLine
 } from "@/lib/platform-api";
 
@@ -79,9 +84,78 @@ function lineActionOptions(line: EstimationCollectionLineContract) {
   }
 }
 
+function recomputeSummary(lines: EstimationCollectionLineContract[]) {
+  return {
+    trackedProjects: lines.length,
+    estimatedPortfolio: lines.reduce((sum, item) => sum + item.estimatedAmount, 0),
+    submittedPortfolio: lines.reduce((sum, item) => sum + item.submittedAmount, 0),
+    collectedPortfolio: lines.reduce((sum, item) => sum + item.collectedAmount, 0),
+    pendingCollection: lines.reduce((sum, item) => sum + item.pendingCollection, 0),
+    criticalCollections: lines.filter((item) => item.collectionHealth === "critical").length,
+    overdueCollections: lines.filter((item) => item.oldestPendingDays > item.collectionWindowDays).length
+  };
+}
+
+function pickFocusLine(lines: EstimationCollectionLineContract[]) {
+  return (
+    lines
+      .slice()
+      .sort((left, right) => {
+        if (left.collectionHealth === "critical" && right.collectionHealth !== "critical") {
+          return -1;
+        }
+
+        if (left.collectionHealth !== "critical" && right.collectionHealth === "critical") {
+          return 1;
+        }
+
+        if (right.oldestPendingDays !== left.oldestPendingDays) {
+          return right.oldestPendingDays - left.oldestPendingDays;
+        }
+
+        return right.pendingCollection - left.pendingCollection;
+      })[0] ?? null
+  );
+}
+
+type EstimationBridgeContext = {
+  crm: NonNullable<Awaited<ReturnType<typeof fetchCrmOverview>>>;
+  cashFlow: NonNullable<Awaited<ReturnType<typeof fetchCashFlowOverview>>>;
+  accountsPayable: NonNullable<Awaited<ReturnType<typeof fetchAccountsPayableOverview>>>;
+  treasury: NonNullable<Awaited<ReturnType<typeof fetchTreasuryPaymentRunsOverview>>>;
+} | null;
+
+function buildEstimationBridge(line: EstimationCollectionLineContract | null, bridge: EstimationBridgeContext) {
+  if (!line) {
+    return null;
+  }
+
+  const linkedBucket = bridge?.crm.leadBuckets.find((bucket) => bucket.projectName === line.projectName) ?? null;
+  const linkedCashLine =
+    bridge?.cashFlow.lines.find((item) => item.sourceType === "collections") ??
+    bridge?.cashFlow.focusLine ??
+    null;
+
+  return {
+    commercialCoverage: linkedBucket
+      ? `${linkedBucket.openOpportunities} open opportunities and ${linkedBucket.reservations} reservations are feeding this collection lane.`
+      : "Commercial origin is not yet mapped for this estimation line.",
+    billingPressure:
+      line.pendingCollection > 0
+        ? `MXN ${line.pendingCollection.toLocaleString()} remains uncollected and MXN ${line.pendingToBill.toLocaleString()} is still waiting to be billed.`
+        : "No meaningful billing or collection backlog remains on this line.",
+    treasuryEffect: linkedCashLine
+      ? linkedCashLine.weeklyNet < 0
+        ? `Collections are feeding a treasury stream currently running at a weekly gap of MXN ${Math.abs(linkedCashLine.weeklyNet).toLocaleString()}.`
+        : `Collections are feeding a treasury stream currently showing a weekly surplus of MXN ${linkedCashLine.weeklyNet.toLocaleString()}.`
+      : "Treasury effect is not yet mapped for this estimation line."
+  };
+}
+
 export default function EstimationsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<EstimationCollectionOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<EstimationBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
@@ -100,11 +174,29 @@ export default function EstimationsPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchEstimationCollectionOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchEstimationCollectionOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchCrmOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchCashFlowOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchAccountsPayableOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchTreasuryPaymentRunsOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, crm, cashFlow, accountsPayable, treasury]) => {
         if (cancelled) {
           return;
         }
@@ -116,6 +208,7 @@ export default function EstimationsPage() {
 
         setOverview(result);
         setSelectedLineId((current) => current ?? result.focusLine?.id ?? result.lines[0]?.id ?? null);
+        setBridgeContext(crm && cashFlow && accountsPayable && treasury ? { crm, cashFlow, accountsPayable, treasury } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -136,6 +229,17 @@ export default function EstimationsPage() {
   const selectedExceptions = useMemo(
     () => overview?.exceptions.filter((item) => item.lineId === selectedLine?.id) ?? [],
     [overview, selectedLine]
+  );
+
+  const selectedStory = useMemo(() => buildEstimationBridge(selectedLine, bridgeContext), [bridgeContext, selectedLine]);
+  const collectionsChainPressure = useMemo(
+    () =>
+      (overview?.summary.overdueCollections ?? 0) +
+      (overview?.summary.criticalCollections ?? 0) +
+      (bridgeContext?.accountsPayable.summary.overdueInvoices ?? 0) +
+      (bridgeContext?.treasury.summary.blockedRuns ?? 0) +
+      (bridgeContext?.treasury.unavailableInvoices.length ?? 0),
+    [bridgeContext, overview]
   );
 
   const actionOptions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
@@ -192,29 +296,9 @@ export default function EstimationsPage() {
 
       return {
         ...current,
-        summary: {
-          trackedProjects: lines.length,
-          estimatedPortfolio: lines.reduce((sum, item) => sum + item.estimatedAmount, 0),
-          submittedPortfolio: lines.reduce((sum, item) => sum + item.submittedAmount, 0),
-          collectedPortfolio: lines.reduce((sum, item) => sum + item.collectedAmount, 0),
-          pendingCollection: lines.reduce((sum, item) => sum + item.pendingCollection, 0),
-          criticalCollections: lines.filter((item) => item.collectionHealth === "critical").length
-        },
+        summary: recomputeSummary(lines),
         lines,
-        focusLine:
-          lines
-            .slice()
-            .sort((left, right) => {
-              if (left.collectionHealth === "critical" && right.collectionHealth !== "critical") {
-                return -1;
-              }
-
-              if (left.collectionHealth !== "critical" && right.collectionHealth === "critical") {
-                return 1;
-              }
-
-              return right.pendingCollection - left.pendingCollection;
-            })[0] ?? null
+        focusLine: pickFocusLine(lines)
       };
     });
 
@@ -257,9 +341,41 @@ export default function EstimationsPage() {
                 value={`MXN ${overview.summary.pendingCollection.toLocaleString()}`}
                 footnote="Value still exposed between submitted work and effective collection."
               />
+              <KpiCard
+                label="Overdue tranches"
+                value={String(overview.summary.overdueCollections)}
+                footnote="Projects where the oldest pending collection already exceeded its expected collection window."
+              />
+              <KpiCard
+                label="Collections chain"
+                value={String(collectionsChainPressure)}
+                footnote="Pressure propagated from overdue collections into AP and treasury release."
+              />
             </section>
 
             <section className="grid cols2">
+              <Card
+                title="Collections to treasury lane"
+                description="Estimations now read downstream cash execution, AP aging and treasury blockage as one practical lane."
+                aside={
+                  <Badge tone={collectionsChainPressure > 8 ? "danger" : collectionsChainPressure > 3 ? "warning" : "success"}>
+                    {collectionsChainPressure > 8 ? "high pressure" : collectionsChainPressure > 3 ? "watch" : "controlled"}
+                  </Badge>
+                }
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Collections</div><div>{overview.summary.overdueCollections} overdue tranches and {overview.summary.criticalCollections} critical collection lines</div></div>
+                  <div className="detailRow"><div className="detailLabel">Accounts payable aging</div><div>{bridgeContext?.accountsPayable.summary.overdueInvoices ?? 0} overdue invoices still tightening cash conversion</div></div>
+                  <div className="detailRow"><div className="detailLabel">Treasury release</div><div>{bridgeContext?.treasury.summary.blockedRuns ?? 0} blocked runs and {bridgeContext?.treasury.unavailableInvoices.length ?? 0} ineligible invoices</div></div>
+                  <div className="detailRow"><div className="detailLabel">Executive read</div><div>{collectionsChainPressure > 0 ? "Collection lag is already translating into short-term treasury pressure." : "Collection and treasury lane are currently aligned enough for cleaner cash conversion."}</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/accounts-payable">Open accounts payable</Link>
+                  <Link className="buttonGhost" href="/treasury/payment-runs">Open treasury</Link>
+                  <Link className="buttonGhost" href="/cash-flow">Open cash flow</Link>
+                </div>
+              </Card>
+
               <Card title="Estimation board" description="Project progress, evidence gap and collection exposure in one live board.">
                 <FilterBar summary={`${overview.lines.length} estimation lines in the active tenant`}>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
@@ -310,6 +426,16 @@ export default function EstimationsPage() {
                       )
                     },
                     {
+                      key: "aging",
+                      label: "Aging",
+                      render: (row) => (
+                        <div className="tableCellStack">
+                          <strong>{row.oldestPendingDays}d oldest</strong>
+                          <span className="tableCellMuted">{row.billingCycleLabel}</span>
+                        </div>
+                      )
+                    },
+                    {
                       key: "health",
                       label: "Collection",
                       render: (row) => <Badge tone={healthTone(row.collectionHealth)}>{row.collectionHealth}</Badge>
@@ -332,12 +458,30 @@ export default function EstimationsPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Collection owner</div>
+                      <div>{selectedLine.collectionOwner}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Billing cycle</div>
+                      <div>{selectedLine.billingCycleLabel}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Pending to bill</div>
-                      <div>MXN {selectedLine.pendingToBill.toLocaleString()}</div>
+                      <div>
+                        MXN {selectedLine.pendingToBill.toLocaleString()}
+                        <div className="tableCellMuted">
+                          approval hold MXN {selectedLine.pendingApprovalAmount.toLocaleString()}
+                        </div>
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Pending collection</div>
-                      <div>MXN {selectedLine.pendingCollection.toLocaleString()}</div>
+                      <div>
+                        MXN {selectedLine.pendingCollection.toLocaleString()}
+                        <div className="tableCellMuted">
+                          oldest tranche {selectedLine.oldestPendingDays}d of {selectedLine.collectionWindowDays}d expected window
+                        </div>
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Evidence gap</div>
@@ -367,6 +511,7 @@ export default function EstimationsPage() {
                       <div className="tableCellStack">
                         <span className="tableCellMuted">Controlled is blocked while pending collection stays too high.</span>
                         <span className="tableCellMuted">Controlled is blocked while evidence still lags field progress.</span>
+                        <span className="tableCellMuted">Controlled is blocked while the oldest pending collection already exceeded its window.</span>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -393,6 +538,17 @@ export default function EstimationsPage() {
                             </button>
                           ))}
                         </div>
+                        <div className="row gap wrap">
+                          <Link className="button secondary" href="/cash-flow">
+                            Open cash flow
+                          </Link>
+                          <Link className="buttonGhost" href="/finance">
+                            Open finance
+                          </Link>
+                          <Link className="buttonGhost" href="/accounts-payable">
+                            Open accounts payable
+                          </Link>
+                        </div>
                         {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
                         {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
                       </div>
@@ -405,6 +561,24 @@ export default function EstimationsPage() {
                     primaryAction={{ label: "Stay on estimations", href: "/estimations" }}
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Commercial coverage" description="How much real demand is already sitting behind the selected estimation line.">
+                <p className="sectionText">
+                  {selectedStory?.commercialCoverage ?? "Choose an estimation line to inspect its commercial coverage."}
+                </p>
+              </Card>
+              <Card title="Billing pressure" description="What remains trapped between field execution and actual collection.">
+                <p className="sectionText">
+                  {selectedStory?.billingPressure ?? "Choose an estimation line to inspect billing pressure."}
+                </p>
+              </Card>
+              <Card title="Treasury effect" description="Why this line already matters for short-term cash discipline.">
+                <p className="sectionText">
+                  {selectedStory?.treasuryEffect ?? "Choose an estimation line to inspect treasury effect."}
+                </p>
               </Card>
             </section>
 

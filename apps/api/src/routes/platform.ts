@@ -65,6 +65,19 @@ export async function registerPlatformRoutes(app: FastifyInstance) {
     return app.container.platformService.getDashboardSummary(companyId);
   });
 
+  app.get<{ Querystring: { companyId?: string } }>("/platform/readiness", async (request) => {
+    const accessToken = getBearerToken(request.headers.authorization);
+    const session = await app.container.authService.authorize(accessToken, {
+      requiredPermissions: ["settings:read", "settings:*", "company:*", "platform:*"],
+      companyId: request.query.companyId
+    });
+
+    const companyId =
+      session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
+
+    return app.container.platformService.getSystemReadiness(companyId);
+  });
+
   app.get<{ Params: { companyId: string } }>("/platform/companies/:companyId/modules", async (request) => {
     const accessToken = getBearerToken(request.headers.authorization);
     await app.container.authService.authorize(accessToken, {

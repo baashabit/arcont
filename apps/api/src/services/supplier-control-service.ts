@@ -39,9 +39,10 @@ export function createSupplierControlService(repository: PlatformRepository) {
       });
     }
 
-    const [packages, risks] = await Promise.all([
+    const [packages, risks, manualLines] = await Promise.all([
       repository.listProcurementPackages(companyId),
-      repository.listProcurementRisks(companyId)
+      repository.listProcurementRisks(companyId),
+      repository.listSupplierControlLines(companyId)
     ]);
 
     const totalVolume = packages.reduce((sum, item) => sum + item.budgetAmount, 0);
@@ -74,7 +75,7 @@ export function createSupplierControlService(repository: PlatformRepository) {
       }
     }
 
-    const lines = Array.from(grouped.values()).map((group) => {
+    const derivedLines = Array.from(grouped.values()).map((group) => {
       const contractedAmount = roundCurrency(group.packages.reduce((sum, item) => sum + item.budgetAmount, 0));
       const awardedPackages = group.packages.filter((item) => item.status === "awarded").length;
       const activePackages = group.packages.filter((item) => item.status !== "awarded").length;
@@ -83,6 +84,7 @@ export function createSupplierControlService(repository: PlatformRepository) {
       const approvalPressureHours = roundMetric(
         group.packages.reduce((sum, item) => sum + item.approvalHours, 0) / group.packages.length
       );
+      const hasBlockedPackage = group.packages.some((item) => item.status === "blocked");
       const complianceAlerts = group.packages.reduce(
         (sum, item) =>
           sum +
@@ -92,7 +94,7 @@ export function createSupplierControlService(repository: PlatformRepository) {
         0
       );
       const deliveryHealth =
-        complianceAlerts >= 3 || concentrationPercent >= 45 || bidCoverage < 1.5
+        hasBlockedPackage || complianceAlerts >= 3 || concentrationPercent >= 45 || bidCoverage < 1.5
           ? "critical"
           : complianceAlerts > 0 || concentrationPercent >= 28 || approvalPressureHours > 24
             ? "watch"
@@ -129,7 +131,7 @@ export function createSupplierControlService(repository: PlatformRepository) {
       }
       const supplierName = supplierNameForPackage(pkg.packageName, pkg.companyId);
       const supplierId = supplierIdFromName(supplierName);
-      const line = lines.find((item) => item.supplierId === supplierId);
+      const line = derivedLines.find((item) => item.supplierId === supplierId);
       if (!line) {
         return null;
       }
@@ -145,6 +147,7 @@ export function createSupplierControlService(repository: PlatformRepository) {
     });
 
     const mappedRisks = risksBySupplier.filter((item): item is NonNullable<typeof item> => item !== null);
+    const lines = [...manualLines, ...derivedLines];
 
     const focusLine =
       lines
@@ -179,6 +182,51 @@ export function createSupplierControlService(repository: PlatformRepository) {
   return {
     async getOverview(companyId: string) {
       return buildOverview(companyId);
+    },
+    async createLine(input: {
+      companyId: string;
+      supplierName: string;
+      owner: string;
+      awardedPackages: number;
+      activePackages: number;
+      contractedAmount: number;
+      concentrationPercent: number;
+      bidCoverage: number;
+      deliveryHealth: "controlled" | "watch" | "critical";
+      approvalPressureHours: number;
+      complianceAlerts: number;
+      nextAction: string;
+    }) {
+      const overview = await buildOverview(input.companyId);
+      const supplierId = supplierIdFromName(input.supplierName);
+
+      if (overview.lines.some((item) => item.supplierId === supplierId)) {
+        throw validationError(
+          "SUPPLIER_CONTROL_DUPLICATE_SUPPLIER",
+          "Supplier already exists in the current supplier control board",
+          {
+            companyId: input.companyId,
+            supplierId
+          }
+        );
+      }
+
+      const line = await repository.createSupplierControlLine(input);
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "supplier_control_line",
+        aggregateId: line.id,
+        action: "supplier-control.line.created",
+        metadata: {
+          supplierId: line.supplierId,
+          supplierName: line.supplierName,
+          deliveryHealth: line.deliveryHealth
+        }
+      });
+
+      return line;
     },
     async updateLine(input: {
       companyId: string;
@@ -228,6 +276,30 @@ export function createSupplierControlService(repository: PlatformRepository) {
             concentrationPercent: line.concentrationPercent
           }
         );
+      }
+
+      const manualLine = (await repository.listSupplierControlLines(input.companyId)).find((item) => item.id === input.lineId);
+      if (manualLine) {
+        const updatedLine = await repository.updateSupplierControlLine({
+          lineId: input.lineId,
+          deliveryHealth: input.deliveryHealth,
+          nextAction: input.nextAction
+        });
+
+        await repository.addAuditEvent({
+          companyId: input.companyId,
+          actorUserId: undefined,
+          aggregateType: "supplier_control_line",
+          aggregateId: updatedLine.id,
+          action: "supplier-control.line.updated",
+          metadata: {
+            deliveryHealth: updatedLine.deliveryHealth,
+            nextAction: updatedLine.nextAction,
+            mode: "manual"
+          }
+        });
+
+        return updatedLine;
       }
 
       const packageToUpdate =

@@ -11,7 +11,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { CashFlowLineContract, CashFlowOverviewContract } from "@/lib/contracts";
-import { fetchCashFlowOverview, updateCashFlowLine } from "@/lib/platform-api";
+import {
+  fetchAccountsPayableOverview,
+  fetchCashFlowOverview,
+  fetchSupplierMasterOverview,
+  fetchTreasuryPaymentRunsOverview,
+  updateCashFlowLine
+} from "@/lib/platform-api";
 
 function healthTone(status: CashFlowLineContract["health"]) {
   switch (status) {
@@ -88,9 +94,33 @@ function pickFocusLine(lines: CashFlowLineContract[]) {
   );
 }
 
+function buildCashFlowStory(line: CashFlowLineContract | null, riskCount: number) {
+  if (!line) {
+    return null;
+  }
+
+  return {
+    liquiditySignal:
+      line.weeklyNet < 0
+        ? `This stream is projecting a weekly gap of MXN ${Math.abs(line.weeklyNet).toLocaleString()}.`
+        : `This stream is projecting a weekly surplus of MXN ${line.weeklyNet.toLocaleString()}.`,
+    confidenceSignal:
+      line.confidencePercent < 75
+        ? `Projection confidence is only ${line.confidencePercent}%, so treasury should treat this stream as volatile.`
+        : `Projection confidence is ${line.confidencePercent}%, which is usable for weekly treasury sequencing.`,
+    decisionLane:
+      riskCount > 0
+        ? `${riskCount} mapped treasury blockers remain active and should be worked before the next disbursement cycle.`
+        : "No mapped blocker is active; keep follow-up centered on execution discipline and forecast refresh."
+  };
+}
+
 export default function CashFlowPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<CashFlowOverviewContract | null>(null);
+  const [accountsPayableOverview, setAccountsPayableOverview] = useState<Awaited<ReturnType<typeof fetchAccountsPayableOverview>> | null>(null);
+  const [supplierMasterOverview, setSupplierMasterOverview] = useState<Awaited<ReturnType<typeof fetchSupplierMasterOverview>> | null>(null);
+  const [treasuryOverview, setTreasuryOverview] = useState<Awaited<ReturnType<typeof fetchTreasuryPaymentRunsOverview>> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
@@ -109,11 +139,25 @@ export default function CashFlowPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchCashFlowOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchCashFlowOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchAccountsPayableOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchSupplierMasterOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchTreasuryPaymentRunsOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, accountsPayableResult, supplierMasterResult, treasuryResult]) => {
         if (cancelled) {
           return;
         }
@@ -124,6 +168,9 @@ export default function CashFlowPage() {
         }
 
         setOverview(result);
+        setAccountsPayableOverview(accountsPayableResult);
+        setSupplierMasterOverview(supplierMasterResult);
+        setTreasuryOverview(treasuryResult);
         setSelectedLineId((current) => current ?? result.focusLine?.id ?? result.lines[0]?.id ?? null);
       })
       .finally(() => {
@@ -145,6 +192,18 @@ export default function CashFlowPage() {
   const selectedRisks = useMemo(
     () => overview?.risks.filter((item) => item.lineId === selectedLine?.id) ?? [],
     [overview, selectedLine]
+  );
+
+  const selectedStory = useMemo(() => buildCashFlowStory(selectedLine, selectedRisks.length), [selectedLine, selectedRisks.length]);
+  const treasuryChainPressure = useMemo(
+    () =>
+      (supplierMasterOverview?.summary.criticalSuppliers ?? 0) +
+      (supplierMasterOverview?.summary.incompletePackets ?? 0) +
+      (accountsPayableOverview?.summary.blockedInvoices ?? 0) +
+      (accountsPayableOverview?.summary.overdueInvoices ?? 0) +
+      (treasuryOverview?.summary.blockedRuns ?? 0) +
+      (treasuryOverview?.unavailableInvoices.length ?? 0),
+    [accountsPayableOverview, supplierMasterOverview, treasuryOverview]
   );
 
   const lineActions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
@@ -243,9 +302,31 @@ export default function CashFlowPage() {
                 value={`MXN ${overview.summary.weeklyNet.toLocaleString()}`}
                 footnote="Directional weekly liquidity gap or surplus from active streams."
               />
+              <KpiCard
+                label="Treasury chain"
+                value={String(treasuryChainPressure)}
+                footnote="Combined pressure from supplier fiscal posture, AP blockers and treasury release lane."
+              />
             </section>
 
             <section className="grid cols2">
+              <Card
+                title="Treasury release lane"
+                description="Cash flow now reads supplier fiscal posture, accounts payable blockers and treasury execution in one lane."
+                aside={
+                  <Badge tone={treasuryChainPressure > 8 ? "danger" : treasuryChainPressure > 3 ? "warning" : "success"}>
+                    {treasuryChainPressure > 8 ? "high pressure" : treasuryChainPressure > 3 ? "watch" : "controlled"}
+                  </Badge>
+                }
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Supplier fiscal blockers</div><div>{supplierMasterOverview?.summary.criticalSuppliers ?? 0} critical and {supplierMasterOverview?.summary.incompletePackets ?? 0} incomplete packets</div></div>
+                  <div className="detailRow"><div className="detailLabel">Accounts payable</div><div>{accountsPayableOverview?.summary.blockedInvoices ?? 0} blocked and {accountsPayableOverview?.summary.overdueInvoices ?? 0} overdue invoices</div></div>
+                  <div className="detailRow"><div className="detailLabel">Treasury execution</div><div>{treasuryOverview?.summary.blockedRuns ?? 0} blocked runs and {treasuryOverview?.unavailableInvoices.length ?? 0} ineligible invoices</div></div>
+                  <div className="detailRow"><div className="detailLabel">What this means</div><div>{treasuryChainPressure > 0 ? "Treasury depends on upstream fiscal and AP cleanup before clean release." : "Treasury lane is currently clean enough for predictable short-term execution."}</div></div>
+                </div>
+              </Card>
+
               <Card title="Cash flow board" description="Treasury signal board across collections, payables, tax and close pressure.">
                 <FilterBar summary={`${overview.lines.length} cash flow streams in the active tenant`}>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
@@ -362,6 +443,20 @@ export default function CashFlowPage() {
                     description="Choose a treasury stream from the board to inspect liquidity posture and next action."
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Liquidity signal" description="Immediate cash meaning of the selected treasury stream.">
+                <p className="sectionText">{selectedStory?.liquiditySignal ?? "Choose a stream to inspect its liquidity signal."}</p>
+              </Card>
+              <Card title="Forecast confidence" description="How much treasury can trust this stream this week.">
+                <p className="sectionText">
+                  {selectedStory?.confidenceSignal ?? "Choose a stream to inspect forecast confidence."}
+                </p>
+              </Card>
+              <Card title="Decision lane" description="Next treasury lens for the selected stream.">
+                <p className="sectionText">{selectedStory?.decisionLane ?? "Choose a stream to inspect the decision lane."}</p>
               </Card>
             </section>
 

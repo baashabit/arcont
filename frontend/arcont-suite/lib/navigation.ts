@@ -137,6 +137,14 @@ export const navigationItems: NavigationItem[] = [
     requiredPermissions: ["procurement:*"]
   },
   {
+    href: "/procurement/purchase-orders",
+    label: "Purchase Orders",
+    description: "Execution and receiving",
+    domain: "procurement",
+    moduleKeys: ["procurement.purchasing"],
+    requiredPermissions: ["procurement:*"]
+  },
+  {
     href: "/budget-book",
     label: "Budget Book",
     description: "Catalog and generators",

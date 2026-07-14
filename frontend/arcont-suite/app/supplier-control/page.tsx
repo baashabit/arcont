@@ -11,7 +11,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { SupplierControlLineContract, SupplierControlOverviewContract } from "@/lib/contracts";
-import { fetchSupplierControlOverview, updateSupplierControlLine } from "@/lib/platform-api";
+import {
+  fetchInventoryReceivingOverview,
+  fetchProcurementPurchaseOrdersOverview,
+  fetchSupplierControlOverview,
+  updateSupplierControlLine
+} from "@/lib/platform-api";
 
 function healthTone(status: SupplierControlLineContract["deliveryHealth"]) {
   switch (status) {
@@ -86,9 +91,39 @@ function pickFocusLine(lines: SupplierControlLineContract[]) {
   );
 }
 
+type SupplierBridgeContext = {
+  purchaseOrders: NonNullable<Awaited<ReturnType<typeof fetchProcurementPurchaseOrdersOverview>>>;
+  receiving: NonNullable<Awaited<ReturnType<typeof fetchInventoryReceivingOverview>>>;
+} | null;
+
+function buildSupplierBridge(line: SupplierControlLineContract | null, bridge: SupplierBridgeContext) {
+  if (!line) {
+    return null;
+  }
+
+  const purchaseSignal = bridge?.purchaseOrders.focusPurchaseOrder ?? null;
+  const receivingSignal = bridge?.receiving.focusReceipt ?? null;
+
+  return {
+    executionImpact:
+      line.deliveryHealth === "critical"
+        ? `${line.supplierName} is already threatening live execution through concentration, blocked packages or approval aging.`
+        : line.deliveryHealth === "watch"
+          ? `${line.supplierName} still needs active review before it becomes an execution blocker.`
+          : `${line.supplierName} is currently operating within acceptable delivery posture.`,
+    procurementDependency: purchaseSignal
+      ? `${purchaseSignal.code} is the current PO anchor with status ${purchaseSignal.status} and invoice posture ${purchaseSignal.invoiceMatchStatus}.`
+      : "No linked purchase-order anchor is currently in focus.",
+    receivingExposure: receivingSignal
+      ? `${receivingSignal.code} remains at ${receivingSignal.status} with PO posture ${receivingSignal.purchaseOrderStatus} and invoice posture ${receivingSignal.invoiceMatchStatus}.`
+      : "No linked receiving exposure is currently in focus."
+  };
+}
+
 export default function SupplierControlPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<SupplierControlOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<SupplierBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
@@ -96,6 +131,20 @@ export default function SupplierControlPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    supplierName: "",
+    owner: "Procurement lead",
+    awardedPackages: "1",
+    activePackages: "1",
+    contractedAmount: "1250000",
+    concentrationPercent: "18",
+    bidCoverage: "2.5",
+    deliveryHealth: "controlled" as SupplierControlLineContract["deliveryHealth"],
+    approvalPressureHours: "8",
+    complianceAlerts: "0",
+    nextAction: ""
+  });
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -107,11 +156,21 @@ export default function SupplierControlPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchSupplierControlOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchSupplierControlOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchProcurementPurchaseOrdersOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchInventoryReceivingOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, purchaseOrders, receiving]) => {
         if (cancelled) {
           return;
         }
@@ -123,6 +182,7 @@ export default function SupplierControlPage() {
 
         setOverview(result);
         setSelectedLineId((current) => current ?? result.focusLine?.id ?? result.lines[0]?.id ?? null);
+        setBridgeContext(purchaseOrders && receiving ? { purchaseOrders, receiving } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -144,6 +204,8 @@ export default function SupplierControlPage() {
     () => overview?.risks.filter((item) => item.lineId === selectedLine?.id) ?? [],
     [overview, selectedLine]
   );
+
+  const selectedStory = useMemo(() => buildSupplierBridge(selectedLine, bridgeContext), [bridgeContext, selectedLine]);
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
 
@@ -210,6 +272,81 @@ export default function SupplierControlPage() {
     setIsSaving(false);
   }
 
+  function handleCreateSupplier() {
+    if (!overview) {
+      return;
+    }
+
+    const supplierName = createForm.supplierName.trim();
+    const owner = createForm.owner.trim();
+    const nextAction = createForm.nextAction.trim();
+
+    if (supplierName.length < 3 || owner.length < 3) {
+      setActionError("Supplier name and owner must be specific before creating the supplier lane.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before creating the supplier lane.");
+      setCreateMessage(null);
+      return;
+    }
+
+    const now = new Date();
+    const lineId = `local-supplier-line-${now.getTime()}`;
+    const supplierId = `local-supplier-${overview.lines.length + 1}`;
+
+    const newLine: SupplierControlLineContract = {
+      id: lineId,
+      supplierId,
+      companyId: activeCompany.id,
+      supplierName,
+      owner,
+      awardedPackages: Number(createForm.awardedPackages),
+      activePackages: Number(createForm.activePackages),
+      contractedAmount: Number(createForm.contractedAmount),
+      concentrationPercent: Number(createForm.concentrationPercent),
+      bidCoverage: Number(createForm.bidCoverage),
+      deliveryHealth: createForm.deliveryHealth,
+      approvalPressureHours: Number(createForm.approvalPressureHours),
+      complianceAlerts: Number(createForm.complianceAlerts),
+      nextAction,
+      updatedAt: now.toISOString()
+    };
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const lines = [...current.lines, newLine];
+      return {
+        ...current,
+        summary: recomputeSummary(lines),
+        lines,
+        focusLine: pickFocusLine(lines)
+      };
+    });
+    setSelectedLineId(lineId);
+    setNextActionDraft(nextAction);
+    setActionError(null);
+    setCreateMessage(`${supplierName} added to the supplier workbench.`);
+    setCreateForm({
+      supplierName: "",
+      owner,
+      awardedPackages: "1",
+      activePackages: "1",
+      contractedAmount: "1250000",
+      concentrationPercent: "18",
+      bidCoverage: "2.5",
+      deliveryHealth: "controlled",
+      approvalPressureHours: "8",
+      complianceAlerts: "0",
+      nextAction: ""
+    });
+  }
+
   return (
     <AppShell
       title="Supplier Control"
@@ -244,6 +381,24 @@ export default function SupplierControlPage() {
                 value={String(overview.summary.complianceAlerts)}
                 footnote="Open commercial or operating alerts still attached to the current supplier base."
               />
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Execution impact" description="How this supplier is already shaping real delivery posture.">
+                <p className="sectionText">
+                  {selectedStory?.executionImpact ?? "Choose a supplier to inspect execution impact."}
+                </p>
+              </Card>
+              <Card title="Procurement dependency" description="Purchase-order signal currently attached to the supplier lane.">
+                <p className="sectionText">
+                  {selectedStory?.procurementDependency ?? "Choose a supplier to inspect procurement dependency."}
+                </p>
+              </Card>
+              <Card title="Receiving exposure" description="Inbound exposure still tied to this supplier posture.">
+                <p className="sectionText">
+                  {selectedStory?.receivingExposure ?? "Choose a supplier to inspect receiving exposure."}
+                </p>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -362,6 +517,171 @@ export default function SupplierControlPage() {
                     description="Choose a supplier from the board to inspect concentration, alerts and next action."
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Register supplier lane"
+                description="Create a new supplier-control record in the tenant workbench before live POST endpoints are added."
+              >
+                <div className="detailGrid">
+                  <label className="detailRow">
+                    <div className="detailLabel">Supplier</div>
+                    <input
+                      className="field"
+                      value={createForm.supplierName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, supplierName: event.target.value }))}
+                      placeholder="Concretos del Sureste"
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Owner</div>
+                    <input
+                      className="field"
+                      value={createForm.owner}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, owner: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Awarded packages</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.awardedPackages}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, awardedPackages: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Active packages</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.activePackages}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, activePackages: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Contracted amount</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.contractedAmount}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, contractedAmount: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Concentration %</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={createForm.concentrationPercent}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, concentrationPercent: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Bid coverage</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.1"
+                      value={createForm.bidCoverage}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, bidCoverage: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Health</div>
+                    <select
+                      className="selectField"
+                      value={createForm.deliveryHealth}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          deliveryHealth: event.target.value as SupplierControlLineContract["deliveryHealth"]
+                        }))
+                      }
+                    >
+                      <option value="controlled">controlled</option>
+                      <option value="watch">watch</option>
+                      <option value="critical">critical</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Approval pressure h</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.approvalPressureHours}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, approvalPressureHours: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Compliance alerts</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.complianceAlerts}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, complianceAlerts: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Next action</div>
+                    <input
+                      className="field"
+                      value={createForm.nextAction}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))}
+                      placeholder="Cerrar competencia, validar expediente fiscal y amarrar ventana de entrega"
+                    />
+                  </label>
+                </div>
+
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <button type="button" className="button" onClick={handleCreateSupplier}>
+                    Add supplier lane
+                  </button>
+                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                </div>
+              </Card>
+
+              <Card
+                title="Workbench rules"
+                description="The creation flow stays coherent now and maps cleanly to a future backend endpoint."
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">Scope</div>
+                    <div>New supplier lanes stay in the active tenant session and immediately reshape concentration metrics.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Selection</div>
+                    <div>The new supplier becomes the selected lane so procurement can act on it immediately.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Backend path</div>
+                    <div>This same intake can later point to `POST /supplier-control/lines` without changing the UX.</div>
+                  </div>
+                </div>
               </Card>
             </section>
 

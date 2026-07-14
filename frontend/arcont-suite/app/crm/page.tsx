@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -11,7 +12,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { CrmLeadBucketContract, CrmOverviewContract } from "@/lib/contracts";
-import { fetchCrmOverview, updateCrmLeadBucket } from "@/lib/platform-api";
+import {
+  fetchCashFlowOverview,
+  fetchCrmOverview,
+  fetchEstimationCollectionOverview,
+  updateCrmLeadBucket
+} from "@/lib/platform-api";
 
 function healthTone(health: CrmLeadBucketContract["health"]) {
   switch (health) {
@@ -60,9 +66,48 @@ function crmActionOptions(bucket: CrmLeadBucketContract) {
   }
 }
 
+type CommercialBridgeContext = {
+  estimations: NonNullable<Awaited<ReturnType<typeof fetchEstimationCollectionOverview>>>;
+  cashFlow: NonNullable<Awaited<ReturnType<typeof fetchCashFlowOverview>>>;
+} | null;
+
+function buildCommercialBridge(bucket: CrmLeadBucketContract | null, bridge: CommercialBridgeContext) {
+  if (!bucket) {
+    return null;
+  }
+
+  const linkedLine = bridge?.estimations.lines.find((line) => line.projectName === bucket.projectName) ?? null;
+  const linkedCashLine =
+    bridge?.cashFlow.lines.find((line) => line.sourceType === "collections") ??
+    bridge?.cashFlow.focusLine ??
+    null;
+
+  const demandSignal =
+    bucket.reservations >= 10
+      ? `${bucket.reservations} reservations already justify active delivery and closing readiness.`
+      : `${bucket.reservations} reservations still need stronger closing traction before the bucket becomes dependable.`;
+
+  const collectionSignal = linkedLine
+    ? `Estimated downstream exposure is MXN ${linkedLine.pendingCollection.toLocaleString()} pending collection and MXN ${linkedLine.pendingToBill.toLocaleString()} pending to bill.`
+    : "This bucket still has no mapped estimation and collection bridge.";
+
+  const treasurySignal = linkedCashLine
+    ? linkedCashLine.weeklyNet < 0
+      ? `Current treasury posture tied to this lane is under pressure with a weekly gap of MXN ${Math.abs(linkedCashLine.weeklyNet).toLocaleString()}.`
+      : `Current treasury posture tied to this lane shows a weekly surplus of MXN ${linkedCashLine.weeklyNet.toLocaleString()}.`
+    : "Treasury linkage is not yet available for this bucket.";
+
+  return {
+    demandSignal,
+    collectionSignal,
+    treasurySignal
+  };
+}
+
 export default function CrmPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<CrmOverviewContract | null>(null);
+  const [commercialBridge, setCommercialBridge] = useState<CommercialBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null);
@@ -81,11 +126,21 @@ export default function CrmPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchCrmOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchCrmOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchEstimationCollectionOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchCashFlowOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, estimations, cashFlow]) => {
         if (cancelled) {
           return;
         }
@@ -97,6 +152,15 @@ export default function CrmPage() {
 
         setOverview(result);
         setSelectedBucketId((current) => current ?? result.focusBucket?.id ?? result.leadBuckets[0]?.id ?? null);
+
+        setCommercialBridge(
+          estimations && cashFlow
+            ? {
+                estimations,
+                cashFlow
+              }
+            : null
+        );
       })
       .finally(() => {
         if (!cancelled) {
@@ -118,6 +182,8 @@ export default function CrmPage() {
     () => overview?.risks.filter((risk) => risk.leadBucketId === selectedBucket?.id) ?? [],
     [overview, selectedBucket]
   );
+
+  const selectedStory = useMemo(() => buildCommercialBridge(selectedBucket, commercialBridge), [commercialBridge, selectedBucket]);
 
   const actionOptions = useMemo(() => (selectedBucket ? crmActionOptions(selectedBucket) : []), [selectedBucket]);
 
@@ -318,6 +384,23 @@ export default function CrmPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/estimations">
+                          Open estimations
+                        </Link>
+                        <Link className="buttonGhost" href="/cash-flow">
+                          Open cash flow
+                        </Link>
+                        <Link className="buttonGhost" href="/finance">
+                          Open finance
+                        </Link>
+                        <Link className="buttonGhost" href="/projects">
+                          Open projects
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedBucket.updatedAt).toLocaleString()}</div>
                     </div>
@@ -326,6 +409,8 @@ export default function CrmPage() {
                       <div className="tableCellStack">
                         <span className="tableCellMuted">Healthy requires conversion of at least 20%.</span>
                         <span className="tableCellMuted">Healthy also requires at least 10 reservations in the bucket.</span>
+                        <span className="tableCellMuted">Healthy now also requires at least MXN 1,000,000 forecast revenue.</span>
+                        <span className="tableCellMuted">Watch is blocked when reservations are still below 5.</span>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -337,7 +422,15 @@ export default function CrmPage() {
                               key={option.label}
                               className={option.health === "critical" ? "buttonGhost" : "button"}
                               type="button"
-                              disabled={isSaving}
+                              disabled={
+                                isSaving ||
+                                (option.health === "healthy" &&
+                                  (selectedBucket.conversionRate < 20 ||
+                                    selectedBucket.reservations < 10 ||
+                                    selectedBucket.forecastRevenue < 1_000_000)) ||
+                                (option.health === "watch" &&
+                                  (selectedBucket.conversionRate < 15 || selectedBucket.reservations < 5))
+                              }
                               onClick={() => void handleBucketAction(option.health, option.signal)}
                             >
                               {isSaving ? "Saving..." : option.label}
@@ -356,6 +449,22 @@ export default function CrmPage() {
                     primaryAction={{ label: "Stay on CRM", href: "/crm" }}
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Demand signal" description="What the selected bucket means from a pure commercial standpoint.">
+                <p className="sectionText">{selectedStory?.demandSignal ?? "Choose a bucket to inspect demand quality."}</p>
+              </Card>
+              <Card title="Collection bridge" description="How the selected bucket translates into billing and collection pressure.">
+                <p className="sectionText">
+                  {selectedStory?.collectionSignal ?? "Choose a bucket to inspect its collection bridge."}
+                </p>
+              </Card>
+              <Card title="Treasury signal" description="Why sales quality already matters for short-term cash posture.">
+                <p className="sectionText">
+                  {selectedStory?.treasurySignal ?? "Choose a bucket to inspect its treasury signal."}
+                </p>
               </Card>
             </section>
 

@@ -1,4 +1,7 @@
-import { UpdateSupplierControlLineRequestSchema } from "@arcont/contracts";
+import {
+  CreateSupplierControlLineRequestSchema,
+  UpdateSupplierControlLineRequestSchema
+} from "@arcont/contracts";
 import type { FastifyInstance } from "fastify";
 import { authError } from "../lib/domain-error.js";
 
@@ -27,6 +30,33 @@ export async function registerSupplierControlRoutes(app: FastifyInstance) {
       session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
 
     return app.container.supplierControlService.getOverview(companyId);
+  });
+
+  app.post<{ Body: unknown; Querystring: { companyId?: string } }>("/supplier-control/lines", async (request) => {
+    const accessToken = getBearerToken(request.headers.authorization);
+    const session = await app.container.authService.authorize(accessToken, {
+      requiredPermissions: ["procurement:*"],
+      companyId: request.query.companyId
+    });
+    const input = CreateSupplierControlLineRequestSchema.parse(request.body);
+
+    const companyId =
+      session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
+
+    return app.container.supplierControlService.createLine({
+      companyId,
+      supplierName: input.supplierName,
+      owner: input.owner,
+      awardedPackages: input.awardedPackages,
+      activePackages: input.activePackages,
+      contractedAmount: input.contractedAmount,
+      concentrationPercent: input.concentrationPercent,
+      bidCoverage: input.bidCoverage,
+      deliveryHealth: input.deliveryHealth,
+      approvalPressureHours: input.approvalPressureHours,
+      complianceAlerts: input.complianceAlerts,
+      nextAction: input.nextAction
+    });
   });
 
   app.patch<{ Params: { lineId: string }; Body: unknown; Querystring: { companyId?: string } }>(

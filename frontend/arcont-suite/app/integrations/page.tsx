@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -22,6 +23,39 @@ function healthTone(health: IntegrationStreamContract["health"]) {
     default:
       return "danger";
   }
+}
+
+function buildStreamImpact(stream: IntegrationStreamContract | null, riskCount: number) {
+  if (!stream) {
+    return null;
+  }
+
+  const fieldExposure =
+    stream.health === "critical"
+      ? "Field capture and operational sync are directly exposed."
+      : stream.health === "watch"
+        ? "Field execution can continue, but evidence and telemetry may degrade."
+        : "The connected flow is supporting normal field execution.";
+
+  const recoveryLane =
+    stream.domain === "Connectivity"
+      ? "Recover backbone stability and protect offline-first field continuity."
+      : stream.domain === "Progress capture"
+        ? "Restore drone cadence so project control can trust progress evidence."
+        : stream.domain === "Telemetry"
+          ? "Normalize live sensor continuity before alert fatigue spreads."
+          : "Keep BIM and digital coordination synchronized with downstream consumers.";
+
+  const executiveSignal =
+    riskCount > 0
+      ? `${riskCount} active blockers remain tied to this stream and need coordinated recovery.`
+      : "No explicit blocker is open, but the stream still needs active monitoring.";
+
+  return {
+    fieldExposure,
+    recoveryLane,
+    executiveSignal
+  };
 }
 
 export default function IntegrationsPage() {
@@ -81,6 +115,11 @@ export default function IntegrationsPage() {
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.streamId === selectedStream?.id) ?? [],
     [overview, selectedStream]
+  );
+
+  const selectedImpact = useMemo(
+    () => buildStreamImpact(selectedStream, selectedRisks.length),
+    [selectedRisks.length, selectedStream]
   );
 
   const actionOptions = useMemo(() => {
@@ -338,6 +377,26 @@ export default function IntegrationsPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/field">
+                          Open field
+                        </Link>
+                        <Link className="buttonGhost" href="/document-control">
+                          Open document control
+                        </Link>
+                        <Link className="buttonGhost" href="/quality">
+                          Open quality
+                        </Link>
+                        <Link className="buttonGhost" href="/projects">
+                          Open projects
+                        </Link>
+                        <Link className="buttonGhost" href="/copilot">
+                          Open copilot
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedStream.updatedAt).toLocaleString()}</div>
                     </div>
@@ -346,6 +405,8 @@ export default function IntegrationsPage() {
                       <div className="tableCellStack">
                         <span className="tableCellMuted">Healthy is blocked while open alerts remain.</span>
                         <span className="tableCellMuted">Healthy is blocked when freshness is above 30 minutes.</span>
+                        <span className="tableCellMuted">Healthy now also requires automation coverage of at least 75%.</span>
+                        <span className="tableCellMuted">Watch is blocked while alerts stay above 8 or freshness stays above 120 minutes.</span>
                         <span className="tableCellMuted">Health transitions move one step at a time.</span>
                       </div>
                     </div>
@@ -372,7 +433,15 @@ export default function IntegrationsPage() {
                               key={option.label}
                               className={option.health === "critical" ? "buttonGhost" : "button"}
                               type="button"
-                              disabled={isSaving}
+                              disabled={
+                                isSaving ||
+                                (option.health === "healthy" &&
+                                  (selectedStream.openAlerts > 0 ||
+                                    selectedStream.freshnessMinutes > 30 ||
+                                    selectedStream.automationCoverage < 75)) ||
+                                (option.health === "watch" &&
+                                  (selectedStream.openAlerts > 8 || selectedStream.freshnessMinutes > 120))
+                              }
                               onClick={() => void handleStreamAction(option.health, option.nextAction)}
                             >
                               {isSaving ? "Saving..." : option.label}
@@ -391,6 +460,26 @@ export default function IntegrationsPage() {
                     primaryAction={{ label: "Stay on integrations", href: "/integrations" }}
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Field exposure" description="What this stream means for crews and mobile execution right now.">
+                <p className="sectionText">
+                  {selectedImpact?.fieldExposure ?? "Choose a stream to inspect downstream field exposure."}
+                </p>
+              </Card>
+
+              <Card title="Recovery lane" description="Operational playbook to stabilize the selected connected workflow.">
+                <p className="sectionText">
+                  {selectedImpact?.recoveryLane ?? "Choose a stream to inspect the recovery path."}
+                </p>
+              </Card>
+
+              <Card title="Executive signal" description="How the selected stream should be escalated in operating reviews.">
+                <p className="sectionText">
+                  {selectedImpact?.executiveSignal ?? "Choose a stream to inspect the executive escalation signal."}
+                </p>
               </Card>
             </section>
 

@@ -69,7 +69,15 @@ export function createCrmService(repository: PlatformRepository) {
         });
       }
 
-      if (bucket.health === input.health && bucket.signal === input.signal) {
+      const signal = input.signal.trim();
+      if (signal.length < 8) {
+        throw validationError("CRM_INVALID_SIGNAL", "Commercial signal must be specific", {
+          leadBucketId: bucket.id,
+          signalLength: signal.length
+        });
+      }
+
+      if (bucket.health === input.health && bucket.signal === signal) {
         return bucket;
       }
 
@@ -87,6 +95,13 @@ export function createCrmService(repository: PlatformRepository) {
         });
       }
 
+      if (input.health === "healthy" && bucket.forecastRevenue < 1_000_000) {
+        throw validationError("CRM_REVENUE_TOO_LOW", "Lead bucket needs stronger forecast revenue before healthy status", {
+          leadBucketId: bucket.id,
+          forecastRevenue: bucket.forecastRevenue
+        });
+      }
+
       if (input.health === "watch" && bucket.conversionRate < 15) {
         throw validationError("CRM_SHOULD_STAY_CRITICAL", "Very low conversion should remain critical instead of watch", {
           leadBucketId: bucket.id,
@@ -94,10 +109,17 @@ export function createCrmService(repository: PlatformRepository) {
         });
       }
 
+      if (input.health === "watch" && bucket.reservations < 5) {
+        throw validationError("CRM_RESERVATIONS_TOO_WEAK_FOR_WATCH", "Very weak reservation traction should remain critical instead of watch", {
+          leadBucketId: bucket.id,
+          reservations: bucket.reservations
+        });
+      }
+
       const updatedBucket = await repository.updateCrmLeadBucket({
         leadBucketId: input.leadBucketId,
         health: input.health,
-        signal: input.signal
+        signal
       });
 
       await repository.addAuditEvent({

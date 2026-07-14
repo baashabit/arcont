@@ -1,0 +1,37 @@
+Antonio activo en PC2
+
+Objetivo:
+Seguir con el siguiente vertical util `integrations + copilot` sin tocar backend, auth ni docs/coordination/handoff.md.
+
+Primero ejecutar:
+export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 24
+
+Baseline:
+- `subcontracts + compliance` ya quedaron cerrados y sincronizados.
+- procurement, quality, document-control, crm y finance ya estan conectados al contexto del sistema.
+- ahora hay que empujar conectividad, telemetria y la capa visible del copiloto de IA.
+
+Entregable exacto:
+1. Revisar:
+- `frontend/arcont-suite/app/integrations/page.tsx`
+- `frontend/arcont-suite/app/copilot/page.tsx`
+
+2. En `integrations/page.tsx`:
+- agregar links visibles hacia `field`, `document-control`, `quality`, `projects` y/o `copilot` desde el stream seleccionado
+- endurecer guardas visibles para `healthy/watch/critical` si hay huecos obvios
+- mantener mensajes claros
+
+3. En `copilot/page.tsx`:
+- agregar navegacion visible hacia los dominios que alimentan el contexto (`crm`, `procurement`, `quality`, `document-control`, `integrations`)
+- hacer mas accionable la salida para que no solo sea narrativa sino tambien operativa
+- no tocar backend/api
+
+4. Ejecutar `npm run build:web`.
+5. Dejar todo en `main`.
+6. Reportar archivos tocados.
+
+No hacer:
+- no tocar backend/api
+- no tocar auth/login
+- no tocar docs/coordination/handoff.md
+- no rehacer pantallas enteras

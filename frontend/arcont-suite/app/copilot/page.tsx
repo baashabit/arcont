@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -12,6 +13,7 @@ import {
   fetchComplianceOverview,
   fetchCrmOverview,
   fetchDocumentControlOverview,
+  fetchIntegrationOverview,
   fetchProcurementOverview,
   fetchQualityOverview
 } from "@/lib/platform-api";
@@ -22,6 +24,7 @@ type CopilotContext = {
   compliance: NonNullable<Awaited<ReturnType<typeof fetchComplianceOverview>>>;
   quality: NonNullable<Awaited<ReturnType<typeof fetchQualityOverview>>>;
   documentControl: NonNullable<Awaited<ReturnType<typeof fetchDocumentControlOverview>>>;
+  integrations: NonNullable<Awaited<ReturnType<typeof fetchIntegrationOverview>>>;
 };
 
 export default function CopilotPage() {
@@ -45,14 +48,15 @@ export default function CopilotPage() {
       fetchProcurementOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchComplianceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchQualityOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
-      fetchDocumentControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
+      fetchDocumentControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchIntegrationOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
     ])
-      .then(([crm, procurement, compliance, quality, documentControl]) => {
+      .then(([crm, procurement, compliance, quality, documentControl, integrations]) => {
         if (cancelled) {
           return;
         }
 
-        if (!crm || !procurement || !compliance || !quality || !documentControl) {
+        if (!crm || !procurement || !compliance || !quality || !documentControl || !integrations) {
           setError("Copilot could not assemble enough live context.");
           return;
         }
@@ -62,7 +66,8 @@ export default function CopilotPage() {
           procurement,
           compliance,
           quality,
-          documentControl
+          documentControl,
+          integrations
         });
       })
       .finally(() => {
@@ -97,6 +102,10 @@ export default function CopilotPage() {
       {
         title: "Which contractors are driving rework",
         detail: `Cross ${context.quality.summary.averageReworkRate}% average rework with active quality inspections and findings.`
+      },
+      {
+        title: "What is at risk if connectivity fails today",
+        detail: `Evaluate ${context.integrations.summary.criticalAlerts} critical integration alerts against field quality, procurement and document backlog.`
       }
     ];
   }, [context]);
@@ -110,6 +119,11 @@ export default function CopilotPage() {
     const topCommercialSignal = context.crm.focusBucket?.signal ?? "Commercial signals are stable right now.";
     const topQualitySignal = context.quality.focusInspection?.nextAction ?? "No critical quality action in focus.";
     const topDocumentSignal = context.documentControl.focusItem?.nextAction ?? "No document-control escalation in focus.";
+    const topIntegrationSignal = context.integrations.focusStream?.nextAction ?? "Connectivity and telemetry are stable right now.";
+    const integrationPressure =
+      context.integrations.summary.criticalAlerts > 0
+        ? `Connectivity pressure is active around ${context.integrations.focusStream?.streamName ?? "the connected stack"}. ${topIntegrationSignal}`
+        : "The connected stack is not the main constraint in today's operating picture.";
 
     return [
       {
@@ -125,8 +139,46 @@ export default function CopilotPage() {
         detail: `Prioritize document closure, unblock procurement approvals and resolve the active field-quality signal. ${topDocumentSignal}`
       },
       {
+        title: "Connected operations",
+        detail: integrationPressure
+      },
+      {
         title: "Ready to share",
         detail: "This summary can be converted into an executive note, field follow-up or committee briefing."
+      }
+    ];
+  }, [context]);
+
+  const actionLinks = useMemo(() => {
+    if (!context) {
+      return [];
+    }
+
+    return [
+      {
+        label: "Open CRM",
+        href: "/crm",
+        detail: `${context.crm.summary.reservations} reservations under review`
+      },
+      {
+        label: "Open procurement",
+        href: "/procurement",
+        detail: `${context.procurement.summary.openRequisitions} requisitions still open`
+      },
+      {
+        label: "Open quality",
+        href: "/quality",
+        detail: `${context.quality.summary.openFindings} findings active`
+      },
+      {
+        label: "Open document control",
+        href: "/document-control",
+        detail: `${context.documentControl.summary.openRfis} RFIs open`
+      },
+      {
+        label: "Open integrations",
+        href: "/integrations",
+        detail: `${context.integrations.summary.criticalAlerts} critical connected alerts`
       }
     ];
   }, [context]);
@@ -140,14 +192,23 @@ export default function CopilotPage() {
       (
         context.compliance.summary.averageDocumentCompletion +
         context.quality.summary.releaseReadiness +
-        Math.max(60, 100 - context.procurement.summary.averageApprovalHours / 2)
-      ) / 3
+        Math.max(60, 100 - context.procurement.summary.averageApprovalHours / 2) +
+        Math.max(45, 100 - context.integrations.summary.criticalAlerts * 12)
+      ) / 4
     );
 
     return {
       connectedData,
       auditableResponses: Math.max(70, connectedData - 5),
-      suggestedAutomations: Math.max(55, Math.round((context.procurement.summary.openRequisitions + context.documentControl.summary.openRfis) / 2))
+      suggestedAutomations: Math.max(
+        55,
+        Math.round(
+          (context.procurement.summary.openRequisitions +
+            context.documentControl.summary.openRfis +
+            context.integrations.summary.criticalAlerts) /
+            2
+        )
+      )
     };
   }, [context]);
 
@@ -187,8 +248,8 @@ export default function CopilotPage() {
               />
               <KpiCard
                 label="Cross-area coverage"
-                value="5 domains"
-                footnote="Sales, procurement, compliance, quality and document control already in context."
+                value="6 domains"
+                footnote="Sales, procurement, compliance, quality, document control and connected operations already in context."
               />
             </section>
 
@@ -219,6 +280,22 @@ export default function CopilotPage() {
                 </div>
               </Card>
             </section>
+
+            <Card title="Operational handoff" description="Fast navigation from the AI summary into the live domain that needs action.">
+              <div className="list">
+                {actionLinks.map((item) => (
+                  <div className="listItem" key={item.label}>
+                    <div>
+                      <strong>{item.label}</strong>
+                      <p>{item.detail}</p>
+                    </div>
+                    <Link className="buttonGhost" href={item.href}>
+                      Open
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </Card>
 
             <section className="grid cols3">
               <Card title="Copilot skills" description="The assistant now sits on top of real operating context.">

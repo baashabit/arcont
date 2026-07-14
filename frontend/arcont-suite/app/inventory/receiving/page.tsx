@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -11,7 +12,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { InventoryReceiptContract, InventoryReceivingOverviewContract } from "@/lib/contracts";
-import { fetchInventoryReceivingOverview, updateInventoryReceipt } from "@/lib/platform-api";
+import {
+  createInventoryReceipt,
+  fetchInventoryReceivingOverview,
+  fetchProcurementPurchaseOrdersOverview,
+  fetchSupplierControlOverview,
+  updateInventoryReceipt
+} from "@/lib/platform-api";
 
 function statusTone(status: InventoryReceiptContract["status"]) {
   switch (status) {
@@ -23,6 +30,35 @@ function statusTone(status: InventoryReceiptContract["status"]) {
       return "danger";
     default:
       return "warning";
+  }
+}
+
+function commercialTone(status: InventoryReceiptContract["purchaseOrderStatus"]) {
+  switch (status) {
+    case "received":
+      return "success";
+    case "blocked":
+      return "danger";
+    case "in_transit":
+    case "partial":
+      return "warning";
+    case "confirmed":
+      return "info";
+    default:
+      return "gold";
+  }
+}
+
+function invoiceTone(status: InventoryReceiptContract["invoiceMatchStatus"]) {
+  switch (status) {
+    case "matched":
+      return "success";
+    case "risk":
+      return "danger";
+    case "pending":
+      return "warning";
+    default:
+      return "info";
   }
 }
 
@@ -73,7 +109,10 @@ function recomputeSummary(receipts: InventoryReceiptContract[]) {
     overdueEta: receipts.filter((receipt) => receipt.status !== "received" && Date.parse(receipt.etaDate) < Date.now()).length,
     quantityVarianceUnits: receipts.reduce((sum, receipt) => sum + Math.abs(receipt.varianceUnits), 0),
     pendingEvidence: receipts.reduce((sum, receipt) => sum + receipt.pendingEvidence, 0),
-    blockedReceipts: receipts.filter((receipt) => receipt.status === "blocked").length
+    blockedReceipts: receipts.filter((receipt) => receipt.status === "blocked").length,
+    receiptsAtCommercialRisk: receipts.filter(
+      (receipt) => receipt.purchaseOrderStatus === "blocked" || receipt.invoiceMatchStatus === "risk"
+    ).length
   };
 }
 
@@ -88,14 +127,48 @@ function pickFocusReceipt(receipts: InventoryReceiptContract[]) {
         if (left.status !== "blocked" && right.status === "blocked") {
           return 1;
         }
+        if ((left.invoiceMatchStatus === "risk") !== (right.invoiceMatchStatus === "risk")) {
+          return Number(right.invoiceMatchStatus === "risk") - Number(left.invoiceMatchStatus === "risk");
+        }
         return Math.abs(right.varianceUnits) - Math.abs(left.varianceUnits);
       })[0] ?? null
   );
 }
 
-export default function InventoryReceivingPage() {
+type ReceivingBridgeContext = {
+  purchaseOrders: NonNullable<Awaited<ReturnType<typeof fetchProcurementPurchaseOrdersOverview>>>;
+  supplierControl: NonNullable<Awaited<ReturnType<typeof fetchSupplierControlOverview>>>;
+} | null;
+
+function buildReceivingStory(receipt: InventoryReceiptContract | null, bridge: ReceivingBridgeContext) {
+  if (!receipt) {
+    return null;
+  }
+
+  const purchaseSignal = bridge?.purchaseOrders.focusPurchaseOrder ?? null;
+  const supplierSignal = bridge?.supplierControl.focusLine ?? null;
+
+  return {
+    purchaseDependency: purchaseSignal
+      ? `${purchaseSignal.code} is the current PO anchor with status ${purchaseSignal.status} and ${purchaseSignal.receivedPercent}% receipt progress.`
+      : "No purchase-order anchor is currently visible for this receipt lane.",
+    supplierPressure: supplierSignal
+      ? `${supplierSignal.supplierName} remains at ${supplierSignal.deliveryHealth} delivery health with ${supplierSignal.complianceAlerts} compliance alerts open.`
+      : "No supplier-control pressure is currently visible for this inbound flow.",
+    warehouseExecution:
+      receipt.status === "blocked"
+        ? `${receipt.destinationName} is already exposed because this receipt is blocked before clean stock acceptance.`
+        : receipt.pendingEvidence > 0 || receipt.varianceUnits !== 0
+          ? `${receipt.destinationName} still needs variance and evidence closure before the inbound flow is operationally clean.`
+          : `${receipt.destinationName} currently has a controlled inbound execution posture.`
+  };
+}
+
+function InventoryReceivingPageContent() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const searchParams = useSearchParams();
   const [overview, setOverview] = useState<InventoryReceivingOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<ReceivingBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
@@ -103,6 +176,21 @@ export default function InventoryReceivingPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    supplierName: "Proveedor Estrategico",
+    destinationName: "Almacen central",
+    destinationType: "warehouse",
+    purchaseReference: "",
+    etaDate: "2026-07-25",
+    orderedUnits: "100",
+    receivedUnits: "0",
+    pendingEvidence: "2",
+    rejectedUnits: "0",
+    nextAction: ""
+  });
+  const purchaseReferenceParam = searchParams.get("purchaseReference")?.trim() ?? "";
+  const supplierNameParam = searchParams.get("supplierName")?.trim() ?? "";
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -114,11 +202,21 @@ export default function InventoryReceivingPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchInventoryReceivingOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchInventoryReceivingOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchProcurementPurchaseOrdersOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchSupplierControlOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, purchaseOrders, supplierControl]) => {
         if (cancelled) {
           return;
         }
@@ -130,6 +228,7 @@ export default function InventoryReceivingPage() {
 
         setOverview(result);
         setSelectedReceiptId((current) => current ?? result.focusReceipt?.id ?? result.receipts[0]?.id ?? null);
+        setBridgeContext(purchaseOrders && supplierControl ? { purchaseOrders, supplierControl } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -154,11 +253,43 @@ export default function InventoryReceivingPage() {
 
   const receiptActions = useMemo(() => (selectedReceipt ? actionOptions(selectedReceipt) : []), [selectedReceipt]);
 
+  const selectedStory = useMemo(() => buildReceivingStory(selectedReceipt, bridgeContext), [bridgeContext, selectedReceipt]);
+  const eligiblePurchaseOrders = useMemo(
+    () =>
+      bridgeContext?.purchaseOrders.purchaseOrders.filter((item) => ["confirmed", "in_transit", "partial"].includes(item.status)) ?? [],
+    [bridgeContext]
+  );
+
   useEffect(() => {
     setNextActionDraft(selectedReceipt?.nextAction ?? "");
     setActionError(null);
     setActionMessage(null);
   }, [selectedReceiptId, selectedReceipt?.id, selectedReceipt?.nextAction]);
+
+  useEffect(() => {
+    if (createForm.purchaseReference || eligiblePurchaseOrders.length === 0) {
+      return;
+    }
+
+    setCreateForm((current) => ({
+      ...current,
+      purchaseReference: eligiblePurchaseOrders[0]?.code ?? "",
+      supplierName: eligiblePurchaseOrders[0]?.supplierName ?? current.supplierName
+    }));
+  }, [createForm.purchaseReference, eligiblePurchaseOrders]);
+
+  useEffect(() => {
+    if (!purchaseReferenceParam && !supplierNameParam) {
+      return;
+    }
+
+    const linkedOrder = eligiblePurchaseOrders.find((item) => item.code === purchaseReferenceParam);
+    setCreateForm((current) => ({
+      ...current,
+      purchaseReference: purchaseReferenceParam || current.purchaseReference,
+      supplierName: supplierNameParam || linkedOrder?.supplierName || current.supplierName
+    }));
+  }, [eligiblePurchaseOrders, purchaseReferenceParam, supplierNameParam]);
 
   async function handleAction(status: InventoryReceiptContract["status"], suggestedNextAction: string) {
     if (!selectedReceipt || !session.accessToken) {
@@ -168,6 +299,26 @@ export default function InventoryReceivingPage() {
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
       setActionError("Next action must be more specific before updating the receipt.");
+      return;
+    }
+
+    if (status === "received" && selectedReceipt.pendingEvidence > 0) {
+      setActionError("Receipt cannot close while evidence is still pending.");
+      return;
+    }
+
+    if (status === "received" && selectedReceipt.rejectedUnits > 0) {
+      setActionError("Receipt cannot close while rejected units remain unresolved.");
+      return;
+    }
+
+    if (status === "received" && Math.abs(selectedReceipt.varianceUnits) > 0) {
+      setActionError("Receipt cannot close while quantity variance remains open.");
+      return;
+    }
+
+    if (status === "received" && selectedReceipt.invoiceMatchStatus === "risk") {
+      setActionError("Receipt cannot close while the linked purchase order remains at fiscal risk.");
       return;
     }
 
@@ -212,6 +363,109 @@ export default function InventoryReceivingPage() {
     setIsSaving(false);
   }
 
+  async function handleCreateReceipt() {
+    if (!overview || !session.accessToken) {
+      return;
+    }
+
+    const supplierName = createForm.supplierName.trim();
+    const destinationName = createForm.destinationName.trim();
+    const destinationType = createForm.destinationType.trim();
+    const purchaseReference = createForm.purchaseReference.trim();
+    const nextAction = createForm.nextAction.trim();
+    const orderedUnits = Number(createForm.orderedUnits);
+    const receivedUnits = Number(createForm.receivedUnits);
+    const pendingEvidence = Number(createForm.pendingEvidence);
+    const rejectedUnits = Number(createForm.rejectedUnits);
+
+    if (supplierName.length < 3 || destinationName.length < 3 || destinationType.length < 3 || purchaseReference.length < 3) {
+      setActionError("Supplier, destination and purchase reference must be defined before creating the receipt.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (!createForm.etaDate) {
+      setActionError("ETA date is required before creating the receipt.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (nextAction.length < 8) {
+      setActionError("Next action must be specific before creating the receipt.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (!Number.isFinite(orderedUnits) || orderedUnits <= 0 || !Number.isFinite(receivedUnits) || receivedUnits < 0) {
+      setActionError("Ordered units must be greater than zero and received units cannot be negative.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (![pendingEvidence, rejectedUnits].every((value) => Number.isFinite(value) && value >= 0)) {
+      setActionError("Evidence and rejected units must be valid non-negative numbers.");
+      setCreateMessage(null);
+      return;
+    }
+
+    setIsSaving(true);
+    setActionError(null);
+    setCreateMessage(null);
+
+    const response = await createInventoryReceipt(
+      activeCompany.id,
+      {
+        supplierName,
+        destinationName,
+        destinationType,
+        purchaseReference,
+        etaDate: createForm.etaDate,
+        orderedUnits,
+        receivedUnits,
+        pendingEvidence,
+        rejectedUnits,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Receipt creation failed.");
+      setIsSaving(false);
+      return;
+    }
+
+    const created = response.data;
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const receipts = [created, ...current.receipts];
+      return {
+        ...current,
+        summary: recomputeSummary(receipts),
+        receipts,
+        focusReceipt: pickFocusReceipt(receipts)
+      };
+    });
+    setSelectedReceiptId(created.id);
+    setCreateMessage(`${created.code} created for ${created.purchaseReference}.`);
+    setCreateForm((current) => ({
+      ...current,
+      supplierName: supplierNameParam || current.supplierName,
+      purchaseReference: purchaseReferenceParam || current.purchaseReference,
+      receivedUnits: "0",
+      pendingEvidence: "2",
+      rejectedUnits: "0",
+      nextAction: ""
+    }));
+    setIsSaving(false);
+  }
+
   return (
     <AppShell
       title="Inventory receiving"
@@ -242,6 +496,29 @@ export default function InventoryReceivingPage() {
                 value={String(overview.summary.pendingEvidence)}
                 footnote="Missing evidence items before receipts can be cleanly closed."
               />
+              <KpiCard
+                label="Commercial risk"
+                value={String(overview.summary.receiptsAtCommercialRisk)}
+                footnote="Receipts tied to blocked purchase orders or fiscal packet risk."
+              />
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Purchase dependency" description="Current PO signal tied to the inbound receipt.">
+                <p className="sectionText">
+                  {selectedStory?.purchaseDependency ?? "Choose a receipt to inspect purchase dependency."}
+                </p>
+              </Card>
+              <Card title="Supplier pressure" description="Supplier-control signal shaping this inbound flow.">
+                <p className="sectionText">
+                  {selectedStory?.supplierPressure ?? "Choose a receipt to inspect supplier pressure."}
+                </p>
+              </Card>
+              <Card title="Warehouse execution" description="Fast read of the receiving lane at destination.">
+                <p className="sectionText">
+                  {selectedStory?.warehouseExecution ?? "Choose a receipt to inspect warehouse execution."}
+                </p>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -267,7 +544,12 @@ export default function InventoryReceivingPage() {
                     {
                       key: "supplier",
                       label: "Supplier",
-                      render: (row) => row.supplierName
+                      render: (row) => (
+                        <div className="tableCellStack">
+                          <strong>{row.supplierName}</strong>
+                          <span className="tableCellMuted">{row.purchaseReference}</span>
+                        </div>
+                      )
                     },
                     {
                       key: "destination",
@@ -282,7 +564,12 @@ export default function InventoryReceivingPage() {
                     {
                       key: "status",
                       label: "Status",
-                      render: (row) => <Badge tone={statusTone(row.status)}>{row.status}</Badge>
+                      render: (row) => (
+                        <div className="row gap wrap">
+                          <Badge tone={statusTone(row.status)}>{row.status}</Badge>
+                          <Badge tone={commercialTone(row.purchaseOrderStatus)}>{row.purchaseOrderStatus}</Badge>
+                        </div>
+                      )
                     }
                   ]}
                 />
@@ -313,12 +600,25 @@ export default function InventoryReceivingPage() {
 
                     <div className="row gap wrap">
                       <Badge tone={statusTone(selectedReceipt.status)}>{selectedReceipt.status}</Badge>
+                      <Badge tone={commercialTone(selectedReceipt.purchaseOrderStatus)}>{selectedReceipt.purchaseOrderStatus}</Badge>
+                      <Badge tone={invoiceTone(selectedReceipt.invoiceMatchStatus)}>{selectedReceipt.invoiceMatchStatus}</Badge>
                       <Badge tone={selectedReceipt.varianceUnits === 0 ? "success" : "warning"}>
                         {selectedReceipt.variancePercent}% variance
                       </Badge>
                       <Badge tone={selectedReceipt.pendingEvidence > 0 ? "warning" : "success"}>
                         {selectedReceipt.pendingEvidence} evidence pending
                       </Badge>
+                    </div>
+
+                    <div className="detailGrid">
+                      <div className="detailRow">
+                        <div className="detailLabel">Purchase order</div>
+                        <div>{selectedReceipt.purchaseReference}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Purchasing owner</div>
+                        <div>{selectedReceipt.purchaseOrderOwner}</div>
+                      </div>
                     </div>
 
                     <div className="stack">
@@ -378,6 +678,43 @@ export default function InventoryReceivingPage() {
                 )}
               </Card>
             </section>
+
+            <section className="grid cols2">
+              <Card title="Register inbound receipt" description="Create a warehouse receipt directly against a live purchase order.">
+                <div className="detailGrid">
+                  <label className="detailRow"><div className="detailLabel">Purchase order</div><select className="selectField" value={createForm.purchaseReference} onChange={(event) => {
+                    const nextCode = event.target.value;
+                    const linkedOrder = eligiblePurchaseOrders.find((item) => item.code === nextCode);
+                    setCreateForm((current) => ({
+                      ...current,
+                      purchaseReference: nextCode,
+                      supplierName: linkedOrder?.supplierName ?? current.supplierName
+                    }));
+                  }}><option value="">Select purchase order</option>{eligiblePurchaseOrders.map((item) => <option key={item.id} value={item.code}>{item.code} · {item.supplierName} · {item.status}</option>)}</select></label>
+                  <label className="detailRow"><div className="detailLabel">Supplier</div><input className="field" value={createForm.supplierName} onChange={(event) => setCreateForm((current) => ({ ...current, supplierName: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Destination</div><input className="field" value={createForm.destinationName} onChange={(event) => setCreateForm((current) => ({ ...current, destinationName: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Destination type</div><input className="field" value={createForm.destinationType} onChange={(event) => setCreateForm((current) => ({ ...current, destinationType: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">ETA</div><input className="field" type="date" value={createForm.etaDate} onChange={(event) => setCreateForm((current) => ({ ...current, etaDate: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Ordered units</div><input className="field" type="number" min="0" value={createForm.orderedUnits} onChange={(event) => setCreateForm((current) => ({ ...current, orderedUnits: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Received units</div><input className="field" type="number" min="0" value={createForm.receivedUnits} onChange={(event) => setCreateForm((current) => ({ ...current, receivedUnits: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Pending evidence</div><input className="field" type="number" min="0" value={createForm.pendingEvidence} onChange={(event) => setCreateForm((current) => ({ ...current, pendingEvidence: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Rejected units</div><input className="field" type="number" min="0" value={createForm.rejectedUnits} onChange={(event) => setCreateForm((current) => ({ ...current, rejectedUnits: event.target.value }))} /></label>
+                  <label className="detailRow"><div className="detailLabel">Next action</div><input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} /></label>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <button type="button" className="button" disabled={isSaving} onClick={() => void handleCreateReceipt()}>{isSaving ? "Saving..." : "Add receipt"}</button>
+                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                </div>
+              </Card>
+
+              <Card title="Receipt creation rules" description="Inbound receipts only start from purchase orders already in operational execution.">
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Purchase order gate</div><div>Only purchase orders in `confirmed`, `in_transit` or `partial` posture can open a receipt.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Operational counts</div><div>Ordered units must be greater than zero; evidence and rejected units cannot be negative.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Close discipline</div><div>Receipts still cannot close while evidence, rejected units, variance or fiscal risk remain open.</div></div>
+                </div>
+              </Card>
+            </section>
           </>
         ) : (
           <EmptyState
@@ -387,5 +724,23 @@ export default function InventoryReceivingPage() {
         )}
       </ModuleGate>
     </AppShell>
+  );
+}
+
+export default function InventoryReceivingPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppShell title="Inventory receiving" eyebrow="Warehouse execution" description="Loading receiving context...">
+          <section className="grid cols1">
+            <Card title="Loading" description="Receiving context is being prepared.">
+              <p className="sectionText">Preparing receiving context.</p>
+            </Card>
+          </section>
+        </AppShell>
+      }
+    >
+      <InventoryReceivingPageContent />
+    </Suspense>
   );
 }

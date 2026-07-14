@@ -41,6 +41,7 @@ This API currently exposes the first platform capabilities that the web app can 
 - `GET /platform/companies/:companyId/modules`
 - `PUT /platform/companies/:companyId/modules`
 - `GET /platform/dashboard/summary?companyId=...`
+- `GET /platform/readiness?companyId=...`
 - `GET /platform/audit-events?companyId=...&limit=...`
 - `GET /platform/bootstrap/:companyId?userEmail=...`
 - `POST /platform/provision-company`
@@ -69,10 +70,19 @@ npm run dev:api
 Run with PostgreSQL:
 
 ```bash
+npm run env:doctor -w @arcont/api
 docker compose up -d postgres
-npm run db:migrate -w @arcont/api
+npm run db:prepare-demo-local -w @arcont/api
+ARCONT_DATA_DRIVER=postgres npm run db:verify-demo-operations -w @arcont/api
 ARCONT_DATA_DRIVER=postgres npm run dev:api
 ```
+
+What the demo prep does:
+
+- `db:migrate`: creates or updates the schema and seeds base catalogs
+- `db:bootstrap-local`: provisions the first company and admin user
+- `db:seed-demo-operations`: seeds operational sample data across projects, field, procurement, inventory, quality, equipment, and document control
+- `db:verify-demo-operations`: prints row counts for the core demo tables so you can confirm the local database is ready
 
 ## Auth Baseline
 
@@ -129,6 +139,21 @@ That schema separates:
 - user role assignment rejects unknown role keys
 - platform roles are reserved for the platform tenant in this phase
 - disabling the last active user in a company is rejected
+
+## Tenant Readiness
+
+- `GET /platform/readiness` returns a tenant-level rollout posture for onboarding and demo execution
+- checks identity baseline, fiscal/SAT setup, enabled operations modules, seeded operations data and audit trace
+- the current web settings page now surfaces this readiness score for the active company
+
+## Financial Control Rules
+
+- supplier master rejects duplicated RFC or supplier identity in the same tenant
+- supplier master cannot move to SAT `controlled` with incomplete fiscal packet
+- accounts payable rejects duplicated UUID or repeated supplier invoice number
+- accounts payable cannot move to `scheduled` or `paid` unless the linked supplier profile is fiscally ready
+- treasury payment runs reject blocked, paid, fiscally risky or evidence-missing invoices from active assignment
+- treasury execution still requires the run to be `ready` and all linked invoices to be complement-safe
 
 ## Error Shape
 

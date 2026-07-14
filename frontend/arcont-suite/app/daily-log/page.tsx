@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { DailyLogEntryContract, DailyLogOverviewContract } from "@/lib/contracts";
-import { fetchDailyLogOverview, updateDailyLogEntry } from "@/lib/platform-api";
+import { createDailyLogEntry, fetchDailyLogOverview, fetchEquipmentOverview, updateDailyLogEntry } from "@/lib/platform-api";
 
 function statusTone(status: DailyLogEntryContract["status"]) {
   switch (status) {
@@ -93,7 +93,10 @@ function recomputeSummary(entries: DailyLogEntryContract[]) {
     totalWorkforce: entries.reduce((sum, entry) => sum + entry.workforceCount, 0),
     pendingEvidence: entries.reduce((sum, entry) => sum + (entry.status !== "approved" ? Math.max(0, 12 - entry.evidenceCount) : 0), 0),
     averageProgress:
-      entries.length > 0 ? Number((entries.reduce((sum, entry) => sum + entry.progressPercent, 0) / entries.length).toFixed(1)) : 0
+      entries.length > 0 ? Number((entries.reduce((sum, entry) => sum + entry.progressPercent, 0) / entries.length).toFixed(1)) : 0,
+    executionRiskLogs: entries.filter(
+      (entry) => entry.status === "flagged" || entry.qualityOpenFindings > 3 || entry.subcontractHealth === "critical"
+    ).length
   };
 }
 
@@ -112,9 +115,39 @@ function pickFocusEntry(entries: DailyLogEntryContract[]) {
   );
 }
 
+type DailyLogEquipmentBridge = {
+  equipment: NonNullable<Awaited<ReturnType<typeof fetchEquipmentOverview>>>;
+} | null;
+
+function buildDailyLogEquipmentStory(entry: DailyLogEntryContract | null, bridge: DailyLogEquipmentBridge) {
+  if (!entry) {
+    return null;
+  }
+
+  const linkedMachines =
+    bridge?.equipment.machines.filter((item) => item.projectName === entry.projectName && item.frontName === entry.frontName) ?? [];
+  const constrainedMachines = linkedMachines.filter((item) => item.status !== "available" || item.health !== "healthy");
+
+  return {
+    equipmentSupport:
+      linkedMachines.length > 0
+        ? `${linkedMachines.length} tracked machines support this front, with ${constrainedMachines.length} already degraded.`
+        : "No tracked machine is currently mapped to this front.",
+    executionConstraint:
+      constrainedMachines.length > 0
+        ? `${constrainedMachines[0]?.machineName ?? "A constrained asset"} is affecting the shift under ${constrainedMachines[0]?.status ?? "constraint"} posture.`
+        : "Equipment is not the primary execution constraint on this daily log.",
+    nextEquipmentMove:
+      constrainedMachines.length > 0
+        ? constrainedMachines[0]?.nextAction ?? "Recover equipment continuity before the next field cutoff."
+        : "No immediate equipment move is currently dominating this front."
+  };
+}
+
 export default function DailyLogPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<DailyLogOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<DailyLogEquipmentBridge>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
@@ -122,6 +155,29 @@ export default function DailyLogPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    projectName: "Nuevo proyecto",
+    frontName: "Frente 1",
+    supervisor: "Resident engineer",
+    logDate: new Date().toISOString().slice(0, 10),
+    shift: "morning" as DailyLogEntryContract["shift"],
+    weather: "clear" as DailyLogEntryContract["weather"],
+    status: "draft" as DailyLogEntryContract["status"],
+    progressPercent: "0",
+    workforceCount: "18",
+    incidentsCount: "0",
+    blockersCount: "0",
+    evidenceCount: "4",
+    concretePourM3: "0",
+    projectStatus: "active" as DailyLogEntryContract["projectStatus"],
+    qualityOpenFindings: "0",
+    qualityReleaseReadiness: "92",
+    subcontractHealth: "controlled" as DailyLogEntryContract["subcontractHealth"],
+    pendingDestajo: "0",
+    nextAction: ""
+  });
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -133,11 +189,17 @@ export default function DailyLogPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchDailyLogOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchDailyLogOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchEquipmentOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, equipment]) => {
         if (cancelled) {
           return;
         }
@@ -149,6 +211,7 @@ export default function DailyLogPage() {
 
         setOverview(result);
         setSelectedEntryId((current) => current ?? result.focusEntry?.id ?? result.entries[0]?.id ?? null);
+        setBridgeContext(equipment ? { equipment } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -171,6 +234,11 @@ export default function DailyLogPage() {
     [overview, selectedEntry]
   );
 
+  const selectedStory = useMemo(
+    () => buildDailyLogEquipmentStory(selectedEntry, bridgeContext),
+    [bridgeContext, selectedEntry]
+  );
+
   const entryActions = useMemo(() => (selectedEntry ? actionOptions(selectedEntry) : []), [selectedEntry]);
 
   useEffect(() => {
@@ -187,6 +255,16 @@ export default function DailyLogPage() {
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
       setActionError("Next action must be more specific before updating the daily log.");
+      return;
+    }
+
+    if (status === "approved" && selectedEntry.evidenceCount < 4) {
+      setActionError("Daily log needs at least 4 evidence items before approval.");
+      return;
+    }
+
+    if (status === "approved" && selectedEntry.blockersCount > 0) {
+      setActionError("Daily log cannot be approved while blockers remain open.");
       return;
     }
 
@@ -235,6 +313,131 @@ export default function DailyLogPage() {
     setIsSaving(false);
   }
 
+  async function handleCreateEntry() {
+    if (!overview || !session.accessToken) {
+      return;
+    }
+
+    const projectName = createForm.projectName.trim();
+    const frontName = createForm.frontName.trim();
+    const supervisor = createForm.supervisor.trim();
+    const nextAction = createForm.nextAction.trim();
+
+    if (projectName.length < 3 || frontName.length < 3 || supervisor.length < 3) {
+      setActionError("Project, front and supervisor must be specific before creating the daily log.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (nextAction.length < 8) {
+      setActionError("Next action must be more specific before creating the daily log.");
+      setCreateMessage(null);
+      return;
+    }
+
+    const progressPercent = Number(createForm.progressPercent);
+    const workforceCount = Number(createForm.workforceCount);
+    const blockersCount = Number(createForm.blockersCount);
+    const incidentsCount = Number(createForm.incidentsCount);
+    const evidenceCount = Number(createForm.evidenceCount);
+    const concretePourM3 = Number(createForm.concretePourM3);
+
+    if (!createForm.logDate) {
+      setActionError("Log date is required before creating the daily log.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (!Number.isFinite(progressPercent) || progressPercent < 0 || progressPercent > 100) {
+      setActionError("Progress percent must be between 0 and 100.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (![workforceCount, blockersCount, incidentsCount, evidenceCount].every((value) => Number.isFinite(value) && value >= 0)) {
+      setActionError("Crew, blockers, incidents and evidence must be valid non-negative numbers.");
+      setCreateMessage(null);
+      return;
+    }
+
+    if (!Number.isFinite(concretePourM3) || concretePourM3 < 0) {
+      setActionError("Concrete volume must be a valid non-negative number.");
+      setCreateMessage(null);
+      return;
+    }
+
+    setIsCreating(true);
+    setActionError(null);
+    setCreateMessage(null);
+
+    const response = await createDailyLogEntry(
+      activeCompany.id,
+      {
+        projectName,
+        frontName,
+        supervisor,
+        logDate: createForm.logDate,
+        shift: createForm.shift,
+        weather: createForm.weather,
+        status: createForm.status,
+        progressPercent,
+        workforceCount,
+        incidentsCount,
+        blockersCount,
+        evidenceCount,
+        concretePourM3,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      setActionError(response.error?.message ?? "Daily log creation failed.");
+      setIsCreating(false);
+      return;
+    }
+
+    const newEntry = response.data;
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const entries = [newEntry, ...current.entries];
+      return {
+        ...current,
+        summary: recomputeSummary(entries),
+        entries,
+        focusEntry: pickFocusEntry(entries)
+      };
+    });
+    setSelectedEntryId(newEntry.id);
+    setNextActionDraft(newEntry.nextAction);
+    setCreateMessage(`${frontName} daily log added to the workbench.`);
+    setCreateForm((current) => ({
+      ...current,
+      frontName,
+      projectName,
+      supervisor,
+      logDate: new Date().toISOString().slice(0, 10),
+      status: "draft",
+      progressPercent: "0",
+      workforceCount: "18",
+      incidentsCount: "0",
+      blockersCount: "0",
+      evidenceCount: "4",
+      concretePourM3: "0",
+      qualityOpenFindings: "0",
+      qualityReleaseReadiness: "92",
+      pendingDestajo: "0",
+      nextAction: ""
+    }));
+    setIsCreating(false);
+  }
+
   return (
     <AppShell
       title="Daily log"
@@ -265,6 +468,29 @@ export default function DailyLogPage() {
                 value={String(overview.summary.pendingEvidence)}
                 footnote="Directional evidence debt still pending before clean field closure."
               />
+              <KpiCard
+                label="Execution risk"
+                value={String(overview.summary.executionRiskLogs)}
+                footnote="Logs already carrying field, quality or subcontract execution risk."
+              />
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Equipment support" description="How much asset support is currently mapped to this field front.">
+                <p className="sectionText">
+                  {selectedStory?.equipmentSupport ?? "Choose a daily log to inspect equipment support."}
+                </p>
+              </Card>
+              <Card title="Execution constraint" description="Whether asset posture is already limiting this shift.">
+                <p className="sectionText">
+                  {selectedStory?.executionConstraint ?? "Choose a daily log to inspect equipment constraint."}
+                </p>
+              </Card>
+              <Card title="Next equipment move" description="Immediate asset action required for the selected front.">
+                <p className="sectionText">
+                  {selectedStory?.nextEquipmentMove ?? "Choose a daily log to inspect the next equipment move."}
+                </p>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -333,12 +559,32 @@ export default function DailyLogPage() {
                     <div className="row gap wrap">
                       <Badge tone={statusTone(selectedEntry.status)}>{selectedEntry.status}</Badge>
                       <Badge tone="info">{weatherLabel(selectedEntry.weather)}</Badge>
+                      <Badge tone={selectedEntry.projectStatus === "blocked" ? "danger" : selectedEntry.projectStatus === "at_risk" ? "warning" : "success"}>
+                        {selectedEntry.projectStatus}
+                      </Badge>
+                      <Badge tone={selectedEntry.subcontractHealth === "critical" ? "danger" : selectedEntry.subcontractHealth === "watch" ? "warning" : "success"}>
+                        {selectedEntry.subcontractHealth}
+                      </Badge>
                       <Badge tone={selectedEntry.blockersCount > 0 ? "danger" : "success"}>
                         {selectedEntry.blockersCount} blockers
                       </Badge>
                       <Badge tone={selectedEntry.incidentsCount > 0 ? "warning" : "success"}>
                         {selectedEntry.incidentsCount} incidents
                       </Badge>
+                    </div>
+
+                    <div className="detailGrid">
+                      <div className="detailRow">
+                        <div className="detailLabel">Quality posture</div>
+                        <div>
+                          {selectedEntry.qualityOpenFindings} open findings
+                          <div className="tableCellMuted">{selectedEntry.qualityReleaseReadiness}% release readiness</div>
+                        </div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Pending destajo</div>
+                        <div>MXN {selectedEntry.pendingDestajo.toLocaleString()}</div>
+                      </div>
                     </div>
 
                     <div className="stack">
@@ -396,6 +642,268 @@ export default function DailyLogPage() {
                 ) : (
                   <EmptyState title="No log selected" description="Choose a daily log from the board to review field detail." />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Capture daily log"
+                description="Create a new field diary entry in the tenant workbench before wiring live POST endpoints."
+              >
+                <div className="detailGrid">
+                  <label className="detailRow">
+                    <div className="detailLabel">Project</div>
+                    <input
+                      className="field"
+                      value={createForm.projectName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Front</div>
+                    <input
+                      className="field"
+                      value={createForm.frontName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, frontName: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Supervisor</div>
+                    <input
+                      className="field"
+                      value={createForm.supervisor}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, supervisor: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Date</div>
+                    <input
+                      className="field"
+                      type="date"
+                      value={createForm.logDate}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, logDate: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Shift</div>
+                    <select
+                      className="selectField"
+                      value={createForm.shift}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, shift: event.target.value as DailyLogEntryContract["shift"] }))
+                      }
+                    >
+                      <option value="morning">morning</option>
+                      <option value="mixed">mixed</option>
+                      <option value="night">night</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Weather</div>
+                    <select
+                      className="selectField"
+                      value={createForm.weather}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          weather: event.target.value as DailyLogEntryContract["weather"]
+                        }))
+                      }
+                    >
+                      <option value="clear">clear</option>
+                      <option value="windy">windy</option>
+                      <option value="rain">rain</option>
+                      <option value="storm">storm</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Status</div>
+                    <select
+                      className="selectField"
+                      value={createForm.status}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          status: event.target.value as DailyLogEntryContract["status"]
+                        }))
+                      }
+                    >
+                      <option value="draft">draft</option>
+                      <option value="submitted">submitted</option>
+                      <option value="approved">approved</option>
+                      <option value="flagged">flagged</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Progress %</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={createForm.progressPercent}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, progressPercent: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Crew</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.workforceCount}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, workforceCount: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Blockers</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.blockersCount}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, blockersCount: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Incidents</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.incidentsCount}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, incidentsCount: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Evidence</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.evidenceCount}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, evidenceCount: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Concrete m3</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.concretePourM3}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, concretePourM3: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Project status</div>
+                    <select
+                      className="selectField"
+                      value={createForm.projectStatus}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          projectStatus: event.target.value as DailyLogEntryContract["projectStatus"]
+                        }))
+                      }
+                    >
+                      <option value="on_track">on_track</option>
+                      <option value="at_risk">at_risk</option>
+                      <option value="blocked">blocked</option>
+                      <option value="completed">completed</option>
+                      <option value="unknown">unknown</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Quality findings</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.qualityOpenFindings}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, qualityOpenFindings: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Release readiness %</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={createForm.qualityReleaseReadiness}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, qualityReleaseReadiness: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Subcontract health</div>
+                    <select
+                      className="selectField"
+                      value={createForm.subcontractHealth}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          subcontractHealth: event.target.value as DailyLogEntryContract["subcontractHealth"]
+                        }))
+                      }
+                    >
+                      <option value="controlled">controlled</option>
+                      <option value="watch">watch</option>
+                      <option value="critical">critical</option>
+                      <option value="unknown">unknown</option>
+                    </select>
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Pending destajo</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.pendingDestajo}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, pendingDestajo: event.target.value }))}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">Next action</div>
+                    <input
+                      className="field"
+                      value={createForm.nextAction}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))}
+                      placeholder="Cerrar evidencia, alinear cuadrilla y liberar revisión del residente"
+                    />
+                  </label>
+                </div>
+
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateEntry()}>
+                    {isCreating ? "Saving..." : "Add daily log"}
+                  </button>
+                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                </div>
+              </Card>
+
+              <Card
+                title="Capture rules"
+                description="This keeps the daily-log workflow useful before backend creation endpoints are implemented."
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">Scope</div>
+                    <div>New entries stay inside the active tenant session and immediately affect the field diary board.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Focus</div>
+                    <div>The new daily log becomes the active selected record so the supervisor can continue working on it.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Backend path</div>
+                    <div>This form already persists through `POST /daily-log/entries`, so field supervision is no longer browser-only.</div>
+                  </div>
+                </div>
               </Card>
             </section>
           </>

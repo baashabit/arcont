@@ -16,45 +16,222 @@ function abs(value: number) {
 }
 
 export function createInventoryMovementsService(repository: PlatformRepository) {
+  async function buildOverview(companyId: string) {
+    const company = await repository.getCompanyById(companyId);
+    if (!company) {
+      throw notFound("INVENTORY_MOVEMENTS_COMPANY_NOT_FOUND", "Company not found", {
+        companyId
+      });
+    }
+
+    const [movements, risks, receipts, purchaseOrders] = await Promise.all([
+      repository.listInventoryMovements(companyId),
+      repository.listInventoryMovementRisks(companyId),
+      repository.listInventoryReceipts(companyId),
+      repository.listProcurementPurchaseOrders(companyId)
+    ]);
+
+    const receiptsByCode = new Map(receipts.map((item) => [item.code, item]));
+    const purchaseOrdersByCode = new Map(purchaseOrders.map((item) => [item.code, item]));
+
+    const movementViews = movements.map((movement) => {
+      const linkedReceipt = movement.upstreamReceiptCode ? receiptsByCode.get(movement.upstreamReceiptCode) : null;
+      const purchaseOrder = movement.purchaseReference ? purchaseOrdersByCode.get(movement.purchaseReference) : null;
+
+      return {
+        ...movement,
+        purchaseReference: movement.purchaseReference ?? linkedReceipt?.purchaseReference ?? null,
+        purchaseOrderOwner: purchaseOrder?.buyer ?? "Unassigned purchasing",
+        purchaseOrderStatus: purchaseOrder?.status ?? "unknown",
+        invoiceMatchStatus: purchaseOrder?.invoiceMatchStatus ?? "unknown"
+      };
+    });
+
+    const focusMovement =
+      movementViews
+        .slice()
+        .sort((left, right) => {
+          if (left.impactLevel === "critical" && right.impactLevel !== "critical") {
+            return -1;
+          }
+          if (left.impactLevel !== "critical" && right.impactLevel === "critical") {
+            return 1;
+          }
+          if ((left.invoiceMatchStatus === "risk") !== (right.invoiceMatchStatus === "risk")) {
+            return Number(right.invoiceMatchStatus === "risk") - Number(left.invoiceMatchStatus === "risk");
+          }
+          return abs(right.varianceUnits) - abs(left.varianceUnits);
+        })[0] ?? null;
+
+    return {
+      summary: {
+        openMovements: movementViews.filter((movement) => movement.status !== "received").length,
+        criticalMovements: movementViews.filter((movement) => movement.impactLevel === "critical").length,
+        pendingEvidence: movementViews.reduce((sum, movement) => sum + movement.pendingEvidence, 0),
+        varianceUnits: movementViews.reduce((sum, movement) => sum + abs(movement.varianceUnits), 0),
+        returnsInFlow: movementViews.filter((movement) => movement.movementType === "return" && movement.status !== "received").length,
+        movementsAtCommercialRisk: movementViews.filter(
+          (movement) => movement.purchaseOrderStatus === "blocked" || movement.invoiceMatchStatus === "risk"
+        ).length
+      },
+      movements: movementViews,
+      risks,
+      focusMovement
+    };
+  }
+
   return {
     async getOverview(companyId: string) {
-      const company = await repository.getCompanyById(companyId);
+      return buildOverview(companyId);
+    },
+    async createMovement(input: {
+      companyId: string;
+      movementType: "transfer" | "issue" | "return";
+      skuName: string;
+      sourceName: string;
+      destinationName: string;
+      requestedBy: string;
+      upstreamReceiptCode: string | null;
+      purchaseReference: string | null;
+      requestedUnits: number;
+      movedUnits: number;
+      pendingEvidence: number;
+      impactLevel: "controlled" | "watch" | "critical";
+      nextAction: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
       if (!company) {
         throw notFound("INVENTORY_MOVEMENTS_COMPANY_NOT_FOUND", "Company not found", {
-          companyId
+          companyId: input.companyId
         });
       }
 
-      const [movements, risks] = await Promise.all([
-        repository.listInventoryMovements(companyId),
-        repository.listInventoryMovementRisks(companyId)
-      ]);
+      const skuName = input.skuName.trim();
+      const sourceName = input.sourceName.trim();
+      const destinationName = input.destinationName.trim();
+      const requestedBy = input.requestedBy.trim();
+      const upstreamReceiptCode = input.upstreamReceiptCode?.trim() || null;
+      const purchaseReference = input.purchaseReference?.trim() || null;
+      const nextAction = input.nextAction.trim();
 
-      const focusMovement =
-        movements
-          .slice()
-          .sort((left, right) => {
-            if (left.impactLevel === "critical" && right.impactLevel !== "critical") {
-              return -1;
-            }
-            if (left.impactLevel !== "critical" && right.impactLevel === "critical") {
-              return 1;
-            }
-            return abs(right.varianceUnits) - abs(left.varianceUnits);
-          })[0] ?? null;
+      if (
+        skuName.length < 3 ||
+        sourceName.length < 3 ||
+        destinationName.length < 3 ||
+        requestedBy.length < 3
+      ) {
+        throw validationError(
+          "INVENTORY_MOVEMENT_INVALID_INPUT",
+          "SKU, source, destination and requester must be specific",
+          {
+            skuNameLength: skuName.length,
+            sourceNameLength: sourceName.length,
+            destinationNameLength: destinationName.length,
+            requestedByLength: requestedBy.length
+          }
+        );
+      }
 
-      return {
-        summary: {
-          openMovements: movements.filter((movement) => movement.status !== "received").length,
-          criticalMovements: movements.filter((movement) => movement.impactLevel === "critical").length,
-          pendingEvidence: movements.reduce((sum, movement) => sum + movement.pendingEvidence, 0),
-          varianceUnits: movements.reduce((sum, movement) => sum + abs(movement.varianceUnits), 0),
-          returnsInFlow: movements.filter((movement) => movement.movementType === "return" && movement.status !== "received").length
-        },
-        movements,
-        risks,
-        focusMovement
-      };
+      if (input.requestedUnits <= 0 || input.movedUnits < 0) {
+        throw validationError("INVENTORY_MOVEMENT_INVALID_UNITS", "Requested and moved units must be valid", {
+          requestedUnits: input.requestedUnits,
+          movedUnits: input.movedUnits
+        });
+      }
+
+      if (input.pendingEvidence < 0) {
+        throw validationError("INVENTORY_MOVEMENT_INVALID_EVIDENCE", "Pending evidence must be non-negative", {
+          pendingEvidence: input.pendingEvidence
+        });
+      }
+
+      if (input.movedUnits > input.requestedUnits) {
+        throw validationError(
+          "INVENTORY_MOVEMENT_MOVED_EXCEEDS_REQUESTED",
+          "Moved units cannot exceed requested units",
+          {
+            requestedUnits: input.requestedUnits,
+            movedUnits: input.movedUnits
+          }
+        );
+      }
+
+      if (nextAction.length < 8) {
+        throw validationError(
+          "INVENTORY_MOVEMENT_INVALID_NEXT_ACTION",
+          "Next action must be specific before creating a movement",
+          {
+            nextActionLength: nextAction.length
+          }
+        );
+      }
+
+      if (upstreamReceiptCode) {
+        const receipts = await repository.listInventoryReceipts(input.companyId);
+        const linkedReceipt = receipts.find((item) => item.code === upstreamReceiptCode);
+        if (!linkedReceipt) {
+          throw notFound("INVENTORY_MOVEMENT_RECEIPT_NOT_FOUND", "Linked receipt not found", {
+            upstreamReceiptCode
+          });
+        }
+
+        if (linkedReceipt.status !== "received") {
+          throw validationError(
+            "INVENTORY_MOVEMENT_RECEIPT_NOT_READY",
+            "Movement can only start from a received receipt",
+            { upstreamReceiptCode, receiptStatus: linkedReceipt.status }
+          );
+        }
+
+        if (purchaseReference && linkedReceipt.purchaseReference !== purchaseReference) {
+          throw validationError(
+            "INVENTORY_MOVEMENT_PURCHASE_REFERENCE_MISMATCH",
+            "Movement purchase reference must match the linked receipt purchase reference",
+            {
+              upstreamReceiptCode,
+              receiptPurchaseReference: linkedReceipt.purchaseReference,
+              purchaseReference
+            }
+          );
+        }
+      }
+
+      if (purchaseReference) {
+        const purchaseOrders = await repository.listProcurementPurchaseOrders(input.companyId);
+        const purchaseOrder = purchaseOrders.find((item) => item.code === purchaseReference);
+        if (!purchaseOrder) {
+          throw notFound("INVENTORY_MOVEMENT_PURCHASE_ORDER_NOT_FOUND", "Linked purchase order not found", {
+            purchaseReference
+          });
+        }
+      }
+
+      const created = await repository.createInventoryMovement({
+        ...input,
+        skuName,
+        sourceName,
+        destinationName,
+        requestedBy,
+        upstreamReceiptCode,
+        purchaseReference,
+        nextAction
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "inventory_movement",
+        aggregateId: created.id,
+        action: "inventory.movement.created",
+        metadata: {
+          movementCode: created.code,
+          skuName: created.skuName,
+          movementType: created.movementType
+        }
+      });
+
+      const refreshed = await buildOverview(input.companyId);
+      return refreshed.movements.find((item) => item.id === created.id) ?? created;
     },
     async updateMovement(input: {
       companyId: string;
@@ -130,6 +307,24 @@ export function createInventoryMovementsService(repository: PlatformRepository) 
         );
       }
 
+      if (input.status === "received") {
+        const purchaseOrders = await repository.listProcurementPurchaseOrders(input.companyId);
+        const purchaseOrder = movement.purchaseReference
+          ? purchaseOrders.find((item) => item.code === movement.purchaseReference)
+          : null;
+
+        if (purchaseOrder?.invoiceMatchStatus === "risk") {
+          throw validationError(
+            "INVENTORY_MOVEMENT_FISCAL_RISK_OPEN",
+            "Movement cannot be closed while the linked purchase order remains at fiscal risk",
+            {
+              movementId: movement.id,
+              purchaseReference: movement.purchaseReference
+            }
+          );
+        }
+      }
+
       const updatedMovement = await repository.updateInventoryMovement({
         movementId: input.movementId,
         status: input.status,
@@ -148,7 +343,16 @@ export function createInventoryMovementsService(repository: PlatformRepository) 
         }
       });
 
-      return updatedMovement;
+      const refreshed = await buildOverview(input.companyId);
+      const refreshedMovement = refreshed.movements.find((item) => item.id === updatedMovement.id);
+      if (!refreshedMovement) {
+        throw notFound("INVENTORY_MOVEMENT_NOT_FOUND", "Inventory movement not found after update", {
+          companyId: input.companyId,
+          movementId: input.movementId
+        });
+      }
+
+      return refreshedMovement;
     }
   };
 }

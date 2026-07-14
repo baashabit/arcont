@@ -128,6 +128,130 @@ export function createDocumentControlService(repository: PlatformRepository) {
       });
 
       return updatedItem;
+    },
+    async createItem(input: {
+      companyId: string;
+      documentType: string;
+      subject: string;
+      projectName: string;
+      owner: string;
+      status: "issued" | "in_review" | "awaiting_response" | "approved" | "blocked";
+      revisionCount: number;
+      turnaroundDays: number;
+      openComments: number;
+      health: "healthy" | "watch" | "critical";
+      nextAction: string;
+    }) {
+      const company = await repository.getCompanyById(input.companyId);
+      if (!company) {
+        throw notFound("DOCUMENT_CONTROL_COMPANY_NOT_FOUND", "Company not found", {
+          companyId: input.companyId
+        });
+      }
+
+      const items = await repository.listDocumentControlItems(input.companyId);
+      const documentType = input.documentType.trim();
+      const subject = input.subject.trim();
+      const projectName = input.projectName.trim();
+      const owner = input.owner.trim();
+      const nextAction = input.nextAction.trim();
+
+      if (documentType.length < 3 || subject.length < 5 || projectName.length < 3 || owner.length < 3) {
+        throw validationError(
+          "DOCUMENT_CONTROL_INVALID_INPUT",
+          "Document type, subject, project and owner must be specific",
+          {
+            documentTypeLength: documentType.length,
+            subjectLength: subject.length,
+            projectNameLength: projectName.length,
+            ownerLength: owner.length
+          }
+        );
+      }
+
+      if (
+        [input.revisionCount, input.turnaroundDays, input.openComments].some((value) => !Number.isFinite(value) || value < 0)
+      ) {
+        throw validationError(
+          "DOCUMENT_CONTROL_INVALID_METRICS",
+          "Revision count, turnaround days and open comments must be zero or greater",
+          {
+            revisionCount: input.revisionCount,
+            turnaroundDays: input.turnaroundDays,
+            openComments: input.openComments
+          }
+        );
+      }
+
+      if (nextAction.length < 8) {
+        throw validationError(
+          "DOCUMENT_CONTROL_INVALID_NEXT_ACTION",
+          "Next action must be specific before creating a document item",
+          {
+            nextActionLength: nextAction.length
+          }
+        );
+      }
+
+      if (
+        items.some(
+          (item) =>
+            item.subject.trim().toLowerCase() === subject.toLowerCase() &&
+            item.projectName.trim().toLowerCase() === projectName.toLowerCase() &&
+            item.status !== "approved"
+        )
+      ) {
+        throw validationError(
+          "DOCUMENT_CONTROL_DUPLICATE_OPEN_ITEM",
+          "An open document-control item already exists for this subject and project",
+          {
+            subject,
+            projectName
+          }
+        );
+      }
+
+      if (input.status === "approved" && input.openComments > 0) {
+        throw validationError(
+          "DOCUMENT_CONTROL_OPEN_COMMENTS",
+          "Document cannot be created as approved while comments remain open",
+          {
+            subject,
+            openComments: input.openComments
+          }
+        );
+      }
+
+      const created = await repository.createDocumentControlItem({
+        companyId: input.companyId,
+        code: `DOC-${String(items.length + 1).padStart(3, "0")}`,
+        documentType,
+        subject,
+        projectName,
+        owner,
+        status: input.status,
+        revisionCount: input.revisionCount,
+        turnaroundDays: input.turnaroundDays,
+        openComments: input.openComments,
+        health: input.health,
+        nextAction
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "document_control_item",
+        aggregateId: created.id,
+        action: "document_control.item.created",
+        metadata: {
+          code: created.code,
+          documentType: created.documentType,
+          subject: created.subject,
+          status: created.status
+        }
+      });
+
+      return created;
     }
   };
 }

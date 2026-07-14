@@ -18,10 +18,12 @@ export function createSubcontractsService(repository: PlatformRepository) {
       });
     }
 
-    const [workforces, risks, projects] = await Promise.all([
+    const [workforces, risks, projects, dailyLogs, qualityInspections] = await Promise.all([
       repository.listHrWorkforces(companyId),
       repository.listHrRisks(companyId),
-      repository.listProjects(companyId)
+      repository.listProjects(companyId),
+      repository.listDailyLogEntries(companyId),
+      repository.listQualityInspections(companyId)
     ]);
 
     const lines = workforces.map((item) => {
@@ -29,6 +31,22 @@ export function createSubcontractsService(repository: PlatformRepository) {
         projects.find((candidate) => candidate.name.includes(item.frontName) || item.frontName.includes(candidate.name)) ??
         projects.find((candidate) => candidate.companyId === item.companyId) ??
         null;
+      const latestDailyLog =
+        dailyLogs
+          .filter((entry) => entry.frontName === item.frontName || entry.projectName === project?.name)
+          .slice()
+          .sort((left, right) => right.logDate.localeCompare(left.logDate) || right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
+      const relatedInspections = qualityInspections.filter((inspection) =>
+        inspection.contractorName === item.contractorName ||
+        inspection.areaName === item.frontName ||
+        inspection.areaName.includes(item.frontName)
+      );
+      const qualityReleaseReadiness =
+        relatedInspections.length > 0
+          ? Number(
+              (relatedInspections.reduce((sum, inspection) => sum + inspection.releaseReadiness, 0) / relatedInspections.length).toFixed(1)
+            )
+          : 100;
       const projectProgress = project?.progress ?? clamp(item.productivityRate + item.attendanceRate * 0.2, 25, 100);
       const contractAmount = roundCurrency(
         item.activeHeadcount * 185000 +
@@ -65,6 +83,8 @@ export function createSubcontractsService(repository: PlatformRepository) {
         projectName: project?.name ?? item.frontName,
         projectStatus: project?.status ?? null,
         subcontractHealth,
+        latestDailyLogStatus: latestDailyLog?.status ?? "unknown",
+        qualityReleaseReadiness,
         contractAmount,
         earnedAmount,
         invoicedAmount,
@@ -124,7 +144,10 @@ export function createSubcontractsService(repository: PlatformRepository) {
         earnedAmount: roundCurrency(lines.reduce((sum, item) => sum + item.earnedAmount, 0)),
         paidAmount: roundCurrency(lines.reduce((sum, item) => sum + item.paidAmount, 0)),
         pendingDestajo: roundCurrency(lines.reduce((sum, item) => sum + item.pendingDestajo, 0)),
-        criticalSubcontracts: lines.filter((item) => item.subcontractHealth === "critical").length
+        criticalSubcontracts: lines.filter((item) => item.subcontractHealth === "critical").length,
+        executionRiskSubcontracts: lines.filter(
+          (item) => item.latestDailyLogStatus === "flagged" || item.qualityReleaseReadiness < 75 || item.subcontractHealth === "critical"
+        ).length
       },
       lines,
       risks: mappedRisks,
@@ -151,6 +174,18 @@ export function createSubcontractsService(repository: PlatformRepository) {
         });
       }
 
+      const nextAction = input.nextAction.trim();
+      if (nextAction.length < 8) {
+        throw validationError("SUBCONTRACTS_INVALID_NEXT_ACTION", "Next action must be specific", {
+          lineId: line.id,
+          nextActionLength: nextAction.length
+        });
+      }
+
+      if (input.subcontractHealth === line.subcontractHealth && nextAction === line.nextAction) {
+        return line;
+      }
+
       if (input.subcontractHealth === "controlled") {
         if (line.pendingDestajo > line.contractAmount * 0.1) {
           throw validationError(
@@ -174,6 +209,17 @@ export function createSubcontractsService(repository: PlatformRepository) {
             }
           );
         }
+
+        if (line.qualityReleaseReadiness < 85) {
+          throw validationError(
+            "SUBCONTRACTS_QUALITY_NOT_READY",
+            "Subcontract cannot be marked controlled while quality readiness remains too low",
+            {
+              lineId: line.id,
+              qualityReleaseReadiness: line.qualityReleaseReadiness
+            }
+          );
+        }
       }
 
       if (input.subcontractHealth === "watch" && line.attendanceRate < 85) {
@@ -187,10 +233,21 @@ export function createSubcontractsService(repository: PlatformRepository) {
         );
       }
 
+      if (input.subcontractHealth === "watch" && line.latestDailyLogStatus === "flagged") {
+        throw validationError(
+          "SUBCONTRACTS_FLAGGED_DAILY_LOG",
+          "Subcontract should remain critical while the latest daily log is still flagged",
+          {
+            lineId: line.id,
+            latestDailyLogStatus: line.latestDailyLogStatus
+          }
+        );
+      }
+
       const updatedWorkforce = await repository.updateHrWorkforceItem({
         workforceId: line.workforceId,
         safetyStatus: input.subcontractHealth,
-        nextAction: input.nextAction
+        nextAction
       });
 
       await repository.addAuditEvent({

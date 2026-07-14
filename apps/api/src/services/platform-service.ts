@@ -82,6 +82,18 @@ function sanitizeUser<T extends { passwordHash: string }>(user: T) {
   return safeUser;
 }
 
+function readinessStatusFromCount(count: number, readyMinimum: number, warningMinimum = 1) {
+  if (count >= readyMinimum) {
+    return "ready" as const;
+  }
+
+  if (count >= warningMinimum) {
+    return "warning" as const;
+  }
+
+  return "blocked" as const;
+}
+
 export function createPlatformService(repository: PlatformRepository) {
   return {
     async listCompanies() {
@@ -554,6 +566,132 @@ export function createPlatformService(repository: PlatformRepository) {
         byArea,
         latestAuditEvents,
         focusCompany
+      };
+    },
+    async getSystemReadiness(companyId: string) {
+      const company = await repository.getCompanyById(companyId);
+      const settings = await repository.getSettings(companyId);
+
+      if (!company || !settings) {
+        throw notFound("PLATFORM_COMPANY_NOT_FOUND", "Company not found", {
+          companyId
+        });
+      }
+
+      const [
+        users,
+        modules,
+        auditEvents,
+        projects,
+        fieldRequests,
+        requisitions,
+        machines,
+        qualityInspections,
+        documentItems
+      ] = await Promise.all([
+        repository.listUsers(companyId),
+        repository.listModules(),
+        repository.listAuditEvents(companyId, 20),
+        repository.listProjects(companyId),
+        repository.listFieldMaterialRequests(companyId),
+        repository.listProcurementRequisitions(companyId),
+        repository.listMachines(companyId),
+        repository.listQualityInspections(companyId),
+        repository.listDocumentControlItems(companyId)
+      ]);
+
+      const enabledOperationsModules = modules.filter(
+        (module: (typeof modules)[number]) =>
+          module.scope === "operations" && company.enabledModules.includes(module.key)
+      );
+      const activeUsers = users.filter((user: (typeof users)[number]) => user.status === "active");
+      const satReady =
+        settings.satEnabled &&
+        settings.currency === "MXN" &&
+        settings.locale.startsWith("es-MX") &&
+        /^\d{3}$/.test(settings.fiscalRegime);
+      const operationalDatasets = [
+        projects.length,
+        fieldRequests.length,
+        requisitions.length,
+        machines.length,
+        qualityInspections.length,
+        documentItems.length
+      ];
+      const populatedOperationalDatasets = operationalDatasets.filter((count) => count > 0).length;
+
+      const checks = [
+        {
+          key: "identity",
+          label: "Identity and access baseline",
+          status: readinessStatusFromCount(activeUsers.length, 2),
+          detail: `${activeUsers.length} active users and ${users.length} total users are configured for ${company.tradeName}.`,
+          action:
+            activeUsers.length >= 2
+              ? "Identity baseline is covered for the current tenant."
+              : "Add at least one more active user to avoid single-owner operational dependency."
+        },
+        {
+          key: "fiscal",
+          label: "Mexico fiscal and SAT posture",
+          status: satReady ? "ready" : settings.satEnabled ? "warning" : "blocked",
+          detail: satReady
+            ? `SAT is enabled with ${settings.currency}, ${settings.locale} and fiscal regime ${settings.fiscalRegime}.`
+            : `SAT posture is incomplete for ${settings.fiscalCountry}; current settings are ${settings.currency}, ${settings.locale} and regime ${settings.fiscalRegime}.`,
+          action: satReady
+            ? "Fiscal baseline is aligned for Mexico-first rollout."
+            : "Complete SAT settings, confirm MXN and validate the 3-digit fiscal regime before finance rollout."
+        },
+        {
+          key: "modules",
+          label: "Operational modules activated",
+          status: readinessStatusFromCount(enabledOperationsModules.length, 6, 3),
+          detail: `${enabledOperationsModules.length} operations modules are enabled for this tenant.`,
+          action:
+            enabledOperationsModules.length >= 6
+              ? "Module footprint is broad enough for a realistic end-to-end demo."
+              : "Enable more operations modules so the tenant covers project, field, procurement, inventory and finance flows."
+        },
+        {
+          key: "operations-data",
+          label: "Operational data flows seeded",
+          status: readinessStatusFromCount(populatedOperationalDatasets, 5, 2),
+          detail: `${populatedOperationalDatasets} of 6 core operational datasets already contain live rows.`,
+          action:
+            populatedOperationalDatasets >= 5
+              ? "Operational data coverage is strong enough for cross-domain walkthroughs."
+              : "Seed or create more live operational records before running a full commercial demo."
+        },
+        {
+          key: "audit",
+          label: "Audit and activity trace",
+          status: readinessStatusFromCount(auditEvents.length, 5, 1),
+          detail: `${auditEvents.length} recent audit events are available for tenant traceability.`,
+          action:
+            auditEvents.length >= 5
+              ? "Audit trail is already useful for admin and compliance walkthroughs."
+              : "Generate more platform and operations activity so the audit trail reflects real tenant usage."
+        }
+      ];
+
+      const readyChecks = checks.filter((check) => check.status === "ready").length;
+      const warningChecks = checks.filter((check) => check.status === "warning").length;
+      const blockedChecks = checks.filter((check) => check.status === "blocked").length;
+      const score = Math.round(
+        checks.reduce((sum, check) => sum + (check.status === "ready" ? 100 : check.status === "warning" ? 60 : 20), 0) /
+          checks.length
+      );
+
+      return {
+        companyId,
+        summary: {
+          score,
+          readyChecks,
+          warningChecks,
+          blockedChecks
+        },
+        checks,
+        recommendedActions: checks.filter((check) => check.status !== "ready").map((check) => check.action)
       };
     }
   };

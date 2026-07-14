@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -36,6 +37,17 @@ function procurementTone(status: BudgetBookLineContract["procurementStatus"]) {
       return "info";
     default:
       return "gold";
+  }
+}
+
+function collectionTone(status: BudgetBookLineContract["collectionHealth"]) {
+  switch (status) {
+    case "controlled":
+      return "success";
+    case "watch":
+      return "warning";
+    default:
+      return "danger";
   }
 }
 
@@ -101,7 +113,10 @@ function recomputeSummary(lines: BudgetBookLineContract[]) {
     executedBudget: lines.reduce((sum, item) => sum + item.executedQuantity * item.unitCost, 0),
     estimatedBudget: lines.reduce((sum, item) => sum + item.estimatedQuantity * item.unitCost, 0),
     pendingBudget: lines.reduce((sum, item) => sum + item.pendingQuantity * item.unitCost, 0),
-    criticalConcepts: lines.filter((item) => item.generatorHealth === "critical").length
+    criticalConcepts: lines.filter((item) => item.generatorHealth === "critical").length,
+    conceptsAtCashRisk: lines.filter(
+      (item) => item.collectionHealth === "critical" || item.overdueCollectionDays > 30
+    ).length
   };
 }
 
@@ -277,6 +292,11 @@ export default function BudgetBookPage() {
                 value={`MXN ${Math.round(overview.summary.pendingBudget).toLocaleString()}`}
                 footnote="Value still exposed by incomplete generators, approvals or blocked sourcing."
               />
+              <KpiCard
+                label="Cash-risk concepts"
+                value={String(overview.summary.conceptsAtCashRisk)}
+                footnote="Concepts already carrying collection exposure or overdue cash conversion."
+              />
             </section>
 
             <section className="grid cols2">
@@ -328,7 +348,12 @@ export default function BudgetBookPage() {
                     {
                       key: "health",
                       label: "Health",
-                      render: (row) => <Badge tone={healthTone(row.generatorHealth)}>{row.generatorHealth}</Badge>
+                      render: (row) => (
+                        <div className="row gap wrap">
+                          <Badge tone={healthTone(row.generatorHealth)}>{row.generatorHealth}</Badge>
+                          <Badge tone={collectionTone(row.collectionHealth)}>{row.collectionHealth}</Badge>
+                        </div>
+                      )
                     },
                     {
                       key: "status",
@@ -361,6 +386,11 @@ export default function BudgetBookPage() {
                         value={String(selectedLine.changeOrders)}
                         footnote="Commercial pressure currently affecting this concept."
                       />
+                      <KpiCard
+                        label="Collection aging"
+                        value={`${selectedLine.overdueCollectionDays}d`}
+                        footnote={`pending collection MXN ${selectedLine.pendingCollection.toLocaleString()}`}
+                      />
                     </div>
 
                     <div className="grid cols2">
@@ -373,6 +403,11 @@ export default function BudgetBookPage() {
                         label="Pending quantity"
                         value={`${selectedLine.pendingQuantity.toLocaleString()} ${selectedLine.unit}`}
                         footnote="Backlog still open before the concept can close cleanly."
+                      />
+                      <KpiCard
+                        label="Pending to bill"
+                        value={`MXN ${selectedLine.pendingToBill.toLocaleString()}`}
+                        footnote={`${selectedLine.collectionOwner} owns the downstream collection cycle.`}
                       />
                     </div>
 
@@ -389,7 +424,23 @@ export default function BudgetBookPage() {
                     <div className="cluster">
                       <Badge tone={healthTone(selectedLine.generatorHealth)}>{selectedLine.generatorHealth}</Badge>
                       <Badge tone={procurementTone(selectedLine.procurementStatus)}>{selectedLine.procurementStatus}</Badge>
+                      <Badge tone={collectionTone(selectedLine.collectionHealth)}>{selectedLine.collectionHealth}</Badge>
                       <Badge tone="info">{selectedLine.buyer}</Badge>
+                    </div>
+
+                    <div className="row gap wrap">
+                      <Link className="buttonGhost" href="/procurement">
+                        Open procurement
+                      </Link>
+                      <Link className="buttonGhost" href="/cost-control">
+                        Open cost control
+                      </Link>
+                      <Link className="buttonGhost" href="/finance">
+                        Open finance
+                      </Link>
+                      <Link className="buttonGhost" href="/projects">
+                        Open projects
+                      </Link>
                     </div>
 
                     {actionError ? <EmptyState title="Update blocked" description={actionError} /> : null}
@@ -402,7 +453,14 @@ export default function BudgetBookPage() {
                           type="button"
                           className="button"
                           onClick={() => void handleAction(action.procurementStatus, action.nextAction)}
-                          disabled={isSaving}
+                          disabled={
+                            isSaving ||
+                            (action.procurementStatus === "awarded" &&
+                              (selectedLine.pendingQuantity > selectedLine.quantity * 0.12 ||
+                                selectedLine.changeOrders > 1 ||
+                                selectedLine.collectionHealth === "critical")) ||
+                            (action.procurementStatus === "awaiting_approval" && selectedLine.evidenceCount < 2)
+                          }
                         >
                           {action.label}
                         </button>

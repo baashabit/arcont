@@ -33,6 +33,18 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function collectionOwnerFor(projectSegment: string, client: string) {
+  if (projectSegment === "Government housing" || client.toLowerCase().includes("gobierno") || client === "SEDATU") {
+    return "Government estimations desk";
+  }
+
+  if (projectSegment === "Vertical housing") {
+    return "Collections coordinator";
+  }
+
+  return "Project controls and billing";
+}
+
 function deriveCommittedRatio(
   status: "draft" | "sourcing" | "awaiting_approval" | "awarded" | "blocked"
 ) {
@@ -88,6 +100,11 @@ export function createCostControlService(
 
     const lines = packages.map((pkg) => {
       const project = projects.find((item) => item.name === pkg.projectName) ?? null;
+      const financeAnchor =
+        financeItems.find((item) => item.companyId === pkg.companyId && item.metricName.toLowerCase().includes("revenue")) ??
+        financeItems.find((item) => item.companyId === pkg.companyId && item.cashImpact > 0) ??
+        financeItems.find((item) => item.companyId === pkg.companyId) ??
+        null;
       const projectProgress = project?.progress ?? 0;
       const scheduleVarianceDays = project?.scheduleVarianceDays ?? 0;
       const budgetPressure =
@@ -123,6 +140,31 @@ export function createCostControlService(
         pkg.budgetAmount > 0 ? Number(((varianceAmount / pkg.budgetAmount) * 100).toFixed(1)) : 0;
       const cashExposure =
         totalBudget > 0 ? roundCurrency((negativeCashPressure * pkg.budgetAmount) / totalBudget) : 0;
+      const collectionWindowDays =
+        project?.segment === "Government housing" ? 45 : project?.segment === "Vertical housing" ? 30 : 21;
+      const pendingCollection = financeAnchor
+        ? roundCurrency(
+            pkg.budgetAmount *
+              clamp((1 - financeAnchor.closeReadiness / 100) * 0.34 + financeAnchor.urgentItems * 0.012, 0.04, 0.42)
+          )
+        : 0;
+      const overdueCollectionDays = financeAnchor
+        ? Math.round(
+            clamp(
+              pendingCollection / Math.max(pkg.budgetAmount, 1) * collectionWindowDays +
+                Math.max(scheduleVarianceDays, 0) * 2 +
+                financeAnchor.urgentItems * 2,
+              2,
+              75
+            )
+          )
+        : 0;
+      const collectionHealth =
+        overdueCollectionDays > collectionWindowDays || pendingCollection > pkg.budgetAmount * 0.18
+          ? "critical"
+          : overdueCollectionDays > collectionWindowDays * 0.6 || pendingCollection > pkg.budgetAmount * 0.08
+            ? "watch"
+            : "controlled";
       const riskDrivers: string[] = [];
 
       if (project?.budgetHealth === "critical") {
@@ -155,6 +197,10 @@ export function createCostControlService(
         riskDrivers.push(`Finance queue carries ${financeUrgency} urgent items`);
       }
 
+      if (overdueCollectionDays > collectionWindowDays) {
+        riskDrivers.push(`Collections aging already exceeds ${collectionWindowDays} days`);
+      }
+
       const controlHealth =
         pkg.status === "blocked" || variancePercent >= 9 || project?.budgetHealth === "critical"
           ? "critical"
@@ -171,8 +217,10 @@ export function createCostControlService(
         packageName: pkg.packageName,
         projectName: pkg.projectName,
         buyer: pkg.buyer,
+        collectionOwner: collectionOwnerFor(project?.segment ?? "", project?.client ?? ""),
         procurementStatus: pkg.status,
         controlHealth,
+        collectionHealth,
         budgetAmount: pkg.budgetAmount,
         committedCost,
         spentToDate,
@@ -182,6 +230,8 @@ export function createCostControlService(
         projectProgress,
         scheduleVarianceDays,
         cashExposure,
+        pendingCollection,
+        overdueCollectionDays,
         riskDrivers,
         nextAction: pkg.nextAction,
         updatedAt: pkg.updatedAt
@@ -219,6 +269,10 @@ export function createCostControlService(
             return 1;
           }
 
+          if (right.overdueCollectionDays !== left.overdueCollectionDays) {
+            return right.overdueCollectionDays - left.overdueCollectionDays;
+          }
+
           return right.varianceAmount - left.varianceAmount;
         })[0] ?? null;
 
@@ -229,7 +283,10 @@ export function createCostControlService(
         committedCost: roundCurrency(lines.reduce((sum, item) => sum + item.committedCost, 0)),
         forecastAtCompletion: roundCurrency(lines.reduce((sum, item) => sum + item.forecastAtCompletion, 0)),
         forecastVariance: roundCurrency(lines.reduce((sum, item) => sum + item.varianceAmount, 0)),
-        criticalLines: lines.filter((item) => item.controlHealth === "critical").length
+        criticalLines: lines.filter((item) => item.controlHealth === "critical").length,
+        cashRiskLines: lines.filter(
+          (item) => item.collectionHealth === "critical" || item.overdueCollectionDays > 30
+        ).length
       },
       lines,
       exceptions,
@@ -256,6 +313,18 @@ export function createCostControlService(
         });
       }
 
+      const nextAction = input.nextAction.trim();
+      if (nextAction.length < 8) {
+        throw validationError("COST_CONTROL_INVALID_NEXT_ACTION", "Next action must be specific", {
+          lineId: line.id,
+          nextActionLength: nextAction.length
+        });
+      }
+
+      if (input.procurementStatus === line.procurementStatus && nextAction === line.nextAction) {
+        return line;
+      }
+
       if (input.procurementStatus === "awarded" && line.controlHealth === "critical") {
         throw validationError(
           "COST_CONTROL_CRITICAL_FORECAST",
@@ -267,11 +336,33 @@ export function createCostControlService(
         );
       }
 
+      if (input.procurementStatus === "awarded" && line.collectionHealth === "critical") {
+        throw validationError(
+          "COST_CONTROL_CRITICAL_COLLECTION",
+          "Cost control line cannot be awarded while collection exposure remains critical",
+          {
+            lineId: line.id,
+            collectionHealth: line.collectionHealth,
+            overdueCollectionDays: line.overdueCollectionDays
+          }
+        );
+      }
+
+      if (input.procurementStatus === "awaiting_approval" && line.riskDrivers.some((driver) => driver.includes("Insufficient bid coverage"))) {
+        throw validationError(
+          "COST_CONTROL_INSUFFICIENT_BID_COVERAGE",
+          "Cost control line cannot move to approval while bid coverage is still insufficient",
+          {
+            lineId: line.id
+          }
+        );
+      }
+
       await procurementService.updatePackage({
         companyId: input.companyId,
         packageId: line.packageId,
         status: input.procurementStatus,
-        nextAction: input.nextAction
+        nextAction
       });
 
       const refreshedOverview = await buildOverview(input.companyId);

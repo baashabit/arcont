@@ -80,7 +80,15 @@ export function createComplianceService(repository: PlatformRepository) {
         });
       }
 
-      if (complianceCase.status === input.status && complianceCase.nextAction === input.nextAction) {
+      const nextAction = input.nextAction.trim();
+      if (nextAction.length < 8) {
+        throw validationError("COMPLIANCE_INVALID_NEXT_ACTION", "Next action must be specific", {
+          caseId: complianceCase.id,
+          nextActionLength: nextAction.length
+        });
+      }
+
+      if (complianceCase.status === input.status && complianceCase.nextAction === nextAction) {
         return complianceCase;
       }
 
@@ -118,10 +126,33 @@ export function createComplianceService(repository: PlatformRepository) {
         }
       }
 
+      if (input.status === "in_progress" && complianceCase.documentCompletion < 40) {
+        throw validationError(
+          "COMPLIANCE_DOCUMENT_BASELINE_TOO_LOW",
+          "Compliance case should not move to in-progress without minimum document baseline",
+          {
+            caseId: complianceCase.id,
+            documentCompletion: complianceCase.documentCompletion
+          }
+        );
+      }
+
+      if (input.status === "at_risk" && complianceCase.health === "healthy" && complianceCase.openFindings === 0) {
+        throw validationError(
+          "COMPLIANCE_RISK_ESCALATION_TOO_WEAK",
+          "Compliance case should not move to at-risk without findings or risk posture supporting it",
+          {
+            caseId: complianceCase.id,
+            health: complianceCase.health,
+            openFindings: complianceCase.openFindings
+          }
+        );
+      }
+
       const updatedCase = await repository.updateComplianceCase({
         caseId: input.caseId,
         status: input.status,
-        nextAction: input.nextAction
+        nextAction
       });
 
       await repository.addAuditEvent({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -36,6 +37,17 @@ function statusTone(status: CostControlLineContract["procurementStatus"]) {
       return "info";
     default:
       return "gold";
+  }
+}
+
+function collectionTone(health: CostControlLineContract["collectionHealth"]) {
+  switch (health) {
+    case "controlled":
+      return "success";
+    case "watch":
+      return "warning";
+    default:
+      return "danger";
   }
 }
 
@@ -91,6 +103,42 @@ function lineActionOptions(line: CostControlLineContract) {
     default:
       return [];
   }
+}
+
+function recomputeSummary(lines: CostControlLineContract[]) {
+  return {
+    trackedLines: lines.length,
+    totalBudget: lines.reduce((sum, item) => sum + item.budgetAmount, 0),
+    committedCost: lines.reduce((sum, item) => sum + item.committedCost, 0),
+    forecastAtCompletion: lines.reduce((sum, item) => sum + item.forecastAtCompletion, 0),
+    forecastVariance: lines.reduce((sum, item) => sum + item.varianceAmount, 0),
+    criticalLines: lines.filter((item) => item.controlHealth === "critical").length,
+    cashRiskLines: lines.filter(
+      (item) => item.collectionHealth === "critical" || item.overdueCollectionDays > 30
+    ).length
+  };
+}
+
+function pickFocusLine(lines: CostControlLineContract[]) {
+  return (
+    lines
+      .slice()
+      .sort((left, right) => {
+        if (left.controlHealth === "critical" && right.controlHealth !== "critical") {
+          return -1;
+        }
+
+        if (left.controlHealth !== "critical" && right.controlHealth === "critical") {
+          return 1;
+        }
+
+        if (right.overdueCollectionDays !== left.overdueCollectionDays) {
+          return right.overdueCollectionDays - left.overdueCollectionDays;
+        }
+
+        return right.varianceAmount - left.varianceAmount;
+      })[0] ?? null
+  );
 }
 
 export default function CostControlPage() {
@@ -207,29 +255,9 @@ export default function CostControlPage() {
 
       return {
         ...current,
-        summary: {
-          trackedLines: lines.length,
-          totalBudget: lines.reduce((sum, item) => sum + item.budgetAmount, 0),
-          committedCost: lines.reduce((sum, item) => sum + item.committedCost, 0),
-          forecastAtCompletion: lines.reduce((sum, item) => sum + item.forecastAtCompletion, 0),
-          forecastVariance: lines.reduce((sum, item) => sum + item.varianceAmount, 0),
-          criticalLines: lines.filter((item) => item.controlHealth === "critical").length
-        },
+        summary: recomputeSummary(lines),
         lines,
-        focusLine:
-          lines
-            .slice()
-            .sort((left, right) => {
-              if (left.controlHealth === "critical" && right.controlHealth !== "critical") {
-                return -1;
-              }
-
-              if (left.controlHealth !== "critical" && right.controlHealth === "critical") {
-                return 1;
-              }
-
-              return right.varianceAmount - left.varianceAmount;
-            })[0] ?? null
+        focusLine: pickFocusLine(lines)
       };
     });
 
@@ -267,6 +295,11 @@ export default function CostControlPage() {
                 label="Critical lines"
                 value={String(overview.summary.criticalLines)}
                 footnote="Lines that should not advance without variance containment."
+              />
+              <KpiCard
+                label="Cash-risk lines"
+                value={String(overview.summary.cashRiskLines)}
+                footnote="Lines where forecast pressure is already colliding with collection exposure."
               />
             </section>
 
@@ -325,7 +358,12 @@ export default function CostControlPage() {
                     {
                       key: "health",
                       label: "Health",
-                      render: (row) => <Badge tone={healthTone(row.controlHealth)}>{row.controlHealth}</Badge>
+                      render: (row) => (
+                        <div className="row gap wrap">
+                          <Badge tone={healthTone(row.controlHealth)}>{row.controlHealth}</Badge>
+                          <Badge tone={collectionTone(row.collectionHealth)}>{row.collectionHealth}</Badge>
+                        </div>
+                      )
                     }
                   ]}
                 />
@@ -351,6 +389,10 @@ export default function CostControlPage() {
                       <div>{selectedLine.buyer}</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Collection owner</div>
+                      <div>{selectedLine.collectionOwner}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Committed cost</div>
                       <div>MXN {selectedLine.committedCost.toLocaleString()}</div>
                     </div>
@@ -360,12 +402,24 @@ export default function CostControlPage() {
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Cash exposure</div>
-                      <div>MXN {selectedLine.cashExposure.toLocaleString()}</div>
+                      <div>
+                        MXN {selectedLine.cashExposure.toLocaleString()}
+                        <div className="tableCellMuted">
+                          pending collection MXN {selectedLine.pendingCollection.toLocaleString()}
+                        </div>
+                      </div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Variance</div>
                       <div>
                         MXN {selectedLine.varianceAmount.toLocaleString()} · {selectedLine.variancePercent}%
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Collection aging</div>
+                      <div>
+                        <Badge tone={collectionTone(selectedLine.collectionHealth)}>{selectedLine.collectionHealth}</Badge>
+                        <div className="tableCellMuted">{selectedLine.overdueCollectionDays} overdue days on the cash cycle</div>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -376,6 +430,23 @@ export default function CostControlPage() {
                             {driver}
                           </span>
                         ))}
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/procurement">
+                          Open procurement
+                        </Link>
+                        <Link className="buttonGhost" href="/finance">
+                          Open finance
+                        </Link>
+                        <Link className="buttonGhost" href="/cash-flow">
+                          Open cash flow
+                        </Link>
+                        <Link className="buttonGhost" href="/projects">
+                          Open projects
+                        </Link>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -394,6 +465,7 @@ export default function CostControlPage() {
                       <div className="tableCellStack">
                         <span className="tableCellMuted">Award is blocked while forecast drift stays critical.</span>
                         <span className="tableCellMuted">Approval still requires bid coverage from procurement.</span>
+                        <span className="tableCellMuted">Cash-risk lines should not be treated as financially clean even if sourcing advances.</span>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -419,7 +491,13 @@ export default function CostControlPage() {
                               key={option.label}
                               className={option.procurementStatus === "blocked" ? "buttonGhost" : "button"}
                               type="button"
-                              disabled={isSaving}
+                              disabled={
+                                isSaving ||
+                                (option.procurementStatus === "awarded" &&
+                                  (selectedLine.controlHealth === "critical" || selectedLine.collectionHealth === "critical")) ||
+                                (option.procurementStatus === "awaiting_approval" &&
+                                  selectedLine.riskDrivers.some((driver) => driver.includes("Insufficient bid coverage")))
+                              }
                               onClick={() => void handleLineAction(option.procurementStatus, option.nextAction)}
                             >
                               {isSaving ? "Saving..." : option.label}

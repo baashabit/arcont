@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -86,6 +87,27 @@ function pickFocusLine(lines: CloseControlLineContract[]) {
   );
 }
 
+function buildCloseStory(line: CloseControlLineContract | null, riskCount: number) {
+  if (!line) {
+    return null;
+  }
+
+  return {
+    closeExposure:
+      line.slaHoursRemaining < 0
+        ? `This stream is already overdue by ${Math.abs(line.slaHoursRemaining)} hours and is distorting close discipline.`
+        : `This stream still has ${line.slaHoursRemaining} hours before breaching its close window.`,
+    unblockLane:
+      line.blockingItems > 0
+        ? `${line.blockingItems} blockers remain active and must be cleared together with evidence completion.`
+        : "The blocker queue is contained; focus should stay on evidence quality and timing.",
+    escalationSignal:
+      riskCount > 0
+        ? `${riskCount} mapped risks remain open and justify active escalation in the close room.`
+        : "No mapped escalation remains open; keep the stream under checkpoint monitoring."
+  };
+}
+
 export default function CloseControlPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<CloseControlOverviewContract | null>(null);
@@ -144,6 +166,8 @@ export default function CloseControlPage() {
     () => overview?.risks.filter((item) => item.lineId === selectedLine?.id) ?? [],
     [overview, selectedLine]
   );
+
+  const selectedStory = useMemo(() => buildCloseStory(selectedLine, selectedRisks.length), [selectedLine, selectedRisks.length]);
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
 
@@ -336,6 +360,24 @@ export default function CloseControlPage() {
                       />
                     </label>
 
+                    <div className="row gap wrap">
+                      <Link className="buttonGhost" href="/accounts-payable">
+                        Open payables
+                      </Link>
+                      <Link className="buttonGhost" href="/document-control">
+                        Open document control
+                      </Link>
+                      <Link className="buttonGhost" href="/compliance">
+                        Open compliance
+                      </Link>
+                      <Link className="buttonGhost" href="/finance">
+                        Open finance
+                      </Link>
+                      <Link className="buttonGhost" href="/platform/settings">
+                        Open settings
+                      </Link>
+                    </div>
+
                     <div className="cluster">
                       {lineActions.map((action) => (
                         <button
@@ -343,7 +385,14 @@ export default function CloseControlPage() {
                           type="button"
                           className="button"
                           onClick={() => void handleAction(action.closeHealth, action.nextAction)}
-                          disabled={isSaving}
+                          disabled={
+                            isSaving ||
+                            (action.closeHealth === "controlled" &&
+                              (selectedLine.blockingItems > 0 ||
+                                selectedLine.closeReadiness < 92 ||
+                                selectedLine.evidenceCompletion < 90)) ||
+                            (action.closeHealth === "watch" && selectedLine.slaHoursRemaining < -8)
+                          }
                         >
                           {action.label}
                         </button>
@@ -359,6 +408,20 @@ export default function CloseControlPage() {
                     description="Choose a close stream to inspect readiness, blockers and the next close action."
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Close exposure" description="Immediate close implication of the selected stream.">
+                <p className="sectionText">{selectedStory?.closeExposure ?? "Choose a stream to inspect close exposure."}</p>
+              </Card>
+              <Card title="Unblock lane" description="What the close room should attack next.">
+                <p className="sectionText">{selectedStory?.unblockLane ?? "Choose a stream to inspect the unblock lane."}</p>
+              </Card>
+              <Card title="Escalation signal" description="When the selected stream deserves higher attention.">
+                <p className="sectionText">
+                  {selectedStory?.escalationSignal ?? "Choose a stream to inspect the escalation signal."}
+                </p>
               </Card>
             </section>
 

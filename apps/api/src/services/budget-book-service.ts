@@ -13,6 +13,18 @@ function roundCurrency(value: number) {
   return Math.round(value);
 }
 
+function collectionOwnerFor(projectSegment: string, client: string) {
+  if (projectSegment === "Government housing" || client.toLowerCase().includes("gobierno") || client === "SEDATU") {
+    return "Government estimations desk";
+  }
+
+  if (projectSegment === "Vertical housing") {
+    return "Collections coordinator";
+  }
+
+  return "Project controls and billing";
+}
+
 function conceptCodeFromPackage(code: string, index: number) {
   const suffix = String(index + 1).padStart(3, "0");
   return `GEN-${code.replace(/[^A-Z0-9]/gi, "").slice(-6).toUpperCase()}-${suffix}`;
@@ -56,12 +68,13 @@ export function createBudgetBookService(repository: PlatformRepository) {
       });
     }
 
-    const [projects, projectRisks, procurementPackages, procurementRisks, documentItems] = await Promise.all([
+    const [projects, projectRisks, procurementPackages, procurementRisks, documentItems, financeItems] = await Promise.all([
       repository.listProjects(companyId),
       repository.listProjectRisks(companyId),
       repository.listProcurementPackages(companyId),
       repository.listProcurementRisks(companyId),
-      repository.listDocumentControlItems(companyId)
+      repository.listDocumentControlItems(companyId),
+      repository.listFinanceItems(companyId)
     ]);
 
     const lines = procurementPackages.map((pkg, index) => {
@@ -70,6 +83,11 @@ export function createBudgetBookService(repository: PlatformRepository) {
         projects.find((item) => item.companyId === pkg.companyId) ??
         null;
       const evidenceCount = documentItems.filter((item) => item.projectName === pkg.projectName).length + pkg.bidCount;
+      const financeAnchor =
+        financeItems.find((item) => item.companyId === pkg.companyId && item.metricName.toLowerCase().includes("revenue")) ??
+        financeItems.find((item) => item.companyId === pkg.companyId && item.cashImpact > 0) ??
+        financeItems.find((item) => item.companyId === pkg.companyId) ??
+        null;
       const unit = pkg.strategic ? "lot" : "m2";
       const quantity = pkg.strategic ? 1 : Math.max(120, Math.round(pkg.budgetAmount / 8500));
       const unitCost = roundMetric(pkg.budgetAmount / quantity);
@@ -106,6 +124,35 @@ export function createBudgetBookService(repository: PlatformRepository) {
         changeOrders,
         projectBudgetHealth: project?.budgetHealth
       });
+      const pendingToBill = financeAnchor
+        ? roundCurrency(
+            pkg.budgetAmount *
+              clamp((1 - financeAnchor.closeReadiness / 100) * 0.18 + pkg.approvalHours * 0.0015, 0.02, 0.22)
+          )
+        : 0;
+      const pendingCollection = financeAnchor
+        ? roundCurrency(
+            pkg.budgetAmount *
+              clamp((1 - financeAnchor.closeReadiness / 100) * 0.26 + financeAnchor.urgentItems * 0.01, 0.03, 0.28)
+          )
+        : 0;
+      const overdueCollectionDays = financeAnchor
+        ? Math.round(
+            clamp(
+              pendingCollection / Math.max(pkg.budgetAmount, 1) * 30 +
+                (project?.budgetHealth === "critical" ? 14 : project?.budgetHealth === "warning" ? 8 : 3) +
+                financeAnchor.urgentItems * 2,
+              2,
+              75
+            )
+          )
+        : 0;
+      const collectionHealth =
+        overdueCollectionDays > 30 || pendingCollection > pkg.budgetAmount * 0.14
+          ? "critical"
+          : overdueCollectionDays > 18 || pendingCollection > pkg.budgetAmount * 0.06
+            ? "watch"
+            : "controlled";
 
       return {
         id: `bgt_${pkg.id}`,
@@ -128,6 +175,11 @@ export function createBudgetBookService(repository: PlatformRepository) {
         evidenceCount,
         changeOrders,
         generatorHealth,
+        collectionHealth,
+        collectionOwner: collectionOwnerFor(project?.segment ?? "", project?.client ?? ""),
+        pendingCollection,
+        pendingToBill,
+        overdueCollectionDays,
         procurementStatus: pkg.status,
         nextAction: pkg.nextAction,
         updatedAt: pkg.updatedAt
@@ -200,7 +252,10 @@ export function createBudgetBookService(repository: PlatformRepository) {
         executedBudget: roundCurrency(lines.reduce((sum, item) => sum + item.executedQuantity * item.unitCost, 0)),
         estimatedBudget: roundCurrency(lines.reduce((sum, item) => sum + item.estimatedQuantity * item.unitCost, 0)),
         pendingBudget: roundCurrency(lines.reduce((sum, item) => sum + item.pendingQuantity * item.unitCost, 0)),
-        criticalConcepts: lines.filter((item) => item.generatorHealth === "critical").length
+        criticalConcepts: lines.filter((item) => item.generatorHealth === "critical").length,
+        conceptsAtCashRisk: lines.filter(
+          (item) => item.collectionHealth === "critical" || item.overdueCollectionDays > 30
+        ).length
       },
       lines,
       risks,
@@ -227,6 +282,18 @@ export function createBudgetBookService(repository: PlatformRepository) {
         });
       }
 
+      const nextAction = input.nextAction.trim();
+      if (nextAction.length < 8) {
+        throw validationError("BUDGET_BOOK_INVALID_NEXT_ACTION", "Next action must be specific", {
+          lineId: line.id,
+          nextActionLength: nextAction.length
+        });
+      }
+
+      if (input.procurementStatus === line.procurementStatus && nextAction === line.nextAction) {
+        return line;
+      }
+
       if (input.procurementStatus === "awarded") {
         if (line.pendingQuantity > line.quantity * 0.12) {
           throw validationError(
@@ -249,6 +316,18 @@ export function createBudgetBookService(repository: PlatformRepository) {
             }
           );
         }
+
+        if (line.collectionHealth === "critical") {
+          throw validationError(
+            "BUDGET_BOOK_COLLECTION_RISK_OPEN",
+            "A concept cannot be awarded while collection exposure remains critical",
+            {
+              lineId: line.id,
+              overdueCollectionDays: line.overdueCollectionDays,
+              collectionHealth: line.collectionHealth
+            }
+          );
+        }
       }
 
       if (input.procurementStatus === "awaiting_approval" && line.evidenceCount < 2) {
@@ -265,7 +344,7 @@ export function createBudgetBookService(repository: PlatformRepository) {
       const updatedPackage = await repository.updateProcurementPackage({
         packageId: line.packageId,
         status: input.procurementStatus,
-        nextAction: input.nextAction
+        nextAction
       });
 
       await repository.addAuditEvent({

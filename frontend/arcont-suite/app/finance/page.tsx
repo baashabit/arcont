@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -10,8 +11,14 @@ import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
-import type { FinanceLedgerItemContract, FinanceOverviewContract } from "@/lib/contracts";
-import { fetchFinanceOverview, updateFinanceLedgerItem } from "@/lib/platform-api";
+import type { FinanceLedgerItemContract, FinanceOverviewContract, TreasuryPaymentRunsOverviewContract } from "@/lib/contracts";
+import {
+  fetchAccountsPayableOverview,
+  fetchFinanceOverview,
+  fetchSupplierMasterOverview,
+  fetchTreasuryPaymentRunsOverview,
+  updateFinanceLedgerItem
+} from "@/lib/platform-api";
 
 function satTone(status: FinanceLedgerItemContract["satStatus"]) {
   switch (status) {
@@ -60,9 +67,33 @@ function financeActionOptions(item: FinanceLedgerItemContract) {
   }
 }
 
+function buildFinanceStory(item: FinanceLedgerItemContract | null, riskCount: number) {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    cashSignal:
+      item.cashImpact < 0
+        ? `This signal is draining MXN ${Math.abs(item.cashImpact).toLocaleString()} from the operating cash posture.`
+        : `This signal is contributing MXN ${item.cashImpact.toLocaleString()} back into the operating cash posture.`,
+    operatingImpact:
+      item.urgentItems > 0
+        ? `${item.urgentItems} urgent items are still pushing approvals, payment sequencing or fiscal follow-up.`
+        : "Urgent queue is contained and this signal is no longer driving immediate payment pressure.",
+    releaseCondition:
+      riskCount > 0
+        ? `${riskCount} mapped blockers still need owner follow-through before this signal can be treated as controlled.`
+        : "No mapped blocker remains; only evidence discipline is needed to preserve control."
+  };
+}
+
 export default function FinancePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<FinanceOverviewContract | null>(null);
+  const [treasuryOverview, setTreasuryOverview] = useState<TreasuryPaymentRunsOverviewContract | null>(null);
+  const [accountsPayableOverview, setAccountsPayableOverview] = useState<Awaited<ReturnType<typeof fetchAccountsPayableOverview>> | null>(null);
+  const [supplierMasterOverview, setSupplierMasterOverview] = useState<Awaited<ReturnType<typeof fetchSupplierMasterOverview>> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -81,11 +112,25 @@ export default function FinancePage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchFinanceOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchFinanceOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchAccountsPayableOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchSupplierMasterOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchTreasuryPaymentRunsOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, accountsPayableResult, supplierMasterResult, treasuryResult]) => {
         if (cancelled) {
           return;
         }
@@ -96,6 +141,9 @@ export default function FinancePage() {
         }
 
         setOverview(result);
+        setAccountsPayableOverview(accountsPayableResult);
+        setSupplierMasterOverview(supplierMasterResult);
+        setTreasuryOverview(treasuryResult);
         setSelectedItemId((current) => current ?? result.focusItem?.id ?? result.items[0]?.id ?? null);
       })
       .finally(() => {
@@ -119,6 +167,7 @@ export default function FinancePage() {
     [overview, selectedItem]
   );
 
+  const selectedStory = useMemo(() => buildFinanceStory(selectedItem, selectedRisks.length), [selectedItem, selectedRisks.length]);
   const actionOptions = useMemo(() => (selectedItem ? financeActionOptions(selectedItem) : []), [selectedItem]);
 
   useEffect(() => {
@@ -186,8 +235,16 @@ export default function FinancePage() {
           cashPosition,
           urgentPayables,
           closeReadiness,
-          satStatus: satStatusSummary
+          satStatus: satStatusSummary,
+          supplierExceptions: current.summary.supplierExceptions,
+          paymentReadySuppliers: current.summary.paymentReadySuppliers,
+          blockedTreasuryRuns: current.summary.blockedTreasuryRuns,
+          unavailableTreasuryInvoices: current.summary.unavailableTreasuryInvoices,
+          overdueCollections: current.summary.overdueCollections,
+          criticalCollections: current.summary.criticalCollections,
+          financeChainPressure: current.summary.financeChainPressure
         },
+        command: current.command,
         items,
         focusItem: current.focusItem?.id === response.data?.id ? response.data : current.focusItem
       };
@@ -233,9 +290,74 @@ export default function FinancePage() {
                 footnote="Fiscal control signal tied to current exceptions and complements."
                 badge={{ label: "fiscal", tone: satTone(overview.summary.satStatus) }}
               />
+              <KpiCard
+                label="Supplier exceptions"
+                value={String(overview.summary.supplierExceptions)}
+                footnote="Suppliers still blocked, critical or fiscally incomplete."
+              />
+              <KpiCard
+                label="Finance chain pressure"
+                value={String(overview.summary.financeChainPressure)}
+                footnote="Combined friction across supplier master, AP and treasury release lane."
+              />
             </section>
 
+            {treasuryOverview ? (
+              <section className="grid cols3">
+                <KpiCard
+                  label="Treasury active runs"
+                  value={String(treasuryOverview.summary.activeRuns)}
+                  footnote="Payment batches still pending full execution."
+                />
+                <KpiCard
+                  label="Treasury ready"
+                  value={String(treasuryOverview.summary.readyRuns)}
+                  footnote="Runs that can move directly to bank execution."
+                />
+                <KpiCard
+                  label="Unavailable invoices"
+                  value={String(treasuryOverview.unavailableInvoices.length)}
+                  footnote="Invoices blocked from entering a new treasury batch."
+                />
+                <KpiCard
+                  label="Payment-ready suppliers"
+                  value={String(overview.summary.paymentReadySuppliers)}
+                  footnote="Suppliers already in complete + controlled fiscal posture."
+                />
+                <KpiCard
+                  label="AP blocked invoices"
+                  value={String(accountsPayableOverview?.summary.blockedInvoices ?? 0)}
+                  footnote="Invoices blocked before treasury can release them."
+                />
+              </section>
+            ) : null}
+
             <section className="grid cols2">
+              <Card
+                title="Finance chain command"
+                description="Supplier fiscal posture, accounts payable and treasury batch readiness now read as one release lane."
+                aside={
+                  <Badge tone={overview.command.laneStatus === "critical" ? "danger" : overview.command.laneStatus === "watch" ? "warning" : "success"}>
+                    {overview.command.laneStatus}
+                  </Badge>
+                }
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Supplier master</div><div>{supplierMasterOverview?.summary.criticalSuppliers ?? 0} critical suppliers and {supplierMasterOverview?.summary.incompletePackets ?? 0} incomplete packets</div></div>
+                  <div className="detailRow"><div className="detailLabel">Accounts payable</div><div>{accountsPayableOverview?.summary.blockedInvoices ?? 0} blocked invoices and {accountsPayableOverview?.summary.overdueInvoices ?? 0} overdue invoices</div></div>
+                  <div className="detailRow"><div className="detailLabel">Treasury</div><div>{treasuryOverview?.summary.blockedRuns ?? 0} blocked runs and {treasuryOverview?.unavailableInvoices.length ?? 0} ineligible invoices</div></div>
+                  <div className="detailRow"><div className="detailLabel">Executive read</div><div>{overview.command.headline}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Top action</div><div>{overview.command.topAction}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Next milestone</div><div>{overview.command.nextMilestone}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Blocked amount</div><div>MXN {overview.command.blockedAmount.toLocaleString()}</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/supplier-master">Supplier Master</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Accounts Payable</Link>
+                  <Link className="buttonGhost" href="/treasury/payment-runs">Treasury Runs</Link>
+                </div>
+              </Card>
+
               <Card title="Finance board" description="Treasury, payables and close-readiness in one live view.">
                 <FilterBar summary={`${overview.items.length} finance signals in the active tenant`}>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
@@ -365,6 +487,101 @@ export default function FinancePage() {
                     primaryAction={{ label: "Stay on finance", href: "/finance" }}
                   />
                 )}
+              </Card>
+            </section>
+
+            {treasuryOverview ? (
+              <section className="grid cols2">
+                <Card
+                  title="Treasury bridge"
+                  description="Finance and treasury are now linked through payment-run execution and invoice eligibility."
+                  aside={<Badge tone={treasuryOverview.summary.blockedRuns > 0 ? "danger" : treasuryOverview.summary.readyRuns > 0 ? "success" : "warning"}>{treasuryOverview.summary.blockedRuns > 0 ? "blocked" : treasuryOverview.summary.readyRuns > 0 ? "ready" : "watch"}</Badge>}
+                >
+                  <div className="detailGrid">
+                    <div className="detailRow"><div className="detailLabel">Scheduled amount</div><div>MXN {treasuryOverview.summary.scheduledAmount.toLocaleString()}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Executed runs</div><div>{treasuryOverview.summary.executedRuns}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Current focus</div><div>{treasuryOverview.focusRun?.code ?? "No active focus run"}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Next treasury action</div><div>{treasuryOverview.focusRun?.nextAction ?? "No treasury action pending"}</div></div>
+                  </div>
+                  <div className="row gap wrap" style={{ marginTop: 16 }}>
+                    <Link className="button" href="/treasury/payment-runs">Open Treasury Runs</Link>
+                    <Link className="buttonGhost" href="/accounts-payable">Open Accounts Payable</Link>
+                  </div>
+                </Card>
+
+                <Card title="Treasury eligibility blockers" description="Invoices that treasury cannot include in the next clean run.">
+                  {treasuryOverview.unavailableInvoices.length > 0 ? (
+                    <DataTable
+                      rows={treasuryOverview.unavailableInvoices.slice(0, 5)}
+                      columns={[
+                        {
+                          key: "invoice",
+                          label: "Invoice",
+                          render: (item) => (
+                            <div className="tableCellStack">
+                              <strong>{item.invoiceCode}</strong>
+                              <span className="tableCellMuted">{item.supplierName}</span>
+                            </div>
+                          )
+                        },
+                        { key: "reason", label: "Reason", render: (item) => item.reasonLabel },
+                        {
+                          key: "run",
+                          label: "Run",
+                          render: (item) => item.blockingRunCodes.length > 0 ? item.blockingRunCodes.join(", ") : "Not assigned"
+                        }
+                      ]}
+                    />
+                  ) : (
+                    <EmptyState title="Treasury lane clear" description="No invoice is blocked from entering a new payment run." />
+                  )}
+                </Card>
+              </section>
+            ) : null}
+
+            <section className="grid cols2">
+              <Card
+                title="Supplier fiscal bridge"
+                description="Finance now reads supplier fiscal readiness and exceptions as part of payment control."
+                aside={
+                  <Badge tone={overview.summary.supplierExceptions > 0 ? "warning" : "success"}>
+                    {overview.summary.supplierExceptions > 0 ? "exceptions open" : "supplier lane ready"}
+                  </Badge>
+                }
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Supplier exceptions</div><div>{overview.summary.supplierExceptions}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Payment-ready suppliers</div><div>{overview.summary.paymentReadySuppliers}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Why it matters</div><div>Invoices and treasury release now depend on real supplier fiscal posture, not only on invoice-side CFDI data.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/supplier-master">Open Supplier Master</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Open Accounts Payable</Link>
+                </div>
+              </Card>
+
+              <Card title="Operating implication" description="What finance leadership should read from supplier fiscal readiness right now.">
+                <p className="sectionText">
+                  {overview.summary.supplierExceptions > 0
+                    ? `${overview.summary.supplierExceptions} supplier fiscal exception(s) can still block invoice progression or payment sequencing even when the operational invoice looks complete.`
+                    : "Supplier fiscal posture is currently aligned enough to keep invoice progression and treasury sequencing clean."}
+                </p>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Cash signal" description="Direct treasury implication of the selected finance signal.">
+                <p className="sectionText">{selectedStory?.cashSignal ?? "Choose a finance signal to inspect its cash implication."}</p>
+              </Card>
+              <Card title="Operating impact" description="Why this signal matters beyond accounting.">
+                <p className="sectionText">
+                  {selectedStory?.operatingImpact ?? "Choose a finance signal to inspect current operating pressure."}
+                </p>
+              </Card>
+              <Card title="Release condition" description="What still needs to happen before control is real.">
+                <p className="sectionText">
+                  {selectedStory?.releaseCondition ?? "Choose a finance signal to inspect the release condition."}
+                </p>
               </Card>
             </section>
 

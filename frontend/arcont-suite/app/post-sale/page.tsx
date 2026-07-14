@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -11,7 +12,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { PostSaleCaseContract, PostSaleOverviewContract } from "@/lib/contracts";
-import { fetchPostSaleOverview, updatePostSaleCase } from "@/lib/platform-api";
+import {
+  fetchComplianceOverview,
+  fetchDocumentControlOverview,
+  fetchPostSaleOverview,
+  updatePostSaleCase
+} from "@/lib/platform-api";
 
 function healthTone(health: PostSaleCaseContract["health"]) {
   switch (health) {
@@ -154,9 +160,47 @@ function pickFocusItem(items: PostSaleCaseContract[]) {
   );
 }
 
+type PostSaleBridgeContext = {
+  compliance: NonNullable<Awaited<ReturnType<typeof fetchComplianceOverview>>>;
+  documents: NonNullable<Awaited<ReturnType<typeof fetchDocumentControlOverview>>>;
+} | null;
+
+function buildPostSaleBridge(item: PostSaleCaseContract | null, bridge: PostSaleBridgeContext) {
+  if (!item) {
+    return null;
+  }
+
+  const relatedCompliance =
+    bridge?.compliance.cases.find(
+      (candidate) =>
+        candidate.subject.includes(item.assetLabel) ||
+        candidate.unitOrContract.includes(item.assetLabel) ||
+        candidate.subject.includes(item.customerName) ||
+        candidate.unitOrContract.includes(item.customerName)
+    ) ??
+    bridge?.compliance.focusCase ??
+    null;
+  const relatedDocument =
+    bridge?.documents.items.find((candidate) => candidate.projectName === item.projectName) ?? bridge?.documents.focusItem ?? null;
+
+  return {
+    deliverySignal:
+      item.caseType === "delivery"
+        ? `${caseTypeLabel(item.caseType)} case is carrying ${item.openFindings} open findings with ${item.slaHoursRemaining} SLA hours remaining.`
+        : `${caseTypeLabel(item.caseType)} attention is active and still depends on disciplined closeout evidence.`,
+    complianceSignal: relatedCompliance
+      ? `${relatedCompliance.subject} is at ${relatedCompliance.documentCompletion}% completion with ${relatedCompliance.slaHoursRemaining} SLA hours remaining.`
+      : "No linked compliance folder is mapped for this case yet.",
+    documentSignal: relatedDocument
+      ? `${relatedDocument.documentType} "${relatedDocument.subject}" still carries ${relatedDocument.openComments} comments and ${relatedDocument.turnaroundDays} turnaround days.`
+      : "No linked document-control item is mapped for this case yet."
+  };
+}
+
 export default function PostSalePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<PostSaleOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<PostSaleBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
@@ -175,11 +219,21 @@ export default function PostSalePage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchPostSaleOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchPostSaleOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchComplianceOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchDocumentControlOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, compliance, documents]) => {
         if (cancelled) {
           return;
         }
@@ -191,6 +245,7 @@ export default function PostSalePage() {
 
         setOverview(result);
         setSelectedCaseId((current) => current ?? result.focusItem?.id ?? result.items[0]?.id ?? null);
+        setBridgeContext(compliance && documents ? { compliance, documents } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -212,6 +267,8 @@ export default function PostSalePage() {
     () => overview?.risks.filter((risk) => risk.caseId === selectedCase?.id) ?? [],
     [overview, selectedCase]
   );
+
+  const selectedStory = useMemo(() => buildPostSaleBridge(selectedCase, bridgeContext), [bridgeContext, selectedCase]);
 
   const actionOptions = useMemo(() => (selectedCase ? postSaleActionOptions(selectedCase) : []), [selectedCase]);
 
@@ -317,6 +374,24 @@ export default function PostSalePage() {
                 value={String(overview.summary.pendingCustomerSignoff)}
                 footnote="Cases waiting for explicit customer validation before clean closure."
               />
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Customer delivery signal" description="What the selected case means for real handover or warranty continuity.">
+                <p className="sectionText">
+                  {selectedStory?.deliverySignal ?? "Choose a case to inspect delivery continuity."}
+                </p>
+              </Card>
+              <Card title="Compliance folder" description="Linked legal or handover completion posture behind the case.">
+                <p className="sectionText">
+                  {selectedStory?.complianceSignal ?? "Choose a case to inspect linked compliance posture."}
+                </p>
+              </Card>
+              <Card title="Document dependency" description="Document-control signal that can still delay customer closure.">
+                <p className="sectionText">
+                  {selectedStory?.documentSignal ?? "Choose a case to inspect document dependency."}
+                </p>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -425,6 +500,23 @@ export default function PostSalePage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/compliance">
+                          Open compliance
+                        </Link>
+                        <Link className="buttonGhost" href="/document-control">
+                          Open document control
+                        </Link>
+                        <Link className="buttonGhost" href="/quality">
+                          Open quality
+                        </Link>
+                        <Link className="buttonGhost" href="/projects">
+                          Open projects
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">SLA posture</div>
                       <div className="tableCellStack">
                         <strong>{selectedCase.slaHoursRemaining} hours remaining</strong>
@@ -446,6 +538,8 @@ export default function PostSalePage() {
                       <div className="tableCellStack">
                         <span className="tableCellMuted">Closure requires zero open findings across the selected case.</span>
                         <span className="tableCellMuted">Closure is blocked if the SLA remains critically breached or the case health is critical.</span>
+                        <span className="tableCellMuted">Customer validation is blocked while findings remain open or health stays critical.</span>
+                        <span className="tableCellMuted">Closure now also requires the case to come from customer validation.</span>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -457,7 +551,16 @@ export default function PostSalePage() {
                               key={option.label}
                               className={option.status === "blocked" ? "buttonGhost" : "button"}
                               type="button"
-                              disabled={isSaving}
+                              disabled={
+                                isSaving ||
+                                (option.status === "customer_validation" &&
+                                  (selectedCase.openFindings > 0 || selectedCase.health === "critical")) ||
+                                (option.status === "closed" &&
+                                  (selectedCase.openFindings > 0 ||
+                                    selectedCase.slaHoursRemaining < -4 ||
+                                    selectedCase.health === "critical" ||
+                                    selectedCase.status !== "customer_validation"))
+                              }
                               onClick={() => void handleCaseAction(option.status, option.nextAction)}
                             >
                               {isSaving ? "Saving..." : option.label}

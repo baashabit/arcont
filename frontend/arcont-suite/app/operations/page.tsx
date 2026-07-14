@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -11,17 +12,26 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import {
+  fetchCashFlowOverview,
   fetchComplianceOverview,
+  fetchDailyLogOverview,
   fetchDocumentControlOverview,
+  fetchEquipmentOverview,
   fetchEstimationCollectionOverview,
+  fetchFieldMaterialRequestsOverview,
   fetchFinanceOverview,
   fetchHrOverview,
   fetchIntegrationOverview,
   fetchInventoryMovementsOverview,
   fetchInventoryReceivingOverview,
   fetchInventoryOverview,
+  fetchPostSaleOverview,
   fetchProcurementOverview,
-  fetchProjectsOverview
+  fetchProcurementPurchaseOrdersOverview,
+  fetchProjectsOverview,
+  fetchQualityOverview,
+  fetchSupplierControlOverview,
+  fetchSubcontractOverview
 } from "@/lib/platform-api";
 
 type BlackboardTask = {
@@ -79,6 +89,51 @@ function deriveLaneFromSignal(input: {
   return "in_progress" as const;
 }
 
+function primaryHrefForTask(task: BlackboardTask) {
+  switch (task.domain) {
+    case "Projects":
+      return "/projects";
+    case "Daily log":
+      return "/daily-log";
+    case "Procurement":
+      return "/procurement/requisitions";
+    case "POs":
+      return "/procurement/purchase-orders";
+    case "Supplier control":
+      return "/supplier-control";
+    case "Inventory":
+      return "/inventory";
+    case "Receiving":
+      return "/inventory/receiving";
+    case "Movements":
+      return "/inventory/movements";
+    case "Collections":
+      return "/estimations";
+    case "Cash flow":
+      return "/cash-flow";
+    case "Finance":
+      return "/finance";
+    case "HR":
+      return "/hr";
+    case "Quality":
+      return "/quality";
+    case "Subcontracts":
+      return "/subcontracts";
+    case "Equipment":
+      return "/equipment";
+    case "Compliance":
+      return "/compliance";
+    case "Post-sale":
+      return "/post-sale";
+    case "Integrations":
+      return "/integrations";
+    case "Document control":
+      return "/document-control";
+    default:
+      return "/operations";
+  }
+}
+
 export default function OperationsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [tasks, setTasks] = useState<BlackboardTask[]>([]);
@@ -97,14 +152,23 @@ export default function OperationsPage() {
 
     void Promise.allSettled([
       fetchProjectsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchDailyLogOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchFieldMaterialRequestsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchProcurementOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchProcurementPurchaseOrdersOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchSupplierControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchQualityOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchSubcontractOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchEquipmentOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryReceivingOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryMovementsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchEstimationCollectionOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchCashFlowOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchFinanceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchHrOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchComplianceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchPostSaleOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchIntegrationOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchDocumentControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
     ])
@@ -115,14 +179,23 @@ export default function OperationsPage() {
 
         const [
           projectsResult,
+          dailyLogResult,
+          fieldMaterialsResult,
           procurementResult,
+          procurementPurchaseOrdersResult,
+          supplierControlResult,
+          qualityResult,
+          subcontractsResult,
+          equipmentResult,
           inventoryResult,
           inventoryReceivingResult,
           inventoryMovementsResult,
           estimationsResult,
+          cashFlowResult,
           financeResult,
           hrResult,
           complianceResult,
+          postSaleResult,
           integrationsResult,
           documentControlResult
         ] = results;
@@ -142,6 +215,67 @@ export default function OperationsPage() {
               severity: risk.severity
             });
           }
+
+          if (projectsResult.value.summary.executionRiskProjects > 0) {
+            nextTasks.push({
+              id: "projects_execution_risk",
+              lane: "risk",
+              title: "Projects already carry compounded execution risk",
+              detail: `${projectsResult.value.summary.executionRiskProjects} projects are under field, quality or subcontract pressure`,
+              owner: projectsResult.value.focusProject?.client ?? "PMO",
+              dueLabel: projectsResult.value.focusProject?.nextMilestone ?? "Portfolio recovery review",
+              domain: "Projects",
+              severity: "critical"
+            });
+          }
+        }
+
+        if (dailyLogResult.status === "fulfilled" && dailyLogResult.value && dailyLogResult.value.summary.executionRiskLogs > 0) {
+          nextTasks.push({
+            id: "daily_log_execution_risk",
+            lane: "risk",
+            title: "Field logs are already flagging execution pressure",
+            detail: `${dailyLogResult.value.summary.executionRiskLogs} logs carry blocker, quality or subcontract risk`,
+            owner: dailyLogResult.value.focusEntry?.supervisor ?? "Field control",
+            dueLabel: dailyLogResult.value.focusEntry?.frontName ?? "Field log escalation",
+            domain: "Daily log",
+            severity: "critical"
+          });
+        }
+
+        if (fieldMaterialsResult.status === "fulfilled" && fieldMaterialsResult.value) {
+          const focusRequest = fieldMaterialsResult.value.focusRequest;
+
+          if (focusRequest) {
+            nextTasks.push({
+              id: focusRequest.id,
+              lane: deriveLaneFromSignal({
+                severity: focusRequest.urgency === "critical" ? "critical" : focusRequest.urgency === "watch" ? "warning" : "info"
+              }),
+              title: focusRequest.summary,
+              detail: `${focusRequest.projectName} · ${focusRequest.frontName} · ${focusRequest.requestedVolume}`,
+              owner: focusRequest.requestedBy,
+              dueLabel: focusRequest.nextAction,
+              domain: "Field materials",
+              severity: focusRequest.urgency === "critical" ? "critical" : focusRequest.urgency === "watch" ? "warning" : "info"
+            });
+          }
+
+          if (
+            fieldMaterialsResult.value.summary.criticalRequests > 0 ||
+            fieldMaterialsResult.value.summary.linkedRequisitions > 0
+          ) {
+            nextTasks.push({
+              id: "field_material_chain_pressure",
+              lane: fieldMaterialsResult.value.summary.criticalRequests > 0 ? "risk" : "in_progress",
+              title: "Field material demand is already feeding the supply chain",
+              detail: `${fieldMaterialsResult.value.summary.linkedRequisitions} linked requisitions and ${fieldMaterialsResult.value.summary.criticalRequests} critical field requests remain active`,
+              owner: focusRequest?.requestedBy ?? "Field supply",
+              dueLabel: focusRequest?.nextAction ?? "Field-to-procurement follow-up",
+              domain: "Field materials",
+              severity: fieldMaterialsResult.value.summary.criticalRequests > 0 ? "critical" : "warning"
+            });
+          }
         }
 
         if (procurementResult.status === "fulfilled" && procurementResult.value) {
@@ -155,6 +289,52 @@ export default function OperationsPage() {
               dueLabel: risk.status,
               domain: "Procurement",
               severity: risk.severity
+            });
+          }
+        }
+
+        if (procurementPurchaseOrdersResult.status === "fulfilled" && procurementPurchaseOrdersResult.value) {
+          for (const risk of procurementPurchaseOrdersResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · purchase order execution`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "POs",
+              severity: risk.severity
+            });
+          }
+        }
+
+        if (supplierControlResult.status === "fulfilled" && supplierControlResult.value) {
+          for (const risk of supplierControlResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · supplier dependency`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Supplier control",
+              severity: risk.severity
+            });
+          }
+
+          if (
+            supplierControlResult.value.summary.criticalSuppliers > 0 ||
+            supplierControlResult.value.summary.concentratedSuppliers > 0
+          ) {
+            nextTasks.push({
+              id: "supplier_control_execution_risk",
+              lane: "risk",
+              title: "Supplier concentration or alerts are already threatening execution",
+              detail: `${supplierControlResult.value.summary.criticalSuppliers} critical suppliers and ${supplierControlResult.value.summary.complianceAlerts} active alerts remain open`,
+              owner: supplierControlResult.value.focusLine?.supplierName ?? "Supplier control",
+              dueLabel: supplierControlResult.value.focusLine?.nextAction ?? "Supplier escalation",
+              domain: "Supplier control",
+              severity: "critical"
             });
           }
         }
@@ -187,6 +367,19 @@ export default function OperationsPage() {
               severity: risk.severity
             });
           }
+
+          if (inventoryReceivingResult.value.summary.receiptsAtCommercialRisk > 0) {
+            nextTasks.push({
+              id: "inventory_receiving_commercial_risk",
+              lane: "risk",
+              title: "Commercial blockers are still attached to inbound receipts",
+              detail: `${inventoryReceivingResult.value.summary.receiptsAtCommercialRisk} receipts still depend on blocked PO posture or fiscal risk`,
+              owner: inventoryReceivingResult.value.focusReceipt?.purchaseOrderOwner ?? "Procurement control",
+              dueLabel: inventoryReceivingResult.value.focusReceipt?.purchaseReference ?? "Linked PO review",
+              domain: "Receiving",
+              severity: "critical"
+            });
+          }
         }
 
         if (inventoryMovementsResult.status === "fulfilled" && inventoryMovementsResult.value) {
@@ -202,6 +395,19 @@ export default function OperationsPage() {
               severity: risk.severity
             });
           }
+
+          if (inventoryMovementsResult.value.summary.movementsAtCommercialRisk > 0) {
+            nextTasks.push({
+              id: "inventory_movements_commercial_risk",
+              lane: "risk",
+              title: "Commercial blockers still travel downstream into stock movements",
+              detail: `${inventoryMovementsResult.value.summary.movementsAtCommercialRisk} movements still depend on blocked PO posture or fiscal risk`,
+              owner: inventoryMovementsResult.value.focusMovement?.purchaseOrderOwner ?? "Procurement control",
+              dueLabel: inventoryMovementsResult.value.focusMovement?.purchaseReference ?? "Linked PO review",
+              domain: "Movements",
+              severity: "critical"
+            });
+          }
         }
 
         if (estimationsResult.status === "fulfilled" && estimationsResult.value) {
@@ -215,6 +421,49 @@ export default function OperationsPage() {
               dueLabel: exception.status,
               domain: "Collections",
               severity: exception.severity
+            });
+          }
+
+          if (estimationsResult.value.summary.overdueCollections > 0) {
+            nextTasks.push({
+              id: "estimations_overdue_collections",
+              lane: "risk",
+              title: "Overdue collection tranches already exceed their expected window",
+              detail: `${estimationsResult.value.summary.overdueCollections} project collection lines need escalation`,
+              owner: estimationsResult.value.focusLine?.collectionOwner ?? "Collections",
+              dueLabel: estimationsResult.value.focusLine
+                ? `${estimationsResult.value.focusLine.oldestPendingDays}d oldest tranche`
+                : "Collection aging review",
+              domain: "Collections",
+              severity: "critical"
+            });
+          }
+        }
+
+        if (cashFlowResult.status === "fulfilled" && cashFlowResult.value) {
+          for (const risk of cashFlowResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · treasury`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Cash flow",
+              severity: risk.severity
+            });
+          }
+
+          if (cashFlowResult.value.summary.weeklyNet < 0 || cashFlowResult.value.summary.criticalStreams > 0) {
+            nextTasks.push({
+              id: "cash_flow_treasury_pressure",
+              lane: "risk",
+              title: "Treasury already reflects pressure from collections, tax or payables",
+              detail: `${cashFlowResult.value.summary.criticalStreams} critical treasury streams and MXN ${cashFlowResult.value.summary.weeklyNet.toLocaleString()} weekly net`,
+              owner: cashFlowResult.value.focusLine?.streamName ?? "Treasury",
+              dueLabel: cashFlowResult.value.focusLine?.nextAction ?? "Treasury review",
+              domain: "Cash flow",
+              severity: "critical"
             });
           }
         }
@@ -249,6 +498,63 @@ export default function OperationsPage() {
           }
         }
 
+        if (qualityResult.status === "fulfilled" && qualityResult.value && qualityResult.value.summary.executionRiskInspections > 0) {
+          nextTasks.push({
+            id: "quality_execution_risk",
+            lane: "risk",
+            title: "Quality release is still being dragged by field issues",
+            detail: `${qualityResult.value.summary.executionRiskInspections} inspections still sit under flagged logs, blocked projects or heavy findings`,
+            owner: qualityResult.value.focusInspection?.contractorName ?? "Quality",
+            dueLabel: qualityResult.value.focusInspection?.projectName ?? "Release recovery",
+            domain: "Quality",
+            severity: "critical"
+          });
+        }
+
+        if (subcontractsResult.status === "fulfilled" && subcontractsResult.value && subcontractsResult.value.summary.executionRiskSubcontracts > 0) {
+          nextTasks.push({
+            id: "subcontracts_execution_risk",
+            lane: "risk",
+            title: "Subcontract continuity is already under operating pressure",
+            detail: `${subcontractsResult.value.summary.executionRiskSubcontracts} subcontract lines remain exposed through field, quality or destajo posture`,
+            owner: subcontractsResult.value.focusLine?.contractorName ?? "Subcontracts",
+            dueLabel: subcontractsResult.value.focusLine?.frontName ?? "Subcontract recovery",
+            domain: "Subcontracts",
+            severity: "critical"
+          });
+        }
+
+        if (equipmentResult.status === "fulfilled" && equipmentResult.value) {
+          for (const risk of equipmentResult.value.risks.slice(0, 2)) {
+            nextTasks.push({
+              id: risk.id,
+              lane: deriveLaneFromSignal({ severity: risk.severity }),
+              title: risk.title,
+              detail: `${risk.category} · equipment`,
+              owner: risk.owner,
+              dueLabel: risk.status,
+              domain: "Equipment",
+              severity: risk.severity
+            });
+          }
+
+          if (
+            equipmentResult.value.summary.overdueMaintenance > 0 ||
+            equipmentResult.value.summary.criticalOpenFailures > 0
+          ) {
+            nextTasks.push({
+              id: "equipment_front_pressure",
+              lane: "risk",
+              title: "Equipment readiness is already constraining active fronts",
+              detail: `${equipmentResult.value.summary.overdueMaintenance} overdue maintenance items and ${equipmentResult.value.summary.criticalOpenFailures} critical failures remain open`,
+              owner: equipmentResult.value.focusMachine?.machineName ?? "Equipment control",
+              dueLabel: equipmentResult.value.focusMachine?.nextAction ?? "Equipment recovery",
+              domain: "Equipment",
+              severity: "critical"
+            });
+          }
+        }
+
         if (complianceResult.status === "fulfilled" && complianceResult.value) {
           for (const item of complianceResult.value.cases.slice(0, 2)) {
             nextTasks.push({
@@ -263,6 +569,37 @@ export default function OperationsPage() {
               dueLabel: `${item.slaHoursRemaining}h`,
               domain: "Compliance",
               severity: item.health === "critical" ? "critical" : item.health === "watch" ? "warning" : "info"
+            });
+          }
+        }
+
+        if (postSaleResult.status === "fulfilled" && postSaleResult.value) {
+          for (const item of postSaleResult.value.items.slice(0, 2)) {
+            nextTasks.push({
+              id: item.id,
+              lane: deriveLaneFromSignal({
+                severity: item.health === "critical" ? "critical" : item.health === "watch" ? "warning" : "info",
+                hours: item.slaHoursRemaining
+              }),
+              title: `${item.assetLabel} · ${item.caseType}`,
+              detail: `${item.customerName} · ${item.projectName}`,
+              owner: item.owner,
+              dueLabel: `${item.slaHoursRemaining}h`,
+              domain: "Post-sale",
+              severity: item.health === "critical" ? "critical" : item.health === "watch" ? "warning" : "info"
+            });
+          }
+
+          if (postSaleResult.value.summary.overdueSlaCases > 0) {
+            nextTasks.push({
+              id: "post_sale_overdue_sla",
+              lane: "risk",
+              title: "Customer delivery or warranty cases are already outside SLA",
+              detail: `${postSaleResult.value.summary.overdueSlaCases} cases already breached their expected response window`,
+              owner: postSaleResult.value.focusItem?.owner ?? "Post-sale",
+              dueLabel: postSaleResult.value.focusItem?.nextAction ?? "Customer recovery",
+              domain: "Post-sale",
+              severity: "critical"
             });
           }
         }
@@ -295,6 +632,22 @@ export default function OperationsPage() {
               dueLabel: `${item.turnaroundDays} d`,
               domain: "Document control",
               severity: item.health === "critical" ? "critical" : item.health === "watch" ? "warning" : "info"
+            });
+          }
+
+          if (
+            documentControlResult.value.summary.openRfis > 0 ||
+            documentControlResult.value.summary.activeSubmittals > 0
+          ) {
+            nextTasks.push({
+              id: "document_control_execution_pressure",
+              lane: "risk",
+              title: "Field execution is still feeding document coordination pressure",
+              detail: `${documentControlResult.value.summary.openRfis} open RFIs and ${documentControlResult.value.summary.activeSubmittals} active submittals are still live in execution flow`,
+              owner: documentControlResult.value.focusItem?.owner ?? "Document control",
+              dueLabel: documentControlResult.value.focusItem?.nextAction ?? "Document resolution",
+              domain: "Document control",
+              severity: "critical"
             });
           }
         }
@@ -337,9 +690,97 @@ export default function OperationsPage() {
       openTasks: openTasks.length,
       dueSoon: dueSoon.length,
       complianceRate,
-      criticalResolved
+      criticalResolved,
+      fieldChainPressure: tasks.filter((task) =>
+        ["Daily log", "Field materials", "Quality", "Equipment", "Document control", "Procurement", "POs"].includes(task.domain)
+      ).length
     };
   }, [lanes.risk.length, tasks]);
+
+  const priorityActions = useMemo(
+    () => tasks.filter((task) => task.lane === "risk" || task.severity === "critical").slice(0, 4),
+    [tasks]
+  );
+  const ownerWorkload = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        owner: string;
+        total: number;
+        risk: number;
+        domains: Set<string>;
+        topSignal: string;
+      }
+    >();
+
+    for (const task of tasks) {
+      const current = grouped.get(task.owner);
+      if (current) {
+        current.total += 1;
+        current.risk += task.lane === "risk" || task.severity === "critical" ? 1 : 0;
+        current.domains.add(task.domain);
+      } else {
+        grouped.set(task.owner, {
+          owner: task.owner,
+          total: 1,
+          risk: task.lane === "risk" || task.severity === "critical" ? 1 : 0,
+          domains: new Set([task.domain]),
+          topSignal: task.title
+        });
+      }
+    }
+
+    return Array.from(grouped.values())
+      .map((item) => ({
+        ...item,
+        domains: Array.from(item.domains)
+      }))
+      .sort((left, right) => {
+        if (left.risk !== right.risk) {
+          return right.risk - left.risk;
+        }
+        return right.total - left.total;
+      })
+      .slice(0, 6);
+  }, [tasks]);
+  const domainBlockers = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        domain: string;
+        total: number;
+        risk: number;
+        owner: string;
+        topSignal: string;
+      }
+    >();
+
+    for (const task of tasks) {
+      const current = grouped.get(task.domain);
+      const taskRisk = task.lane === "risk" || task.severity === "critical" ? 1 : 0;
+      if (current) {
+        current.total += 1;
+        current.risk += taskRisk;
+      } else {
+        grouped.set(task.domain, {
+          domain: task.domain,
+          total: 1,
+          risk: taskRisk,
+          owner: task.owner,
+          topSignal: task.title
+        });
+      }
+    }
+
+    return Array.from(grouped.values())
+      .sort((left, right) => {
+        if (left.risk !== right.risk) {
+          return right.risk - left.risk;
+        }
+        return right.total - left.total;
+      })
+      .slice(0, 6);
+  }, [tasks]);
 
   return (
     <AppShell
@@ -371,12 +812,16 @@ export default function OperationsPage() {
                     <strong>{summary.dueSoon}</strong>
                     <span>Signals demanding immediate follow-up</span>
                   </div>
-                  <div className="heroMetric">
-                    <strong>{summary.complianceRate}%</strong>
-                    <span>Rolling operating compliance across the current board</span>
-                  </div>
+                <div className="heroMetric">
+                  <strong>{summary.complianceRate}%</strong>
+                  <span>Rolling operating compliance across the current board</span>
+                </div>
+                <div className="heroMetric">
+                  <strong>{summary.fieldChainPressure}</strong>
+                  <span>Signals already traveling across field, quality, equipment, docs and buying flow</span>
                 </div>
               </div>
+            </div>
 
               <Card
                 title="Board posture"
@@ -394,7 +839,7 @@ export default function OperationsPage() {
                   </div>
                 </div>
                 <p className="sectionText">
-                  This board now blends projects, procurement, finance, workforce, compliance, integrations and document control.
+                  This board now blends projects, field capture, quality, equipment, procurement, finance, compliance, integrations and document control.
                 </p>
               </Card>
             </section>
@@ -419,6 +864,11 @@ export default function OperationsPage() {
                 label="Risk lane"
                 value={String(lanes.risk.length)}
                 footnote="Signals already blocked, overdue or critical."
+              />
+              <KpiCard
+                label="Field chain"
+                value={String(summary.fieldChainPressure)}
+                footnote="Signals already propagating from field into quality, equipment, documents or buying."
               />
             </section>
 
@@ -489,6 +939,38 @@ export default function OperationsPage() {
               </Card>
             </section>
 
+            <section className="grid cols2">
+              <Card title="Jump Actions" description="Open the exact module owning the current blocker instead of chasing it manually.">
+                <div className="list">
+                  {priorityActions.map((task) => (
+                    <div className="listItem" key={task.id}>
+                      <div>
+                        <strong>{task.title}</strong>
+                        <p>{task.domain} · {task.owner}</p>
+                      </div>
+                      <div className="row gap wrap">
+                        <Badge tone={severityTone(task.severity)}>{task.dueLabel}</Badge>
+                        <Link className="buttonGhost" href={primaryHrefForTask(task)}>
+                          Open
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card title="Flow Shortcuts" description="Direct entry points into the cross-domain chains that are already active.">
+                <div className="row gap wrap">
+                  <Link className="button" href="/procurement/requisitions">Field to requisitions</Link>
+                  <Link className="buttonGhost" href="/procurement/purchase-orders">Requisitions to PO</Link>
+                  <Link className="buttonGhost" href="/inventory/receiving">PO to receiving</Link>
+                  <Link className="buttonGhost" href="/supplier-control">Supplier blockers</Link>
+                  <Link className="buttonGhost" href="/equipment">Equipment blockers</Link>
+                  <Link className="buttonGhost" href="/treasury/payment-runs">Treasury release</Link>
+                </div>
+              </Card>
+            </section>
+
             <section className="grid cols3">
               <Card title="Execution indicators" description="Simple cross-domain quality metrics for the current board.">
                 <div className="detailGrid">
@@ -503,6 +985,10 @@ export default function OperationsPage() {
                   <div className="detailRow">
                     <div className="detailLabel">Need reassignment</div>
                     <div>{tasks.filter((task) => task.severity !== "info").length}</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Field chain</div>
+                    <div>{summary.fieldChainPressure} signals</div>
                   </div>
                 </div>
               </Card>
@@ -524,13 +1010,56 @@ export default function OperationsPage() {
                 </div>
               </Card>
 
-              <Card title="Why this matters" description="What improves versus keeping each signal buried in its own module.">
-                <div className="tagRow">
-                  <span className="tag">Priorities visible</span>
-                  <span className="tag">Owners visible</span>
-                  <span className="tag">Cross-domain focus</span>
-                  <span className="tag">Less chasing</span>
-                  <span className="tag">Weekly execution</span>
+              <Card title="Owner workload" description="Who is currently carrying the heaviest cross-domain pressure.">
+                <div className="list">
+                  {ownerWorkload.map((item) => (
+                    <div className="listItem" key={item.owner}>
+                      <div>
+                        <strong>{item.owner}</strong>
+                        <p>{item.topSignal}</p>
+                      </div>
+                      <div className="tableCellStack" style={{ alignItems: "flex-end" }}>
+                        <Badge tone={item.risk > 0 ? "danger" : "info"}>{item.risk} risk</Badge>
+                        <span className="tableCellMuted">{item.total} signals · {item.domains.join(", ")}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card title="Top Blockers by Domain" description="Which domains are currently concentrating the highest operational pressure.">
+                <div className="list">
+                  {domainBlockers.map((item) => (
+                    <div className="listItem" key={item.domain}>
+                      <div>
+                        <strong>{item.domain}</strong>
+                        <p>{item.topSignal}</p>
+                      </div>
+                      <div className="tableCellStack" style={{ alignItems: "flex-end" }}>
+                        <Badge tone={item.risk > 0 ? "danger" : "info"}>{item.risk} risk</Badge>
+                        <span className="tableCellMuted">{item.total} signals · {item.owner}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card title="Weekly Handoff" description="Suggested weekly review sequence for the current operating pressure.">
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">1. Field to buying</div>
+                    <div>Review field materials, requisitions and PO continuity before site blockers age further.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">2. Supplier and asset</div>
+                    <div>Escalate concentrated suppliers and critical equipment before execution windows are lost.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">3. Finance release</div>
+                    <div>Close collections, payables and treasury blockers after supply posture is clarified.</div>
+                  </div>
                 </div>
               </Card>
             </section>

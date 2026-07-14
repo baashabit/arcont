@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -11,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { ProjectPortfolioItemContract, ProjectPortfolioOverviewContract } from "@/lib/contracts";
-import { fetchProjectsOverview, updateProjectPortfolioItem } from "@/lib/platform-api";
+import { fetchEquipmentOverview, fetchProjectsOverview, updateProjectPortfolioItem } from "@/lib/platform-api";
 
 function statusTone(status: ProjectPortfolioItemContract["status"]) {
   switch (status) {
@@ -98,9 +99,84 @@ function projectActionOptions(project: ProjectPortfolioItemContract) {
   }
 }
 
+function recomputeSummary(projects: ProjectPortfolioItemContract[]) {
+  const activeProjects = projects.filter((project) => ["active", "at_risk", "blocked"].includes(project.status));
+  return {
+    activeProjects: activeProjects.length,
+    averageProgress:
+      activeProjects.length > 0
+        ? Number((activeProjects.reduce((sum, project) => sum + project.progress, 0) / activeProjects.length).toFixed(1))
+        : 0,
+    qualityHolds: activeProjects.reduce((sum, project) => sum + project.qualityHolds, 0),
+    permitBlockers: activeProjects.reduce((sum, project) => sum + project.permitBlockers, 0),
+    executionRiskProjects: activeProjects.filter(
+      (project) =>
+        project.latestDailyLogStatus === "flagged" ||
+        project.subcontractHealth === "critical" ||
+        project.qualityReleaseReadiness < 75
+    ).length
+  };
+}
+
+function pickFocusProject(projects: ProjectPortfolioItemContract[]) {
+  const activeProjects = projects.filter((project) => ["active", "at_risk", "blocked"].includes(project.status));
+  return (
+    activeProjects
+      .slice()
+      .sort((left, right) => {
+        if (left.latestDailyLogStatus === "flagged" && right.latestDailyLogStatus !== "flagged") {
+          return -1;
+        }
+
+        if (left.latestDailyLogStatus !== "flagged" && right.latestDailyLogStatus === "flagged") {
+          return 1;
+        }
+
+        if (left.status === "at_risk" && right.status !== "at_risk") {
+          return -1;
+        }
+
+        if (left.status !== "at_risk" && right.status === "at_risk") {
+          return 1;
+        }
+
+        return right.scheduleVarianceDays - left.scheduleVarianceDays;
+      })[0] ?? null
+  );
+}
+
+type ProjectEquipmentBridge = {
+  equipment: NonNullable<Awaited<ReturnType<typeof fetchEquipmentOverview>>>;
+} | null;
+
+function buildProjectEquipmentStory(project: ProjectPortfolioItemContract | null, bridge: ProjectEquipmentBridge) {
+  if (!project) {
+    return null;
+  }
+
+  const linkedMachines = bridge?.equipment.machines.filter((item) => item.projectName === project.name) ?? [];
+  const constrainedMachines = linkedMachines.filter((item) => item.status !== "available" || item.health !== "healthy");
+
+  return {
+    equipmentCoverage:
+      linkedMachines.length > 0
+        ? `${linkedMachines.length} tracked machines are mapped to this project, with ${constrainedMachines.length} already under constraint.`
+        : "No tracked equipment is currently mapped to this project.",
+    fieldExecution:
+      constrainedMachines.length > 0
+        ? `${constrainedMachines[0]?.machineName ?? "A critical machine"} is already affecting field continuity in ${constrainedMachines[0]?.frontName ?? "an active front"}.`
+        : "Equipment posture is not currently the leading execution constraint on this project.",
+    dispatchSignal:
+      constrainedMachines.length > 0
+        ? constrainedMachines[0]?.nextAction ?? "Recover constrained machine availability before the next production cycle."
+        : "Dispatch posture remains stable across mapped equipment."
+  };
+}
+
 export default function ProjectsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<ProjectPortfolioOverviewContract | null>(null);
+  const [bridgeContext, setBridgeContext] = useState<ProjectEquipmentBridge>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -119,11 +195,17 @@ export default function ProjectsPage() {
     setIsLoading(true);
     setError(null);
 
-    void fetchProjectsOverview(activeCompany.id, {
-      apiBaseUrl,
-      accessToken: session.accessToken
-    })
-      .then((result) => {
+    void Promise.all([
+      fetchProjectsOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
+      fetchEquipmentOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      })
+    ])
+      .then(([result, equipment]) => {
         if (cancelled) {
           return;
         }
@@ -135,6 +217,7 @@ export default function ProjectsPage() {
 
         setOverview(result);
         setSelectedProjectId((current) => current ?? result.focusProject?.id ?? result.projects[0]?.id ?? null);
+        setBridgeContext(equipment ? { equipment } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -155,6 +238,11 @@ export default function ProjectsPage() {
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.projectId === selectedProject?.id) ?? [],
     [overview, selectedProject]
+  );
+
+  const selectedStory = useMemo(
+    () => buildProjectEquipmentStory(selectedProject, bridgeContext),
+    [bridgeContext, selectedProject]
   );
 
   const actionOptions = useMemo(() => (selectedProject ? projectActionOptions(selectedProject) : []), [selectedProject]);
@@ -208,20 +296,12 @@ export default function ProjectsPage() {
       }
 
       const projects = current.projects.map((project) => (project.id === response.data?.id ? response.data : project));
-      const activeProjects = projects.filter((project) => ["active", "at_risk", "blocked"].includes(project.status));
-      const averageProgress =
-        activeProjects.length > 0 ? Number((activeProjects.reduce((sum, project) => sum + project.progress, 0) / activeProjects.length).toFixed(1)) : 0;
 
       return {
         ...current,
-        summary: {
-          activeProjects: activeProjects.length,
-          averageProgress,
-          qualityHolds: activeProjects.reduce((sum, project) => sum + project.qualityHolds, 0),
-          permitBlockers: activeProjects.reduce((sum, project) => sum + project.permitBlockers, 0)
-        },
+        summary: recomputeSummary(projects),
         projects,
-        focusProject: current.focusProject?.id === response.data?.id ? response.data : current.focusProject
+        focusProject: pickFocusProject(projects)
       };
     });
 
@@ -262,6 +342,29 @@ export default function ProjectsPage() {
                 footnote="Critical blockers tied to permits, release or supervision."
                 badge={{ label: "watchlist", tone: overview.summary.permitBlockers > 0 ? "danger" : "success" }}
               />
+              <KpiCard
+                label="Execution risk"
+                value={String(overview.summary.executionRiskProjects)}
+                footnote="Projects where field log, quality or subcontract posture already signal execution risk."
+              />
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Equipment coverage" description="How much real field equipment is mapped to the selected project.">
+                <p className="sectionText">
+                  {selectedStory?.equipmentCoverage ?? "Choose a project to inspect equipment coverage."}
+                </p>
+              </Card>
+              <Card title="Field execution impact" description="What equipment posture means for the active production sequence.">
+                <p className="sectionText">
+                  {selectedStory?.fieldExecution ?? "Choose a project to inspect equipment impact."}
+                </p>
+              </Card>
+              <Card title="Dispatch signal" description="Immediate equipment-driven action required for the selected project.">
+                <p className="sectionText">
+                  {selectedStory?.dispatchSignal ?? "Choose a project to inspect dispatch signal."}
+                </p>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -350,6 +453,41 @@ export default function ProjectsPage() {
                       <div>{selectedProject.permitBlockers}</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Latest daily log</div>
+                      <div>
+                        <Badge tone={selectedProject.latestDailyLogStatus === "flagged" ? "danger" : selectedProject.latestDailyLogStatus === "submitted" ? "info" : selectedProject.latestDailyLogStatus === "approved" ? "success" : "warning"}>
+                          {selectedProject.latestDailyLogStatus}
+                        </Badge>
+                        <div className="tableCellMuted">{selectedProject.latestDailyLogDate ?? "No log linked yet"}</div>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Quality / subcontract</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">release readiness {selectedProject.qualityReleaseReadiness}%</span>
+                        <span className="tableCellMuted">
+                          subcontract {selectedProject.subcontractHealth} · pending destajo MXN {selectedProject.pendingDestajo.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/field">
+                          Open field
+                        </Link>
+                        <Link className="buttonGhost" href="/quality">
+                          Open quality
+                        </Link>
+                        <Link className="buttonGhost" href="/cost-control">
+                          Open cost control
+                        </Link>
+                        <Link className="buttonGhost" href="/equipment">
+                          Open equipment
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Next milestone</div>
                       <div>
                         <input
@@ -380,7 +518,16 @@ export default function ProjectsPage() {
                               key={option.label}
                               className={option.status === "blocked" ? "buttonGhost" : "button"}
                               type="button"
-                              disabled={isSaving}
+                              disabled={
+                                isSaving ||
+                                (option.status === "active" && selectedProject.permitBlockers > 2) ||
+                                (option.status === "active" && selectedProject.latestDailyLogStatus === "flagged") ||
+                                (option.status === "closed" &&
+                                  (selectedProject.qualityHolds > 0 ||
+                                    selectedProject.permitBlockers > 0 ||
+                                    selectedProject.progress < 100 ||
+                                    selectedProject.latestDailyLogStatus === "flagged"))
+                              }
                               onClick={() => void handleProjectAction(option.status, option.nextMilestone)}
                             >
                               {isSaving ? "Saving..." : option.label}

@@ -1,4 +1,7 @@
 import {
+  AccountsPayableInvoiceSchema,
+  AccountsPayableOverviewSchema,
+  CreateTreasuryPaymentRunRequestSchema,
   AuditEventSchema,
   AuthSessionSchema,
   BudgetBookLineSchema,
@@ -9,6 +12,8 @@ import {
   CloseControlOverviewSchema,
   SupplierControlLineSchema,
   SupplierControlOverviewSchema,
+  SupplierMasterOverviewSchema,
+  SupplierMasterProfileSchema,
   ComplianceCaseSchema,
   ComplianceOverviewSchema,
   CostControlLineSchema,
@@ -18,6 +23,19 @@ import {
   CompanyDetailSchema,
   CompanyModuleStateSchema,
   CompanySchema,
+  CreateAccountsPayableInvoiceRequestSchema,
+  CreateDocumentControlItemRequestSchema,
+  CreateFieldMaterialRequestRequestSchema,
+  CreateFieldMaterialRequestResponseSchema,
+  CreateDailyLogEntryRequestSchema,
+  CreateInventoryMovementRequestSchema,
+  CreateInventoryReceiptRequestSchema,
+  CreateMachineItemRequestSchema,
+  CreateQualityInspectionRequestSchema,
+  CreateProcurementPurchaseOrderRequestSchema,
+  CreateProcurementRequisitionRequestSchema,
+  CreateSupplierControlLineRequestSchema,
+  CreateSupplierMasterProfileRequestSchema,
   CreatePlatformUserRequestSchema,
   CreatePlatformUserResponseSchema,
   DailyLogEntrySchema,
@@ -29,6 +47,7 @@ import {
   EstimationCollectionOverviewSchema,
   FinanceOverviewSchema,
   FinanceLedgerItemSchema,
+  FieldMaterialRequestOverviewSchema,
   HrWorkforceItemSchema,
   HrOverviewSchema,
   IntegrationOverviewSchema,
@@ -51,6 +70,8 @@ import {
   ProvisionCompanyResponseSchema,
   ProcurementOverviewSchema,
   ProcurementPackageSchema,
+  ProcurementPurchaseOrderSchema,
+  ProcurementPurchaseOrdersOverviewSchema,
   ProcurementRequisitionSchema,
   ProcurementRequisitionsOverviewSchema,
   ProjectPortfolioItemSchema,
@@ -61,6 +82,8 @@ import {
   RoleSchema,
   SubcontractLineSchema,
   SubcontractOverviewSchema,
+  UpdateAccountsPayableInvoiceRequestSchema,
+  UpdateTreasuryPaymentRunRequestSchema,
   UpdateSubcontractLineRequestSchema,
   UpdateComplianceCaseRequestSchema,
   UpdateCostControlLineRequestSchema,
@@ -77,6 +100,7 @@ import {
   UpdatePostSaleCaseRequestSchema,
   UpdateProjectPortfolioItemRequestSchema,
   UpdateProcurementPackageRequestSchema,
+  UpdateProcurementPurchaseOrderRequestSchema,
   UpdateProcurementRequisitionRequestSchema,
   UpdatePlatformUserRoleRequestSchema,
   UpdatePlatformUserStatusRequestSchema,
@@ -84,11 +108,15 @@ import {
   UpdateCashFlowLineRequestSchema,
   UpdateCloseControlLineRequestSchema,
   UpdateSupplierControlLineRequestSchema,
+  UpdateSupplierMasterProfileRequestSchema,
   UpdateDailyLogEntryRequestSchema,
   UpdateQualityInspectionRequestSchema,
   UpdateCompanyModulesRequestSchema,
   UpdatePlatformSettingsRequestSchema,
   UserSchema,
+  type AccountsPayableInvoiceContract,
+  type AccountsPayableOverviewContract,
+  type CreateTreasuryPaymentRunRequestContract,
   type AuditEventContract,
   type AuthLoginRequestContract,
   type AuthSessionContract,
@@ -100,6 +128,8 @@ import {
   type CloseControlOverviewContract,
   type SupplierControlLineContract,
   type SupplierControlOverviewContract,
+  type SupplierMasterOverviewContract,
+  type SupplierMasterProfileContract,
   type ComplianceCaseContract,
   type ComplianceOverviewContract,
   type CostControlLineContract,
@@ -109,8 +139,21 @@ import {
   type CompanyDetailContract,
   type CompanyModuleStateContract,
   type CompanyContract,
+  type CreateAccountsPayableInvoiceRequestContract,
+  type CreateDocumentControlItemRequestContract,
+  type CreateDailyLogEntryRequestContract,
+  type CreateFieldMaterialRequestRequestContract,
+  type CreateFieldMaterialRequestResponseContract,
+  type CreateInventoryMovementRequestContract,
+  type CreateInventoryReceiptRequestContract,
+  type CreateMachineItemRequestContract,
+  type CreateQualityInspectionRequestContract,
+  type CreateProcurementPurchaseOrderRequestContract,
+  type CreateSupplierControlLineRequestContract,
+  type CreateSupplierMasterProfileRequestContract,
   type CreatePlatformUserRequestContract,
   type CreatePlatformUserResponseContract,
+  type CreateProcurementRequisitionRequestContract,
   type DailyLogEntryContract,
   type DailyLogOverviewContract,
   type DocumentControlItemContract,
@@ -120,6 +163,7 @@ import {
   type EstimationCollectionOverviewContract,
   type FinanceLedgerItemContract,
   type FinanceOverviewContract,
+  type FieldMaterialRequestOverviewContract,
   type HrWorkforceItemContract,
   type HrOverviewContract,
   type IntegrationOverviewContract,
@@ -137,11 +181,15 @@ import {
   type PlatformApiErrorContract,
   type PlatformBootstrapContract,
   type PlatformDashboardSummaryContract,
+  type PlatformSystemReadinessContract,
+  PlatformSystemReadinessSchema,
   type PlatformSettingsContract,
   type ProvisionCompanyRequestContract,
   type ProvisionCompanyResponseContract,
   type ProcurementOverviewContract,
   type ProcurementPackageContract,
+  type ProcurementPurchaseOrderContract,
+  type ProcurementPurchaseOrdersOverviewContract,
   type ProcurementRequisitionContract,
   type ProcurementRequisitionsOverviewContract,
   type ProjectPortfolioItemContract,
@@ -153,6 +201,12 @@ import {
   type SubcontractLineContract,
   type SubcontractOverviewContract,
   type UpdateComplianceCaseRequestContract,
+  type UpdateAccountsPayableInvoiceRequestContract,
+  type UpdateTreasuryPaymentRunRequestContract,
+  type TreasuryPaymentRunContract,
+  type TreasuryPaymentRunsOverviewContract,
+  TreasuryPaymentRunSchema,
+  TreasuryPaymentRunsOverviewSchema,
   type UpdateCostControlLineRequestContract,
   type UpdateCrmLeadBucketRequestContract,
   type UpdateDocumentControlItemRequestContract,
@@ -167,6 +221,7 @@ import {
   type UpdatePostSaleCaseRequestContract,
   type UpdateProjectPortfolioItemRequestContract,
   type UpdateProcurementPackageRequestContract,
+  type UpdateProcurementPurchaseOrderRequestContract,
   type UpdateProcurementRequisitionRequestContract,
   type UpdatePlatformUserRoleRequestContract,
   type UpdatePlatformUserStatusRequestContract,
@@ -174,6 +229,7 @@ import {
   type UpdateCashFlowLineRequestContract,
   type UpdateCloseControlLineRequestContract,
   type UpdateSupplierControlLineRequestContract,
+  type UpdateSupplierMasterProfileRequestContract,
   type UpdateDailyLogEntryRequestContract,
   type UpdateQualityInspectionRequestContract,
   type UpdateCompanyModulesRequestContract,
@@ -413,6 +469,15 @@ export async function fetchDashboardSummary(
   return response ? PlatformDashboardSummarySchema.parse(response) : null;
 }
 
+export async function fetchPlatformSystemReadiness(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<PlatformSystemReadinessContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/platform/readiness${query}`, options);
+  return response ? PlatformSystemReadinessSchema.parse(response) : null;
+}
+
 export async function fetchAuditEvents(
   companyId: string | undefined,
   limit: number | undefined,
@@ -520,6 +585,34 @@ export async function fetchProcurementRequisitionsOverview(
   return response ? ProcurementRequisitionsOverviewSchema.parse(response) : null;
 }
 
+export async function createProcurementRequisition(
+  companyId: string | undefined,
+  input: CreateProcurementRequisitionRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProcurementRequisitionContract>> {
+  const payload = CreateProcurementRequisitionRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/procurement/requisitions${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProcurementRequisitionSchema.parse(response.data),
+    error: null
+  };
+}
+
 export async function updateProcurementRequisition(
   requisitionId: string,
   companyId: string | undefined,
@@ -545,6 +638,109 @@ export async function updateProcurementRequisition(
 
   return {
     data: ProcurementRequisitionSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function createFieldMaterialRequest(
+  companyId: string | undefined,
+  input: CreateFieldMaterialRequestRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<CreateFieldMaterialRequestResponseContract>> {
+  const payload = CreateFieldMaterialRequestRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/field/material-requests${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: CreateFieldMaterialRequestResponseSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchFieldMaterialRequestsOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<FieldMaterialRequestOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/field/material-requests/overview${query}`, options);
+  return response ? FieldMaterialRequestOverviewSchema.parse(response) : null;
+}
+
+export async function fetchProcurementPurchaseOrdersOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<ProcurementPurchaseOrdersOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/procurement/purchase-orders/overview${query}`, options);
+  return response ? ProcurementPurchaseOrdersOverviewSchema.parse(response) : null;
+}
+
+export async function createProcurementPurchaseOrder(
+  companyId: string | undefined,
+  input: CreateProcurementPurchaseOrderRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProcurementPurchaseOrderContract>> {
+  const payload = CreateProcurementPurchaseOrderRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/procurement/purchase-orders${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProcurementPurchaseOrderSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function updateProcurementPurchaseOrder(
+  purchaseOrderId: string,
+  companyId: string | undefined,
+  input: UpdateProcurementPurchaseOrderRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProcurementPurchaseOrderContract>> {
+  const payload = UpdateProcurementPurchaseOrderRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/procurement/purchase-orders/${purchaseOrderId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: ProcurementPurchaseOrderSchema.parse(response.data),
     error: null
   };
 }
@@ -701,6 +897,100 @@ export async function updateSupplierControlLine(
   };
 }
 
+export async function createSupplierControlLine(
+  companyId: string | undefined,
+  input: CreateSupplierControlLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<SupplierControlLineContract>> {
+  const payload = CreateSupplierControlLineRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/supplier-control/lines${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: SupplierControlLineSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchSupplierMasterOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<SupplierMasterOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/supplier-master/overview${query}`, options);
+  return response ? SupplierMasterOverviewSchema.parse(response) : null;
+}
+
+export async function createSupplierMasterProfile(
+  companyId: string | undefined,
+  input: CreateSupplierMasterProfileRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<SupplierMasterProfileContract>> {
+  const payload = CreateSupplierMasterProfileRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/supplier-master/profiles${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: SupplierMasterProfileSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function updateSupplierMasterProfile(
+  profileId: string,
+  companyId: string | undefined,
+  input: UpdateSupplierMasterProfileRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<SupplierMasterProfileContract>> {
+  const payload = UpdateSupplierMasterProfileRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/supplier-master/profiles/${profileId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: SupplierMasterProfileSchema.parse(response.data),
+    error: null
+  };
+}
+
 export async function fetchCostControlOverview(
   companyId: string | undefined,
   options: RequestOptions
@@ -786,6 +1076,34 @@ export async function fetchInventoryReceivingOverview(
   return response ? InventoryReceivingOverviewSchema.parse(response) : null;
 }
 
+export async function createInventoryReceipt(
+  companyId: string | undefined,
+  input: CreateInventoryReceiptRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<InventoryReceiptContract>> {
+  const payload = CreateInventoryReceiptRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/inventory/receipts${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: InventoryReceiptSchema.parse(response.data),
+    error: null
+  };
+}
+
 export async function updateInventoryReceipt(
   receiptId: string,
   companyId: string | undefined,
@@ -822,6 +1140,34 @@ export async function fetchInventoryMovementsOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/inventory/movements/overview${query}`, options);
   return response ? InventoryMovementsOverviewSchema.parse(response) : null;
+}
+
+export async function createInventoryMovement(
+  companyId: string | undefined,
+  input: CreateInventoryMovementRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<InventoryMovementContract>> {
+  const payload = CreateInventoryMovementRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/inventory/movements${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: InventoryMovementSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function updateInventoryMovement(
@@ -862,6 +1208,34 @@ export async function fetchEquipmentOverview(
   return response ? EquipmentOverviewSchema.parse(response) : null;
 }
 
+export async function createMachineItem(
+  companyId: string | undefined,
+  input: CreateMachineItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<MachineItemContract>> {
+  const payload = CreateMachineItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/equipment/machines${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: MachineItemSchema.parse(response.data),
+    error: null
+  };
+}
+
 export async function updateMachineItem(
   machineId: string,
   companyId: string | undefined,
@@ -898,6 +1272,34 @@ export async function fetchDailyLogOverview(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/daily-log/overview${query}`, options);
   return response ? DailyLogOverviewSchema.parse(response) : null;
+}
+
+export async function createDailyLogEntry(
+  companyId: string | undefined,
+  input: CreateDailyLogEntryRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<DailyLogEntryContract>> {
+  const payload = CreateDailyLogEntryRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/daily-log/entries${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: DailyLogEntrySchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function updateDailyLogEntry(
@@ -963,6 +1365,218 @@ export async function updateFinanceLedgerItem(
 
   return {
     data: FinanceLedgerItemSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchAccountsPayableOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<AccountsPayableOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/accounts-payable/overview${query}`, options);
+  return response ? AccountsPayableOverviewSchema.parse(response) : null;
+}
+
+export async function createAccountsPayableInvoice(
+  companyId: string | undefined,
+  input: CreateAccountsPayableInvoiceRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<AccountsPayableInvoiceContract>> {
+  const payload = CreateAccountsPayableInvoiceRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/accounts-payable/invoices${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: AccountsPayableInvoiceSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function updateAccountsPayableInvoice(
+  invoiceId: string,
+  companyId: string | undefined,
+  input: UpdateAccountsPayableInvoiceRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<AccountsPayableInvoiceContract>> {
+  const payload = UpdateAccountsPayableInvoiceRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/accounts-payable/invoices/${invoiceId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: AccountsPayableInvoiceSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function fetchTreasuryPaymentRunsOverview(
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<TreasuryPaymentRunsOverviewContract | null> {
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/treasury/payment-runs/overview${query}`, options);
+  return response ? TreasuryPaymentRunsOverviewSchema.parse(response) : null;
+}
+
+export async function createTreasuryPaymentRun(
+  companyId: string | undefined,
+  input: CreateTreasuryPaymentRunRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<TreasuryPaymentRunContract>> {
+  const payload = CreateTreasuryPaymentRunRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/treasury/payment-runs${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return { data: null, error: response.error };
+  }
+
+  return {
+    data: TreasuryPaymentRunSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function updateTreasuryPaymentRun(
+  paymentRunId: string,
+  companyId: string | undefined,
+  input: UpdateTreasuryPaymentRunRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<TreasuryPaymentRunContract>> {
+  const payload = UpdateTreasuryPaymentRunRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/treasury/payment-runs/${paymentRunId}${query}`, options, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return { data: null, error: response.error };
+  }
+
+  return {
+    data: TreasuryPaymentRunSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function removeTreasuryPaymentRunInvoice(
+  paymentRunId: string,
+  invoiceId: string,
+  companyId: string | undefined,
+  nextAction: string,
+  options: RequestOptions
+): Promise<ApiResult<TreasuryPaymentRunContract>> {
+  const payload = { nextAction };
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/treasury/payment-runs/${paymentRunId}/invoices/${invoiceId}${query}`, options, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return { data: null, error: response.error };
+  }
+
+  return {
+    data: TreasuryPaymentRunSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function addTreasuryPaymentRunInvoice(
+  paymentRunId: string,
+  companyId: string | undefined,
+  invoiceId: string,
+  nextAction: string,
+  options: RequestOptions
+): Promise<ApiResult<TreasuryPaymentRunContract>> {
+  const payload = { invoiceId, nextAction };
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/treasury/payment-runs/${paymentRunId}/invoices${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return { data: null, error: response.error };
+  }
+
+  return {
+    data: TreasuryPaymentRunSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function moveTreasuryPaymentRunInvoice(
+  sourcePaymentRunId: string,
+  invoiceId: string,
+  companyId: string | undefined,
+  targetPaymentRunId: string,
+  nextAction: string,
+  options: RequestOptions
+): Promise<ApiResult<TreasuryPaymentRunContract>> {
+  const payload = { targetPaymentRunId, nextAction };
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(
+    `/treasury/payment-runs/${sourcePaymentRunId}/invoices/${invoiceId}/move${query}`,
+    options,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
+
+  if (!response.data) {
+    return { data: null, error: response.error };
+  }
+
+  return {
+    data: TreasuryPaymentRunSchema.parse(response.data),
     error: null
   };
 }
@@ -1166,6 +1780,34 @@ export async function fetchDocumentControlOverview(
   return response ? DocumentControlOverviewSchema.parse(response) : null;
 }
 
+export async function createDocumentControlItem(
+  companyId: string | undefined,
+  input: CreateDocumentControlItemRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<DocumentControlItemContract>> {
+  const payload = CreateDocumentControlItemRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/document-control/items${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: DocumentControlItemSchema.parse(response.data),
+    error: null
+  };
+}
+
 export async function updateDocumentControlItem(
   itemId: string,
   companyId: string | undefined,
@@ -1214,6 +1856,34 @@ export async function updateQualityInspection(
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/quality/inspections/${inspectionId}${query}`, options, {
     method: "PATCH",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: QualityInspectionSchema.parse(response.data),
+    error: null
+  };
+}
+
+export async function createQualityInspection(
+  companyId: string | undefined,
+  input: CreateQualityInspectionRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<QualityInspectionContract>> {
+  const payload = CreateQualityInspectionRequestSchema.parse(input);
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/quality/inspections${query}`, options, {
+    method: "POST",
     headers: {
       "Content-Type": "application/json"
     },

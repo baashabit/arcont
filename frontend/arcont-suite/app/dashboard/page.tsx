@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
@@ -9,25 +10,51 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { KpiCard } from "@/components/ui/kpi-card";
 import { ModuleBadge } from "@/components/ui/module-badge";
 import {
+  fetchAccountsPayableOverview,
+  fetchCashFlowOverview,
   fetchComplianceOverview,
   fetchCrmOverview,
+  fetchDailyLogOverview,
   fetchDocumentControlOverview,
+  fetchEquipmentOverview,
   fetchEstimationCollectionOverview,
+  fetchFieldMaterialRequestsOverview,
   fetchFinanceOverview,
+  fetchProjectsOverview,
   fetchInventoryMovementsOverview,
   fetchInventoryReceivingOverview,
   fetchInventoryOverview,
-  fetchProcurementOverview
+  fetchPostSaleOverview,
+  fetchProcurementOverview,
+  fetchProcurementPurchaseOrdersOverview,
+  fetchQualityOverview,
+  fetchSupplierMasterOverview,
+  fetchSupplierControlOverview,
+  fetchSubcontractOverview,
+  fetchTreasuryPaymentRunsOverview
 } from "@/lib/platform-api";
 
 type ExecutiveSnapshot = {
   crm: NonNullable<Awaited<ReturnType<typeof fetchCrmOverview>>>;
+  projects: NonNullable<Awaited<ReturnType<typeof fetchProjectsOverview>>>;
+  dailyLog: NonNullable<Awaited<ReturnType<typeof fetchDailyLogOverview>>>;
+  quality: NonNullable<Awaited<ReturnType<typeof fetchQualityOverview>>>;
+  subcontracts: NonNullable<Awaited<ReturnType<typeof fetchSubcontractOverview>>>;
+  equipment: NonNullable<Awaited<ReturnType<typeof fetchEquipmentOverview>>>;
+  fieldMaterials: NonNullable<Awaited<ReturnType<typeof fetchFieldMaterialRequestsOverview>>>;
   inventory: NonNullable<Awaited<ReturnType<typeof fetchInventoryOverview>>>;
   inventoryReceiving: NonNullable<Awaited<ReturnType<typeof fetchInventoryReceivingOverview>>>;
   inventoryMovements: NonNullable<Awaited<ReturnType<typeof fetchInventoryMovementsOverview>>>;
   estimations: NonNullable<Awaited<ReturnType<typeof fetchEstimationCollectionOverview>>>;
+  cashFlow: NonNullable<Awaited<ReturnType<typeof fetchCashFlowOverview>>>;
   procurement: NonNullable<Awaited<ReturnType<typeof fetchProcurementOverview>>>;
+  procurementPurchaseOrders: NonNullable<Awaited<ReturnType<typeof fetchProcurementPurchaseOrdersOverview>>>;
+  supplierControl: NonNullable<Awaited<ReturnType<typeof fetchSupplierControlOverview>>>;
+  supplierMaster: NonNullable<Awaited<ReturnType<typeof fetchSupplierMasterOverview>>>;
+  treasury: NonNullable<Awaited<ReturnType<typeof fetchTreasuryPaymentRunsOverview>>>;
+  accountsPayable: NonNullable<Awaited<ReturnType<typeof fetchAccountsPayableOverview>>>;
   compliance: NonNullable<Awaited<ReturnType<typeof fetchComplianceOverview>>>;
+  postSale: NonNullable<Awaited<ReturnType<typeof fetchPostSaleOverview>>>;
   finance: NonNullable<Awaited<ReturnType<typeof fetchFinanceOverview>>>;
   documentControl: NonNullable<Awaited<ReturnType<typeof fetchDocumentControlOverview>>>;
 };
@@ -73,33 +100,105 @@ export default function DashboardPage() {
 
     void Promise.all([
       fetchCrmOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchProjectsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchDailyLogOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchQualityOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchSubcontractOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchEquipmentOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchFieldMaterialRequestsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryReceivingOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchInventoryMovementsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchEstimationCollectionOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchCashFlowOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchProcurementOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchProcurementPurchaseOrdersOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchSupplierControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchSupplierMasterOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchAccountsPayableOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchTreasuryPaymentRunsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchComplianceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+      fetchPostSaleOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchFinanceOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchDocumentControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
     ])
-      .then(([crm, inventory, inventoryReceiving, inventoryMovements, estimations, procurement, compliance, finance, documentControl]) => {
+      .then(([
+          crm,
+          projects,
+          dailyLog,
+          quality,
+          subcontracts,
+          equipment,
+          fieldMaterials,
+          inventory,
+          inventoryReceiving,
+          inventoryMovements,
+          estimations,
+          cashFlow,
+          procurement,
+          procurementPurchaseOrders,
+          supplierControl,
+          supplierMaster,
+          accountsPayable,
+          treasury,
+          compliance,
+          postSale,
+          finance,
+          documentControl
+        ]) => {
         if (cancelled) {
           return;
         }
 
-        if (!crm || !inventory || !inventoryReceiving || !inventoryMovements || !estimations || !procurement || !compliance || !finance || !documentControl) {
+        if (
+          !crm ||
+          !projects ||
+          !dailyLog ||
+          !quality ||
+          !subcontracts ||
+          !equipment ||
+          !fieldMaterials ||
+          !inventory ||
+          !inventoryReceiving ||
+          !inventoryMovements ||
+          !estimations ||
+          !cashFlow ||
+          !procurement ||
+          !procurementPurchaseOrders ||
+          !supplierControl ||
+          !supplierMaster ||
+          !accountsPayable ||
+          !treasury ||
+          !compliance ||
+          !postSale ||
+          !finance ||
+          !documentControl
+        ) {
           setSnapshotError("Executive dashboard could not assemble all live operating signals.");
           return;
         }
 
         setSnapshot({
           crm,
+          projects,
+          dailyLog,
+          quality,
+          subcontracts,
+          equipment,
+          fieldMaterials,
           inventory,
           inventoryReceiving,
           inventoryMovements,
           estimations,
+          cashFlow,
           procurement,
+          procurementPurchaseOrders,
+          supplierControl,
+          supplierMaster,
+          accountsPayable,
+          treasury,
           compliance,
+          postSale,
           finance,
           documentControl
         });
@@ -135,19 +234,59 @@ export default function DashboardPage() {
         tone: snapshot.crm.summary.visitConversion < 20 ? "warning" : "success"
       },
       {
+        title: "Execution discipline",
+        detail: `${snapshot.projects.summary.executionRiskProjects} projects at execution risk, ${snapshot.dailyLog.summary.executionRiskLogs} logs under field pressure and ${snapshot.quality.summary.executionRiskInspections} inspections under release stress.`,
+        tone:
+          snapshot.projects.summary.executionRiskProjects > 0 ||
+          snapshot.dailyLog.summary.executionRiskLogs > 0 ||
+          snapshot.quality.summary.executionRiskInspections > 0
+            ? "danger"
+            : "success"
+      },
+      {
         title: "Inventory pressure",
         detail: `${snapshot.inventory.summary.urgentReplenishments} urgent replenishments and ${snapshot.inventory.summary.openVariances} open variances.`,
         tone: snapshot.inventory.summary.urgentReplenishments > 0 ? "warning" : "success"
       },
       {
+        title: "Equipment readiness",
+        detail: `${snapshot.equipment.summary.overdueMaintenance} overdue maintenance items and ${snapshot.equipment.summary.criticalOpenFailures} critical failures are still affecting field equipment.`,
+        tone:
+          snapshot.equipment.summary.criticalOpenFailures > 0 || snapshot.equipment.summary.overdueMaintenance > 0
+            ? "danger"
+            : snapshot.equipment.summary.machinesInMaintenance > 0
+              ? "warning"
+              : "success"
+      },
+      {
+        title: "Field-to-backoffice chain",
+        detail: `${snapshot.dailyLog.summary.executionRiskLogs} risky field logs, ${snapshot.quality.summary.executionRiskInspections} inspections under stress, ${snapshot.fieldMaterials.summary.linkedRequisitions} field-linked requisitions, ${snapshot.documentControl.summary.openRfis} open RFIs and ${snapshot.procurement.summary.openRequisitions} open requisitions are already connected in the operating chain.`,
+        tone:
+          snapshot.dailyLog.summary.executionRiskLogs > 0 ||
+          snapshot.quality.summary.executionRiskInspections > 0 ||
+          snapshot.fieldMaterials.summary.criticalRequests > 0 ||
+          snapshot.documentControl.summary.openRfis > 0 ||
+          snapshot.procurement.summary.openRequisitions > 0
+            ? "danger"
+            : "success"
+      },
+      {
         title: "Inbound receiving",
-        detail: `${snapshot.inventoryReceiving.summary.overdueEta} overdue arrivals and ${snapshot.inventoryReceiving.summary.blockedReceipts} blocked receipts.`,
-        tone: snapshot.inventoryReceiving.summary.blockedReceipts > 0 ? "danger" : snapshot.inventoryReceiving.summary.overdueEta > 0 ? "warning" : "success"
+        detail: `${snapshot.inventoryReceiving.summary.overdueEta} overdue arrivals, ${snapshot.inventoryReceiving.summary.blockedReceipts} blocked receipts and ${snapshot.inventoryReceiving.summary.receiptsAtCommercialRisk} at commercial risk.`,
+        tone:
+          snapshot.inventoryReceiving.summary.blockedReceipts > 0 || snapshot.inventoryReceiving.summary.receiptsAtCommercialRisk > 0
+            ? "danger"
+            : snapshot.inventoryReceiving.summary.overdueEta > 0
+              ? "warning"
+              : "success"
       },
       {
         title: "Movement traceability",
-        detail: `${snapshot.inventoryMovements.summary.openMovements} open movements and ${snapshot.inventoryMovements.summary.pendingEvidence} pending evidence items.`,
-        tone: snapshot.inventoryMovements.summary.criticalMovements > 0 ? "danger" : "info"
+        detail: `${snapshot.inventoryMovements.summary.openMovements} open movements, ${snapshot.inventoryMovements.summary.pendingEvidence} pending evidence items and ${snapshot.inventoryMovements.summary.movementsAtCommercialRisk} at commercial risk.`,
+        tone:
+          snapshot.inventoryMovements.summary.criticalMovements > 0 || snapshot.inventoryMovements.summary.movementsAtCommercialRisk > 0
+            ? "danger"
+            : "info"
       },
       {
         title: "Procurement approvals",
@@ -155,14 +294,89 @@ export default function DashboardPage() {
         tone: snapshot.procurement.summary.averageApprovalHours > 48 ? "danger" : "info"
       },
       {
+        title: "Purchase order execution",
+        detail: `${snapshot.procurementPurchaseOrders.summary.inTransitOrders} orders in transit and ${snapshot.procurementPurchaseOrders.summary.blockedOrders} blocked.`,
+        tone:
+          snapshot.procurementPurchaseOrders.summary.blockedOrders > 0
+            ? "danger"
+            : snapshot.procurementPurchaseOrders.summary.pendingInvoiceMatch > 0
+              ? "warning"
+              : "success"
+      },
+      {
+        title: "Supplier dependency",
+        detail: `${snapshot.supplierControl.summary.criticalSuppliers} critical suppliers, ${snapshot.supplierControl.summary.concentratedSuppliers} concentrated and ${snapshot.supplierControl.summary.complianceAlerts} active alerts.`,
+        tone:
+          snapshot.supplierControl.summary.criticalSuppliers > 0
+            ? "danger"
+            : snapshot.supplierControl.summary.concentratedSuppliers > 0
+              ? "warning"
+              : "success"
+      },
+      {
+        title: "Supplier fiscal readiness",
+        detail: `${snapshot.supplierMaster.summary.criticalSuppliers} fiscal-critical suppliers, ${snapshot.supplierMaster.summary.incompletePackets} incomplete packets and ${snapshot.finance.summary.paymentReadySuppliers} suppliers already ready for payment flow.`,
+        tone:
+          snapshot.supplierMaster.summary.criticalSuppliers > 0
+            ? "danger"
+            : snapshot.supplierMaster.summary.incompletePackets > 0
+              ? "warning"
+              : "success"
+      },
+      {
+        title: "Accounts payable release",
+        detail: `${snapshot.accountsPayable.summary.blockedInvoices} blocked invoices, ${snapshot.accountsPayable.summary.overdueInvoices} overdue and MXN ${snapshot.accountsPayable.summary.openAmount.toLocaleString()} still open in payables.`,
+        tone:
+          snapshot.accountsPayable.summary.blockedInvoices > 0 || snapshot.accountsPayable.summary.overdueInvoices > 0
+            ? "danger"
+            : snapshot.accountsPayable.summary.criticalInvoices > 0
+              ? "warning"
+              : "success"
+      },
+      {
         title: "Collections aging",
-        detail: `MXN ${snapshot.estimations.summary.pendingCollection.toLocaleString()} pending and ${snapshot.estimations.summary.criticalCollections} critical collection lines.`,
-        tone: snapshot.estimations.summary.criticalCollections > 0 ? "danger" : "warning"
+        detail: `MXN ${snapshot.estimations.summary.pendingCollection.toLocaleString()} pending, ${snapshot.estimations.summary.criticalCollections} critical lines and ${snapshot.estimations.summary.overdueCollections} overdue tranches.`,
+        tone:
+          snapshot.estimations.summary.criticalCollections > 0 || snapshot.estimations.summary.overdueCollections > 0
+            ? "danger"
+            : "warning"
+      },
+      {
+        title: "Treasury outlook",
+        detail: `MXN ${snapshot.cashFlow.summary.weeklyNet.toLocaleString()} weekly net, ${snapshot.treasury.summary.activeRuns} active runs and ${snapshot.treasury.unavailableInvoices.length} invoices currently ineligible for a new batch.`,
+        tone:
+          snapshot.cashFlow.summary.weeklyNet < 0 ||
+          snapshot.cashFlow.summary.criticalStreams > 0 ||
+          snapshot.treasury.summary.blockedRuns > 0
+            ? "danger"
+            : snapshot.treasury.summary.readyRuns === 0
+              ? "warning"
+              : "success"
+      },
+      {
+        title: "Finance release chain",
+        detail: `${snapshot.finance.command.headline} Next: ${snapshot.finance.command.topAction}`,
+        tone:
+          snapshot.finance.command.laneStatus === "critical"
+            ? "danger"
+            : snapshot.finance.command.laneStatus === "watch"
+              ? "warning"
+              : "success"
       },
       {
         title: "Compliance backlog",
         detail: `${snapshot.compliance.summary.atRiskCases} cases at risk and ${snapshot.compliance.summary.openFindings} open findings.`,
         tone: snapshot.compliance.summary.atRiskCases > 0 ? "danger" : "success"
+      },
+      {
+        title: "Handover and warranty",
+        detail: `${snapshot.postSale.summary.openCases} open cases, ${snapshot.postSale.summary.criticalCases} critical and ${snapshot.postSale.summary.overdueSlaCases} already overdue.`,
+        tone:
+          snapshot.postSale.summary.criticalCases > 0 || snapshot.postSale.summary.overdueSlaCases > 0
+            ? "danger"
+            : snapshot.postSale.summary.pendingCustomerSignoff > 0
+              ? "warning"
+              : "success"
       }
     ];
   }, [snapshot]);
@@ -177,20 +391,48 @@ export default function DashboardPage() {
       forecastRevenue: snapshot.crm.summary.forecastRevenue,
       blackboardPressure:
         snapshot.procurement.summary.openRequisitions +
+        snapshot.procurementPurchaseOrders.summary.blockedOrders +
+        snapshot.supplierControl.summary.criticalSuppliers +
         snapshot.compliance.summary.activeCases +
+        snapshot.postSale.summary.openCases +
         snapshot.documentControl.summary.openRfis +
-        snapshot.estimations.summary.criticalCollections,
+        snapshot.estimations.summary.criticalCollections +
+        snapshot.estimations.summary.overdueCollections +
+        snapshot.cashFlow.summary.criticalStreams +
+        snapshot.accountsPayable.summary.blockedInvoices,
+      fieldChainPressure:
+        snapshot.dailyLog.summary.executionRiskLogs +
+        snapshot.quality.summary.executionRiskInspections +
+        snapshot.fieldMaterials.summary.criticalRequests +
+        snapshot.documentControl.summary.openRfis +
+        snapshot.documentControl.summary.activeSubmittals +
+        snapshot.equipment.summary.overdueMaintenance +
+        snapshot.equipment.summary.criticalOpenFailures +
+        snapshot.procurement.summary.openRequisitions,
       supplyRisk:
         snapshot.procurement.summary.strategicPackages +
+        snapshot.procurementPurchaseOrders.summary.inTransitOrders +
+        snapshot.supplierControl.summary.concentratedSuppliers +
+        snapshot.supplierMaster.summary.criticalSuppliers +
+        snapshot.equipment.summary.overdueMaintenance +
+        snapshot.equipment.summary.criticalOpenFailures +
         snapshot.inventory.summary.urgentReplenishments +
         snapshot.inventoryReceiving.summary.blockedReceipts +
-        snapshot.inventoryMovements.summary.criticalMovements,
+        snapshot.inventoryReceiving.summary.receiptsAtCommercialRisk +
+        snapshot.inventoryMovements.summary.criticalMovements +
+        snapshot.inventoryMovements.summary.movementsAtCommercialRisk,
+      financeChainPressure:
+        snapshot.finance.summary.financeChainPressure,
       operatingHealth: Math.round(
         (
+          snapshot.projects.summary.averageProgress +
+          (100 - Math.min(snapshot.dailyLog.summary.executionRiskLogs * 10, 100)) +
+          snapshot.quality.summary.releaseReadiness +
+          (100 - Math.min(snapshot.subcontracts.summary.executionRiskSubcontracts * 12, 100)) +
+          (100 - Math.min(snapshot.documentControl.summary.openRfis * 8, 100)) +
           snapshot.compliance.summary.averageDocumentCompletion +
-          snapshot.documentControl.summary.averageTurnaroundDays * 10 +
           snapshot.finance.summary.closeReadiness
-        ) / 3
+        ) / 6
       )
     };
   }, [snapshot]);
@@ -220,22 +462,104 @@ export default function DashboardPage() {
         posture: snapshot.procurement.focusPackage?.status ?? "watch"
       },
       {
+        area: "Purchase orders",
+        signal: snapshot.procurementPurchaseOrders.focusPurchaseOrder?.nextAction ?? "No active action",
+        owner: snapshot.procurementPurchaseOrders.focusPurchaseOrder?.buyer ?? "Procurement",
+        posture: snapshot.procurementPurchaseOrders.focusPurchaseOrder?.status ?? "watch"
+      },
+      {
+        area: "Supplier control",
+        signal: snapshot.supplierControl.focusLine?.nextAction ?? "No active action",
+        owner: snapshot.supplierControl.focusLine?.supplierName ?? "Procurement control",
+        posture: snapshot.supplierControl.focusLine?.deliveryHealth ?? "watch"
+      },
+      {
+        area: "Supplier master",
+        signal: snapshot.supplierMaster.focusItem?.nextAction ?? "No active action",
+        owner: snapshot.supplierMaster.focusItem?.supplierName ?? "Fiscal control",
+        posture: snapshot.supplierMaster.focusItem?.satStatus ?? "watch"
+      },
+      {
+        area: "Accounts payable",
+        signal: snapshot.accountsPayable.focusInvoice?.nextAction ?? "No active action",
+        owner: snapshot.accountsPayable.focusInvoice?.supplierName ?? "Accounts payable",
+        posture: snapshot.accountsPayable.focusInvoice?.status ?? "watch"
+      },
+      {
+        area: "Projects",
+        signal: snapshot.projects.focusProject?.nextMilestone ?? "No active milestone",
+        owner: snapshot.projects.focusProject?.client ?? "PMO",
+        posture: snapshot.projects.focusProject?.latestDailyLogStatus ?? "watch"
+      },
+      {
+        area: "Field materials",
+        signal: snapshot.fieldMaterials.focusRequest?.nextAction ?? "No active action",
+        owner: snapshot.fieldMaterials.focusRequest?.requestedBy ?? "Field supply",
+        posture: snapshot.fieldMaterials.focusRequest?.urgency ?? "watch"
+      },
+      {
+        area: "Daily log",
+        signal: snapshot.dailyLog.focusEntry?.nextAction ?? "No active action",
+        owner: snapshot.dailyLog.focusEntry?.supervisor ?? "Field control",
+        posture: snapshot.dailyLog.focusEntry?.subcontractHealth ?? "watch"
+      },
+      {
+        area: "Quality",
+        signal: snapshot.quality.focusInspection?.nextAction ?? "No active action",
+        owner: snapshot.quality.focusInspection?.contractorName ?? "Quality",
+        posture: snapshot.quality.focusInspection?.latestDailyLogStatus ?? "watch"
+      },
+      {
+        area: "Subcontracts",
+        signal: snapshot.subcontracts.focusLine?.nextAction ?? "No active action",
+        owner: snapshot.subcontracts.focusLine?.contractorName ?? "Subcontracts",
+        posture: snapshot.subcontracts.focusLine?.latestDailyLogStatus ?? "watch"
+      },
+      {
+        area: "Equipment",
+        signal: snapshot.equipment.focusMachine?.nextAction ?? "No active action",
+        owner: snapshot.equipment.focusMachine?.machineName ?? "Equipment control",
+        posture: snapshot.equipment.focusMachine?.health ?? "watch"
+      },
+      {
         area: "Receiving",
         signal: snapshot.inventoryReceiving.focusReceipt?.nextAction ?? "No active action",
-        owner: snapshot.inventoryReceiving.focusReceipt?.supplierName ?? "Warehouse",
-        posture: snapshot.inventoryReceiving.focusReceipt?.status ?? "watch"
+        owner: snapshot.inventoryReceiving.focusReceipt?.purchaseOrderOwner ?? "Warehouse",
+        posture: snapshot.inventoryReceiving.focusReceipt?.purchaseOrderStatus ?? "watch"
       },
       {
         area: "Movements",
         signal: snapshot.inventoryMovements.focusMovement?.nextAction ?? "No active action",
-        owner: snapshot.inventoryMovements.focusMovement?.requestedBy ?? "Warehouse",
-        posture: snapshot.inventoryMovements.focusMovement?.impactLevel ?? "watch"
+        owner: snapshot.inventoryMovements.focusMovement?.purchaseOrderOwner ?? "Warehouse",
+        posture: snapshot.inventoryMovements.focusMovement?.purchaseOrderStatus ?? "watch"
       },
       {
         area: "Collections",
         signal: snapshot.estimations.focusLine?.nextAction ?? "No active action",
-        owner: snapshot.estimations.focusLine?.buyer ?? "Finance",
+        owner: snapshot.estimations.focusLine?.client ?? "Finance",
         posture: snapshot.estimations.focusLine?.collectionHealth ?? "watch"
+      },
+      {
+        area: "Cash flow",
+        signal: snapshot.cashFlow.focusLine?.nextAction ?? "No active action",
+        owner: snapshot.cashFlow.focusLine?.streamName ?? "Treasury",
+        posture: snapshot.cashFlow.focusLine?.health ?? "watch"
+      },
+      {
+        area: "Treasury runs",
+        signal:
+          snapshot.treasury.focusRun?.nextAction ??
+          (snapshot.treasury.unavailableInvoices[0]
+            ? `${snapshot.treasury.unavailableInvoices[0].invoiceCode} blocked: ${snapshot.treasury.unavailableInvoices[0].reasonLabel}`
+            : "No treasury blocker mapped"),
+        owner: snapshot.treasury.focusRun?.owner ?? "Treasury",
+        posture: snapshot.treasury.focusRun?.status ?? "watch"
+      },
+      {
+        area: "Post-sale",
+        signal: snapshot.postSale.focusItem?.nextAction ?? "No active action",
+        owner: snapshot.postSale.focusItem?.owner ?? "Post-sale",
+        posture: snapshot.postSale.focusItem?.health ?? "watch"
       },
       {
         area: "Document control",
@@ -278,6 +602,18 @@ export default function DashboardPage() {
                 <div className="heroMetric">
                   <strong>{snapshot.procurement.summary.openRequisitions}</strong>
                   <span>Procurement requests still pressuring execution</span>
+                </div>
+                <div className="heroMetric">
+                  <strong>{snapshot.treasury.summary.activeRuns}</strong>
+                  <span>Treasury runs active with {snapshot.treasury.unavailableInvoices.length} ineligible invoices</span>
+                </div>
+                <div className="heroMetric">
+                  <strong>{executiveKpis.fieldChainPressure}</strong>
+                  <span>Signals already chained from field into quality, documents, equipment and buying</span>
+                </div>
+                <div className="heroMetric">
+                  <strong>{executiveKpis.financeChainPressure}</strong>
+                  <span>Supplier fiscal, AP and treasury blockers already affecting payment release</span>
                 </div>
               </div>
             </div>
@@ -322,6 +658,16 @@ export default function DashboardPage() {
               footnote="Cross-domain load from procurement, compliance and document control."
             />
             <KpiCard
+              label="Field chain"
+              value={String(executiveKpis.fieldChainPressure)}
+              footnote="Pressure already propagated from field into quality, documents, equipment and buying."
+            />
+            <KpiCard
+              label="Finance chain"
+              value={String(executiveKpis.financeChainPressure)}
+              footnote="Pressure across supplier master, urgent payables and treasury release blockers."
+            />
+            <KpiCard
               label="Operating health"
               value={`${executiveKpis.operatingHealth}%`}
               footnote="Blended directional signal from close, documents and compliance."
@@ -360,6 +706,112 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </Card>
+          </section>
+
+          <section className="grid cols3">
+            <Card title="Field chain actions" description="Jump directly into the currently active field-to-supply thread.">
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Field request</div><div>{snapshot.fieldMaterials.focusRequest?.summary ?? "No active field request"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Requisition</div><div>{snapshot.procurementPurchaseOrders.focusPurchaseOrder?.requisitionCode ?? snapshot.procurement.focusPackage?.code ?? "No requisition/PO focus"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Receiving</div><div>{snapshot.inventoryReceiving.focusReceipt?.code ?? "No receipt focus"}</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className="button" href="/procurement/requisitions">Open requisitions</Link>
+                <Link className="buttonGhost" href="/procurement/purchase-orders">Open purchase orders</Link>
+                <Link className="buttonGhost" href="/inventory/receiving">Open receiving</Link>
+              </div>
+            </Card>
+
+            <Card title="Asset and supplier actions" description="Direction can jump into the current supplier and equipment blockers immediately.">
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Supplier focus</div><div>{snapshot.supplierControl.focusLine?.supplierName ?? "No supplier focus"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Equipment focus</div><div>{snapshot.equipment.focusMachine?.machineName ?? "No equipment focus"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Movement focus</div><div>{snapshot.inventoryMovements.focusMovement?.code ?? "No movement focus"}</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className="button" href="/supplier-control">Open supplier control</Link>
+                <Link className="buttonGhost" href="/equipment">Open equipment</Link>
+                <Link className="buttonGhost" href="/inventory/movements">Open movements</Link>
+              </div>
+            </Card>
+
+            <Card title="Finance and release actions" description="Open the finance lanes currently constraining payment or close readiness.">
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Command</div><div>{snapshot.finance.command.headline}</div></div>
+                <div className="detailRow"><div className="detailLabel">Supplier fiscal focus</div><div>{snapshot.supplierMaster.focusItem?.supplierName ?? "No supplier fiscal focus"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Payables focus</div><div>{snapshot.accountsPayable.focusInvoice?.code ?? "No payable invoice focus"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Treasury focus</div><div>{snapshot.treasury.focusRun?.code ?? "No treasury run focus"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Collections focus</div><div>{snapshot.estimations.focusLine?.client ?? "No collection focus"}</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className="buttonGhost" href="/supplier-master">Open supplier master</Link>
+                <Link className="button" href="/treasury/payment-runs">Open treasury</Link>
+                <Link className="buttonGhost" href="/accounts-payable">Open payables</Link>
+                <Link className="buttonGhost" href="/finance">Open finance</Link>
+              </div>
+            </Card>
+          </section>
+
+          <section className="grid cols2">
+            <Card
+              title="Treasury release posture"
+              description="Payment-run availability and blockers exposed directly to direction."
+              aside={<Badge tone={snapshot.treasury.summary.blockedRuns > 0 ? "danger" : snapshot.treasury.summary.readyRuns > 0 ? "success" : "warning"}>{snapshot.treasury.summary.blockedRuns > 0 ? "blocked" : snapshot.treasury.summary.readyRuns > 0 ? "ready" : "watch"}</Badge>}
+            >
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Open runs</div><div>{snapshot.treasury.summary.activeRuns}</div></div>
+                <div className="detailRow"><div className="detailLabel">Ready runs</div><div>{snapshot.treasury.summary.readyRuns}</div></div>
+                <div className="detailRow"><div className="detailLabel">Blocked runs</div><div>{snapshot.treasury.summary.blockedRuns}</div></div>
+                <div className="detailRow"><div className="detailLabel">Unavailable invoices</div><div>{snapshot.treasury.unavailableInvoices.length}</div></div>
+                <div className="detailRow"><div className="detailLabel">Current focus</div><div>{snapshot.treasury.focusRun?.code ?? "No active focus run"}</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className="button" href="/treasury/payment-runs">Open Treasury Runs</Link>
+                <Link className="buttonGhost" href="/accounts-payable">Review Accounts Payable</Link>
+              </div>
+            </Card>
+
+            <Card
+              title="Finance command lane"
+              description="A single executive read for collections, payables and treasury release."
+              aside={<Badge tone={snapshot.finance.command.laneStatus === "critical" ? "danger" : snapshot.finance.command.laneStatus === "watch" ? "warning" : "success"}>{snapshot.finance.command.laneStatus}</Badge>}
+            >
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Headline</div><div>{snapshot.finance.command.headline}</div></div>
+                <div className="detailRow"><div className="detailLabel">Top action</div><div>{snapshot.finance.command.topAction}</div></div>
+                <div className="detailRow"><div className="detailLabel">Next milestone</div><div>{snapshot.finance.command.nextMilestone}</div></div>
+                <div className="detailRow"><div className="detailLabel">Blocked amount</div><div>MXN {snapshot.finance.command.blockedAmount.toLocaleString()}</div></div>
+              </div>
+            </Card>
+          </section>
+
+          <section className="grid cols2">
+            <Card title="Treasury blockers" description="Why treasury cannot assemble the next clean batch right now.">
+              {snapshot.treasury.unavailableInvoices.length > 0 ? (
+                <div className="detailGrid">
+                  {snapshot.treasury.unavailableInvoices.slice(0, 4).map((invoice) => (
+                    <div key={invoice.invoiceId} className="detailRow">
+                      <div className="detailLabel">{invoice.invoiceCode}</div>
+                      <div>
+                        {invoice.reasonLabel}
+                        {invoice.blockingRunCodes.length > 0 ? ` (${invoice.blockingRunCodes.join(", ")})` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="Treasury lane is clear" description="No invoice is currently blocked from entering a new treasury run." />
+              )}
+            </Card>
+
+            <Card title="Collections pressure" description="Commercial collections feeding current treasury certainty.">
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Pending collection</div><div>MXN {snapshot.estimations.summary.pendingCollection.toLocaleString()}</div></div>
+                <div className="detailRow"><div className="detailLabel">Critical lines</div><div>{snapshot.finance.summary.criticalCollections}</div></div>
+                <div className="detailRow"><div className="detailLabel">Overdue lines</div><div>{snapshot.finance.summary.overdueCollections}</div></div>
+                <div className="detailRow"><div className="detailLabel">Collections pressure</div><div>{snapshot.finance.command.collectionsPressure}</div></div>
               </div>
             </Card>
           </section>
