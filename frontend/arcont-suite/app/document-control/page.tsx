@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -123,6 +124,45 @@ function buildDocumentBridge(item: DocumentControlItemContract | null, bridge: D
       ? `${relatedPostSale.customerName} still depends on a ${relatedPostSale.caseType} case in ${relatedPostSale.status} state.`
       : "No linked post-sale or handover case is mapped for this controlled document yet."
   };
+}
+
+function validateDocumentCreateForm(input: {
+  documentType: string;
+  subject: string;
+  projectName: string;
+  owner: string;
+  revisionCount: number;
+  turnaroundDays: number;
+  openComments: number;
+  nextAction: string;
+  status: DocumentControlItemContract["status"];
+  health: DocumentControlItemContract["health"];
+}) {
+  if ([input.documentType, input.subject, input.projectName, input.owner].some((value) => value.trim().length < 3)) {
+    return "Document type, subject, project and owner must be specific before creating the item.";
+  }
+
+  if ([input.revisionCount, input.turnaroundDays, input.openComments].some((value) => !Number.isFinite(value) || value < 0)) {
+    return "Revisions, turnaround days and open comments must be zero or greater.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Next action must be more specific before creating the item.";
+  }
+
+  if (input.status === "approved") {
+    return "Document items cannot start as approved.";
+  }
+
+  if (input.openComments > 0 && input.health === "healthy") {
+    return "Healthy status is blocked while open comments remain active.";
+  }
+
+  if (input.status === "awaiting_response" && input.openComments === 0) {
+    return "Awaiting response requires at least one open comment.";
+  }
+
+  return null;
 }
 
 export default function DocumentControlPage() {
@@ -294,15 +334,24 @@ export default function DocumentControlPage() {
     const projectName = createForm.projectName.trim();
     const owner = createForm.owner.trim();
     const nextAction = createForm.nextAction.trim();
+    const revisionCount = Number(createForm.revisionCount);
+    const turnaroundDays = Number(createForm.turnaroundDays);
+    const openComments = Number(createForm.openComments);
 
-    if (documentType.length < 3 || subject.length < 3 || projectName.length < 3 || owner.length < 3) {
-      setActionError("Document type, subject, project and owner must be specific before creating the item.");
-      setCreateMessage(null);
-      return;
-    }
-
-    if (nextAction.length < 8) {
-      setActionError("Next action must be more specific before creating the item.");
+    const validation = validateDocumentCreateForm({
+      documentType,
+      subject,
+      projectName,
+      owner,
+      revisionCount,
+      turnaroundDays,
+      openComments,
+      nextAction,
+      status: createForm.status,
+      health: createForm.health
+    });
+    if (validation) {
+      setActionError(validation);
       setCreateMessage(null);
       return;
     }
@@ -319,9 +368,9 @@ export default function DocumentControlPage() {
         projectName,
         owner,
         status: createForm.status,
-        revisionCount: Number(createForm.revisionCount),
-        turnaroundDays: Number(createForm.turnaroundDays),
-        openComments: Number(createForm.openComments),
+        revisionCount,
+        turnaroundDays,
+        openComments,
         health: createForm.health,
         nextAction
       },
@@ -515,6 +564,14 @@ export default function DocumentControlPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/quality">Open quality</Link>
+                        <Link className="buttonGhost" href="/compliance">Open compliance</Link>
+                        <Link className="buttonGhost" href="/post-sale">Open post-sale</Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Actions</div>
                       <div className="tableCellStack">
                         <div className="emptyActions">
@@ -625,40 +682,47 @@ export default function DocumentControlPage() {
               </Card>
 
               <Card title="Document risks and blockers" description="Coordination, versioning and response issues affecting active work.">
-                <DataTable
-                  rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
-                  columns={[
-                    {
-                      key: "risk",
-                      label: "Risk",
-                      render: (risk) => (
-                        <div className="tableCellStack">
-                          <strong>{risk.title}</strong>
-                          <span className="tableCellMuted">{risk.category}</span>
-                        </div>
-                      )
-                    },
-                    {
-                      key: "severity",
-                      label: "Severity",
-                      render: (risk) => (
-                        <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
-                          {risk.severity}
-                        </Badge>
-                      )
-                    },
-                    {
-                      key: "owner",
-                      label: "Owner",
-                      render: (risk) => risk.owner
-                    },
-                    {
-                      key: "status",
-                      label: "Current action",
-                      render: (risk) => risk.status
-                    }
-                  ]}
-                />
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Capture gate</div><div>Items cannot start approved, and `awaiting_response` requires live comments.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Healthy gate</div><div>Healthy posture is blocked while comments or review debt remain open.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Cross-domain flow</div><div>Use this lane when quality release, compliance folders or customer handover still depend on missing controlled documents.</div></div>
+                </div>
+                <div style={{ marginTop: 16 }}>
+                  <DataTable
+                    rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
+                    columns={[
+                      {
+                        key: "risk",
+                        label: "Risk",
+                        render: (risk) => (
+                          <div className="tableCellStack">
+                            <strong>{risk.title}</strong>
+                            <span className="tableCellMuted">{risk.category}</span>
+                          </div>
+                        )
+                      },
+                      {
+                        key: "severity",
+                        label: "Severity",
+                        render: (risk) => (
+                          <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
+                            {risk.severity}
+                          </Badge>
+                        )
+                      },
+                      {
+                        key: "owner",
+                        label: "Owner",
+                        render: (risk) => risk.owner
+                      },
+                      {
+                        key: "status",
+                        label: "Current action",
+                        render: (risk) => risk.status
+                      }
+                    ]}
+                  />
+                </div>
               </Card>
             </section>
           </>

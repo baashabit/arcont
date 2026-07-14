@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -569,6 +570,14 @@ export default function QualityPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        <Link className="buttonGhost" href="/document-control">Open document control</Link>
+                        <Link className="buttonGhost" href="/field">Open field</Link>
+                        <Link className="buttonGhost" href="/equipment">Open equipment</Link>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Actions</div>
                       <div className="tableCellStack">
                         <div className="emptyActions">
@@ -665,40 +674,47 @@ export default function QualityPage() {
               </Card>
 
               <Card title="Quality risks and blockers" description="Issues still blocking release, correction or quality closure.">
-                <DataTable
-                  rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
-                  columns={[
-                    {
-                      key: "risk",
-                      label: "Risk",
-                      render: (risk) => (
-                        <div className="tableCellStack">
-                          <strong>{risk.title}</strong>
-                          <span className="tableCellMuted">{risk.category}</span>
-                        </div>
-                      )
-                    },
-                    {
-                      key: "severity",
-                      label: "Severity",
-                      render: (risk) => (
-                        <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
-                          {risk.severity}
-                        </Badge>
-                      )
-                    },
-                    {
-                      key: "owner",
-                      label: "Owner",
-                      render: (risk) => risk.owner
-                    },
-                    {
-                      key: "status",
-                      label: "Current action",
-                      render: (risk) => risk.status
-                    }
-                  ]}
-                />
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Release gate</div><div>`pending_release` requires at most 3 findings and at least 85% evidence.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Final closure</div><div>Release should not be treated as real while findings remain open or readiness stays below 90%.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Execution bridge</div><div>This lane should move together with field correction, equipment readiness and document evidence, not in isolation.</div></div>
+                </div>
+                <div style={{ marginTop: 16 }}>
+                  <DataTable
+                    rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
+                    columns={[
+                      {
+                        key: "risk",
+                        label: "Risk",
+                        render: (risk) => (
+                          <div className="tableCellStack">
+                            <strong>{risk.title}</strong>
+                            <span className="tableCellMuted">{risk.category}</span>
+                          </div>
+                        )
+                      },
+                      {
+                        key: "severity",
+                        label: "Severity",
+                        render: (risk) => (
+                          <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
+                            {risk.severity}
+                          </Badge>
+                        )
+                      },
+                      {
+                        key: "owner",
+                        label: "Owner",
+                        render: (risk) => risk.owner
+                      },
+                      {
+                        key: "status",
+                        label: "Current action",
+                        render: (risk) => risk.status
+                      }
+                    ]}
+                  />
+                </div>
               </Card>
             </section>
           </>
