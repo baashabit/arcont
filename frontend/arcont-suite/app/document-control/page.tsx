@@ -255,11 +255,6 @@ function DocumentControlPageContent() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
-  const selectedItem = useMemo(
-    () => filteredItems.find((item) => item.id === selectedItemId) ?? filteredItems[0] ?? null,
-    [filteredItems, selectedItemId]
-  );
-
   const projectOptions = useMemo(() => {
     if (!overview) {
       return [];
@@ -309,6 +304,12 @@ function DocumentControlPageContent() {
       averageTurnaroundDays
     };
   }, [filteredItems]);
+
+  const selectedItem = useMemo(
+    () => filteredItems.find((item) => item.id === selectedItemId) ?? filteredItems[0] ?? null,
+    [filteredItems, selectedItemId]
+  );
+
 
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.itemId === selectedItem?.id) ?? [],
