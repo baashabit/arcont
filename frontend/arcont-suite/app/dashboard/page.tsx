@@ -70,6 +70,11 @@ type RecentSiteSignal = {
   tone: "success" | "warning" | "danger" | "info";
 };
 
+type RecentSiteSignalGroup = {
+  project: string;
+  items: RecentSiteSignal[];
+};
+
 export default function DashboardPage() {
   const {
     activeCompany,
@@ -483,6 +488,21 @@ export default function DashboardPage() {
 
     return rows;
   }, [snapshot]);
+
+  const recentSiteSignalGroups = useMemo<RecentSiteSignalGroup[]>(() => {
+    const groups = new Map<string, RecentSiteSignal[]>();
+
+    for (const signal of recentSiteSignals) {
+      const projectSignals = groups.get(signal.project) ?? [];
+      projectSignals.push(signal);
+      groups.set(signal.project, projectSignals);
+    }
+
+    return Array.from(groups.entries()).map(([project, items]) => ({
+      project,
+      items
+    }));
+  }, [recentSiteSignals]);
 
   const executiveKpis = useMemo(() => {
     if (!snapshot) {
@@ -939,6 +959,20 @@ export default function DashboardPage() {
           <section className="grid cols3">
             <Card title="Recent site signals" description="Latest project-linked operating signals already visible to direction.">
               <div className="list">
+                {recentSiteSignalGroups.map((group) => (
+                  <div className="listItem" key={group.project}>
+                    <div>
+                      <strong>{group.project}</strong>
+                      <p>{group.items.map((item) => `${item.area}: ${item.title}`).join(" · ")}</p>
+                    </div>
+                    <div className="row gap wrap">
+                      <Badge tone="info">{group.items.length} signals</Badge>
+                      <Link className="buttonGhost" href={`/field?projectName=${encodeURIComponent(group.project)}`}>Open field</Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="list" style={{ marginTop: 16 }}>
                 {recentSiteSignals.map((signal) => (
                   <div className="listItem" key={signal.id}>
                     <div>

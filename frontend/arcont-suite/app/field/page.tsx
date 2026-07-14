@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -212,8 +213,9 @@ function createCaptureForm(mode: FieldCaptureMode): FieldCaptureForm {
   }
 }
 
-export default function FieldPage() {
+function FieldPageContent() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const searchParams = useSearchParams();
   const [signals, setSignals] = useState<FieldSignal[]>([]);
   const [customSignals, setCustomSignals] = useState<FieldSignal[]>([]);
   const [projectsOverview, setProjectsOverview] = useState<NonNullable<Awaited<ReturnType<typeof fetchProjectsOverview>>> | null>(null);
@@ -223,6 +225,7 @@ export default function FieldPage() {
   const [error, setError] = useState<string | null>(null);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState<FieldCaptureForm>(() => createCaptureForm("daily_log"));
+  const projectQuery = searchParams.get("projectName")?.trim() ?? "";
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -424,6 +427,17 @@ export default function FieldPage() {
       projectName: projectsOverview.projects[0]?.name ?? current.projectName
     }));
   }, [createForm.projectName, projectsOverview]);
+
+  useEffect(() => {
+    if (!projectQuery) {
+      return;
+    }
+
+    setCreateForm((current) => ({
+      ...current,
+      projectName: projectQuery
+    }));
+  }, [projectQuery]);
 
   const combinedSignals = useMemo(() => [...customSignals, ...signals], [customSignals, signals]);
 
@@ -1262,5 +1276,13 @@ export default function FieldPage() {
         )}
       </ModuleGate>
     </AppShell>
+  );
+}
+
+export default function FieldPage() {
+  return (
+    <Suspense fallback={null}>
+      <FieldPageContent />
+    </Suspense>
   );
 }
