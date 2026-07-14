@@ -126,9 +126,6 @@ function SidebarIcon({ name }: { name: SidebarIconName }) {
   return <svg className="navIconGraphic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths}</svg>;
 }
 
-const quickLaunchHrefs = ["/", "/projects", "/operations", "/field", "/procurement/requisitions", "/accounts-payable"];
-const setupLaunchHrefs = ["/platform/companies", "/platform/settings", "/platform/users", "/copilot"];
-
 export function Sidebar({
   isOpen,
   isCollapsed,
