@@ -242,9 +242,30 @@ function InventoryReceivingPageContent() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const eligiblePurchaseOrders = useMemo(
+    () =>
+      bridgeContext?.purchaseOrders.purchaseOrders.filter((item) => ["confirmed", "in_transit", "partial"].includes(item.status)) ?? [],
+    [bridgeContext]
+  );
+  const filteredReceipts = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return overview.receipts.filter((receipt) => {
+      const matchesPurchaseReference = !purchaseReferenceParam || receipt.purchaseReference === purchaseReferenceParam;
+      const matchesSupplierName =
+        !supplierNameParam || receipt.supplierName.toLowerCase().includes(supplierNameParam.toLowerCase());
+
+      return matchesPurchaseReference && matchesSupplierName;
+    });
+  }, [overview, purchaseReferenceParam, supplierNameParam]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredReceipts), [filteredReceipts]);
+
   const selectedReceipt = useMemo(
-    () => overview?.receipts.find((item) => item.id === selectedReceiptId) ?? overview?.focusReceipt ?? null,
-    [overview, selectedReceiptId]
+    () => filteredReceipts.find((item) => item.id === selectedReceiptId) ?? filteredReceipts[0] ?? null,
+    [filteredReceipts, selectedReceiptId]
   );
 
   const selectedRisks = useMemo(
@@ -255,11 +276,22 @@ function InventoryReceivingPageContent() {
   const receiptActions = useMemo(() => (selectedReceipt ? actionOptions(selectedReceipt) : []), [selectedReceipt]);
 
   const selectedStory = useMemo(() => buildReceivingStory(selectedReceipt, bridgeContext), [bridgeContext, selectedReceipt]);
-  const eligiblePurchaseOrders = useMemo(
-    () =>
-      bridgeContext?.purchaseOrders.purchaseOrders.filter((item) => ["confirmed", "in_transit", "partial"].includes(item.status)) ?? [],
-    [bridgeContext]
-  );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredReceipts.length === 0) {
+      setSelectedReceiptId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredReceipts.some((item) => item.id === selectedReceiptId);
+    if (!isSelectedVisible) {
+      setSelectedReceiptId(filteredReceipts[0]?.id ?? null);
+    }
+  }, [filteredReceipts, overview, selectedReceiptId]);
 
   useEffect(() => {
     setNextActionDraft(selectedReceipt?.nextAction ?? "");
@@ -504,27 +536,27 @@ function InventoryReceivingPageContent() {
             <section className="grid cols4">
               <KpiCard
                 label="Open receipts"
-                value={String(overview.summary.openReceipts)}
+                value={String(filteredSummary.openReceipts)}
                 footnote="Inbound receipts not yet fully accepted into stock."
               />
               <KpiCard
                 label="Overdue ETA"
-                value={String(overview.summary.overdueEta)}
+                value={String(filteredSummary.overdueEta)}
                 footnote="Receipts already late against their expected arrival window."
               />
               <KpiCard
                 label="Variance units"
-                value={String(overview.summary.quantityVarianceUnits)}
+                value={String(filteredSummary.quantityVarianceUnits)}
                 footnote="Absolute quantity gap still open across the current receipt board."
               />
               <KpiCard
                 label="Pending evidence"
-                value={String(overview.summary.pendingEvidence)}
+                value={String(filteredSummary.pendingEvidence)}
                 footnote="Missing evidence items before receipts can be cleanly closed."
               />
               <KpiCard
                 label="Commercial risk"
-                value={String(overview.summary.receiptsAtCommercialRisk)}
+                value={String(filteredSummary.receiptsAtCommercialRisk)}
                 footnote="Receipts tied to blocked purchase orders or fiscal packet risk."
               />
             </section>
@@ -549,14 +581,21 @@ function InventoryReceivingPageContent() {
 
             <section className="grid cols2">
               <Card title="Inbound board" description="Receipt posture by supplier, destination and current warehouse acceptance state.">
-                <FilterBar summary={`${overview.receipts.length} inbound receipts in the active tenant`}>
+                <FilterBar summary={`${filteredReceipts.length} inbound receipts in the active tenant`}>
+                  {purchaseReferenceParam ? <Badge tone="info">{purchaseReferenceParam}</Badge> : null}
+                  {supplierNameParam ? <Badge tone="info">{supplierNameParam}</Badge> : null}
+                  {purchaseReferenceParam || supplierNameParam ? (
+                    <Link className="buttonGhost" href="/inventory/receiving">
+                      Clear context
+                    </Link>
+                  ) : null}
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "receiving ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.receipts}
+                  rows={filteredReceipts}
                   columns={[
                     {
                       key: "code",
