@@ -204,6 +204,9 @@ export default function PostSalePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | PostSaleCaseContract["health"]>("all");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | PostSaleCaseContract["priority"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -258,9 +261,41 @@ export default function PostSalePage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredCases = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.items.filter((item) => {
+      const matchesHealth = healthFilter === "all" || item.health === healthFilter;
+      const matchesPriority = priorityFilter === "all" || item.priority === priorityFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.projectName.toLowerCase().includes(normalizedSearch) ||
+        item.customerName.toLowerCase().includes(normalizedSearch) ||
+        item.assetLabel.toLowerCase().includes(normalizedSearch) ||
+        item.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesPriority && matchesSearch;
+    });
+  }, [healthFilter, overview, priorityFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const openCases = filteredCases.filter((item) => item.status !== "closed");
+    const averageSlaHours =
+      openCases.length > 0 ? Number((openCases.reduce((sum, item) => sum + item.slaHoursRemaining, 0) / openCases.length).toFixed(1)) : 0;
+    return {
+      openCases: openCases.length,
+      criticalCases: filteredCases.filter((item) => item.health === "critical").length,
+      urgentCases: filteredCases.filter((item) => item.priority === "urgent" || item.priority === "critical").length,
+      averageSlaHours
+    };
+  }, [filteredCases]);
+
   const selectedCase = useMemo(
-    () => overview?.items.find((item) => item.id === selectedCaseId) ?? overview?.focusItem ?? null,
-    [overview, selectedCaseId]
+    () => filteredCases.find((item) => item.id === selectedCaseId) ?? filteredCases[0] ?? null,
+    [filteredCases, selectedCaseId]
   );
 
   const selectedRisks = useMemo(
@@ -271,6 +306,22 @@ export default function PostSalePage() {
   const selectedStory = useMemo(() => buildPostSaleBridge(selectedCase, bridgeContext), [bridgeContext, selectedCase]);
 
   const actionOptions = useMemo(() => (selectedCase ? postSaleActionOptions(selectedCase) : []), [selectedCase]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredCases.length === 0) {
+      setSelectedCaseId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredCases.some((item) => item.id === selectedCaseId);
+    if (!isSelectedVisible) {
+      setSelectedCaseId(filteredCases[0]?.id ?? null);
+    }
+  }, [filteredCases, overview, selectedCaseId]);
 
   useEffect(() => {
     setNextActionDraft(selectedCase?.nextAction ?? "");
@@ -356,12 +407,12 @@ export default function PostSalePage() {
             <section className="grid cols4">
               <KpiCard
                 label="Open cases"
-                value={String(overview.summary.openCases)}
+                value={String(filteredSummary.openCases)}
                 footnote="Deliveries, warranties and incidents still under active attention."
               />
               <KpiCard
                 label="Critical cases"
-                value={String(overview.summary.criticalCases)}
+                value={String(filteredSummary.criticalCases)}
                 footnote="Queues under severe customer, findings or response pressure."
               />
               <KpiCard
@@ -396,14 +447,49 @@ export default function PostSalePage() {
 
             <section className="grid cols2">
               <Card title="Post-sale board" description="Operational queue across deliveries, warranty brigades and customer incidents.">
-                <FilterBar summary={`${overview.items.length} post-sale cases in the active tenant`}>
+                <FilterBar summary={`${filteredCases.length} post-sale cases match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="healthy">Healthy</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Priority
+                    <select className="field" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as typeof priorityFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="urgent">Urgent</option>
+                      <option value="normal">Normal</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Project, customer, asset or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "post-sale ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalCases > 0 ? "danger" : filteredSummary.urgentCases > 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalCases > 0
+                      ? `${filteredSummary.criticalCases} critical`
+                      : filteredSummary.urgentCases > 0
+                        ? `${filteredSummary.urgentCases} urgent`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.items}
+                  rows={filteredCases}
                   columns={[
                     {
                       key: "case",
