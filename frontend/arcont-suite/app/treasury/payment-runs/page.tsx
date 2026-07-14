@@ -55,6 +55,8 @@ export default function TreasuryPaymentRunsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<TreasuryPaymentRunsOverviewContract | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | TreasuryPaymentRunContract["status"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,9 +105,30 @@ export default function TreasuryPaymentRunsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredRuns = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.runs.filter((run) => {
+      const matchesStatus = statusFilter === "all" || run.status === statusFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        run.code.toLowerCase().includes(normalizedSearch) ||
+        run.bankAccountLabel.toLowerCase().includes(normalizedSearch) ||
+        run.owner.toLowerCase().includes(normalizedSearch) ||
+        run.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [overview, searchFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredRuns), [filteredRuns]);
+
   const selectedRun = useMemo(
-    () => overview?.runs.find((run) => run.id === selectedId) ?? overview?.focusRun ?? null,
-    [overview, selectedId]
+    () => filteredRuns.find((run) => run.id === selectedId) ?? filteredRuns[0] ?? null,
+    [filteredRuns, selectedId]
   );
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.paymentRunId === selectedRun?.id) ?? [],
@@ -123,6 +146,38 @@ export default function TreasuryPaymentRunsPage() {
     () => overview?.runs.filter((run) => run.id !== selectedRun?.id && run.status !== "executed") ?? [],
     [overview, selectedRun?.id]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredRuns.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredRuns.some((run) => run.id === selectedId);
+    if (!isSelectedVisible) {
+      setSelectedId(filteredRuns[0]?.id ?? null);
+    }
+  }, [filteredRuns, overview, selectedId]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredRuns.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredRuns.some((run) => run.id === selectedId);
+    if (!isSelectedVisible) {
+      setSelectedId(filteredRuns[0]?.id ?? null);
+    }
+  }, [filteredRuns, overview, selectedId]);
 
   useEffect(() => {
     setNextActionDraft(selectedRun?.nextAction ?? "");
@@ -338,21 +393,55 @@ export default function TreasuryPaymentRunsPage() {
         {overview ? (
           <>
             <section className="grid cols4">
-              <KpiCard label="Active runs" value={String(overview.summary.activeRuns)} footnote="Treasury batches still in play." />
-              <KpiCard label="Scheduled amount" value={`MXN ${overview.summary.scheduledAmount.toLocaleString()}`} footnote="Pending disbursement volume across open runs." />
-              <KpiCard label="Blocked runs" value={String(overview.summary.blockedRuns)} footnote="Runs held by fiscal or evidence blockers." />
-              <KpiCard label="Ready runs" value={String(overview.summary.readyRuns)} footnote="Runs that can move to execution." />
-              <KpiCard label="Duplicate assignments" value={String(overview.summary.duplicateAssignments)} footnote="Invoices duplicated across active runs must be rebalanced." />
+              <KpiCard label="Active runs" value={String(filteredSummary.activeRuns)} footnote="Visible treasury batches still in play." />
+              <KpiCard label="Scheduled amount" value={`MXN ${filteredSummary.scheduledAmount.toLocaleString()}`} footnote="Pending disbursement volume across visible open runs." />
+              <KpiCard label="Blocked runs" value={String(filteredSummary.blockedRuns)} footnote="Visible runs held by fiscal or evidence blockers." />
+              <KpiCard label="Ready runs" value={String(filteredSummary.readyRuns)} footnote="Visible runs that can move to execution." />
+              <KpiCard label="Duplicate assignments" value={String(filteredSummary.duplicateAssignments)} footnote="Invoices duplicated across visible active runs must be rebalanced." />
             </section>
 
             <section className="grid cols3">
               <Card title="Payment run board" description="Treasury batches and current release posture.">
-                <FilterBar summary={`${overview.runs.length} runs in the active tenant`}>
+                <FilterBar summary={`${filteredRuns.length} runs match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Status
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                      <option value="all">All</option>
+                      <option value="draft">Draft</option>
+                      <option value="ready">Ready</option>
+                      <option value="blocked">Blocked</option>
+                      <option value="executed">Executed</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Run, bank account, owner or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>{session.authenticated ? "live backend" : source}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "treasury ready"}</Badge>
+                  <Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>
+                    {filteredSummary.blockedRuns > 0
+                      ? `${filteredSummary.blockedRuns} blocked`
+                      : filteredSummary.readyRuns > 0
+                        ? `${filteredSummary.readyRuns} ready`
+                        : "visible subset controlled"}
+                  </Badge>
+                  <Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>
+                    {filteredSummary.blockedRuns > 0
+                      ? `${filteredSummary.blockedRuns} blocked`
+                      : filteredSummary.readyRuns > 0
+                        ? `${filteredSummary.readyRuns} ready`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.runs}
+                  rows={filteredRuns}
                   columns={[
                     {
                       key: "run",
