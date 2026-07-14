@@ -147,6 +147,9 @@ export default function CostControlPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | CostControlLineContract["controlHealth"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -190,9 +193,40 @@ export default function CostControlPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const projectOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return Array.from(new Set(overview.lines.map((item) => item.projectName))).sort((left, right) =>
+      left.localeCompare(right)
+    );
+  }, [overview]);
+
+  const filteredLines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.lines.filter((item) => {
+      const matchesProject = projectFilter === "all" || item.projectName === projectFilter;
+      const matchesHealth = healthFilter === "all" || item.controlHealth === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.packageName.toLowerCase().includes(normalizedSearch) ||
+        item.code.toLowerCase().includes(normalizedSearch) ||
+        item.projectName.toLowerCase().includes(normalizedSearch);
+
+      return matchesProject && matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, projectFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLines), [filteredLines]);
+
   const selectedLine = useMemo(
-    () => overview?.lines.find((item) => item.id === selectedLineId) ?? overview?.focusLine ?? null,
-    [overview, selectedLineId]
+    () => filteredLines.find((item) => item.id === selectedLineId) ?? filteredLines[0] ?? null,
+    [filteredLines, selectedLineId]
   );
 
   const selectedExceptions = useMemo(
@@ -201,6 +235,22 @@ export default function CostControlPage() {
   );
 
   const actionOptions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLines.length === 0) {
+      setSelectedLineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLines.some((item) => item.id === selectedLineId);
+    if (!isSelectedVisible) {
+      setSelectedLineId(filteredLines[0]?.id ?? null);
+    }
+  }, [filteredLines, overview, selectedLineId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLine?.nextAction ?? "");
@@ -278,41 +328,65 @@ export default function CostControlPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Tracked lines"
-                value={String(overview.summary.trackedLines)}
+                value={String(filteredSummary.trackedLines)}
                 footnote="Procurement-backed lines tied to project execution pressure."
               />
               <KpiCard
                 label="Total budget"
-                value={`MXN ${overview.summary.totalBudget.toLocaleString()}`}
+                value={`MXN ${filteredSummary.totalBudget.toLocaleString()}`}
                 footnote="Controlled budget baseline across active cost lines."
               />
               <KpiCard
                 label="Forecast variance"
-                value={`MXN ${overview.summary.forecastVariance.toLocaleString()}`}
+                value={`MXN ${filteredSummary.forecastVariance.toLocaleString()}`}
                 footnote="Current drift between budget and forecast at completion."
               />
               <KpiCard
                 label="Critical lines"
-                value={String(overview.summary.criticalLines)}
+                value={String(filteredSummary.criticalLines)}
                 footnote="Lines that should not advance without variance containment."
               />
               <KpiCard
                 label="Cash-risk lines"
-                value={String(overview.summary.cashRiskLines)}
+                value={String(filteredSummary.cashRiskLines)}
                 footnote="Lines where forecast pressure is already colliding with collection exposure."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Cost board" description="Budget, commitment and forecast posture across the active company cost lines.">
-                <FilterBar summary={`${overview.lines.length} cost lines in the active tenant`}>
+                <FilterBar summary={`${filteredLines.length} cost lines in the active tenant`}>
+                  <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                    <option value="all">All projects</option>
+                    {projectOptions.map((projectName) => (
+                      <option key={projectName} value={projectName}>
+                        {projectName}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="selectField"
+                    value={healthFilter}
+                    onChange={(event) => setHealthFilter(event.target.value as "all" | CostControlLineContract["controlHealth"])}
+                  >
+                    <option value="all">All health</option>
+                    <option value="on_track">on_track</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search package, code or project"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "cost view ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.lines}
+                  rows={filteredLines}
                   columns={[
                     {
                       key: "line",
