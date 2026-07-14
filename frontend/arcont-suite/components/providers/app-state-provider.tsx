@@ -37,6 +37,7 @@ import {
   type AppData,
   type AppSession
 } from "@/lib/app-data";
+import { type LocalizedText, type UiLanguage, translateText } from "@/lib/i18n";
 import {
   createPlatformUser,
   fetchAuditEvents,
@@ -85,7 +86,10 @@ type AppStateContextValue = AppData & {
   isSavingModules: boolean;
   isSavingUsers: boolean;
   isProvisioningCompany: boolean;
+  uiLanguage: UiLanguage;
   setActiveCompanyId: (companyId: string) => void;
+  setUiLanguage: (language: UiLanguage) => void;
+  localizeText: (input: LocalizedText) => string;
   signIn: (credentials: AuthLoginRequestContract) => Promise<SignInResult>;
   signOut: () => void;
   refreshCompanyDetail: (companyId?: string) => Promise<CompanyDetailContract | null>;
@@ -121,6 +125,11 @@ type AppStateContextValue = AppData & {
 const AppStateContext = createContext<AppStateContextValue | null>(null);
 const companyStorageKey = "arcont.activeCompanyId";
 const sessionStorageKey = "arcont.session";
+const uiLanguageStorageKey = "arcont.uiLanguage";
+
+function resolveInitialUiLanguage(locale?: string): UiLanguage {
+  return locale?.toLowerCase().startsWith("en") ? "en" : "es";
+}
 
 function mergeUniqueCompanies(current: CompanyContract[], next: CompanyContract) {
   return [...current.filter((company) => company.id !== next.id), next];
@@ -181,6 +190,9 @@ export function AppStateProvider({
   const [isSavingModules, setSavingModules] = useState(false);
   const [isSavingUsers, setSavingUsers] = useState(false);
   const [isProvisioningCompany, setProvisioningCompany] = useState(false);
+  const [uiLanguage, setUiLanguageState] = useState<UiLanguage>(
+    resolveInitialUiLanguage(initialData.settings[initialData.session.companyId]?.locale)
+  );
 
   const apiOptions = useMemo(
     () => ({
@@ -412,6 +424,7 @@ export function AppStateProvider({
   useEffect(() => {
     const storedCompanyId = window.localStorage.getItem(companyStorageKey);
     const storedSession = window.localStorage.getItem(sessionStorageKey);
+    const storedUiLanguage = window.localStorage.getItem(uiLanguageStorageKey);
     let resolvedSession = initialData.session;
 
     if (storedSession) {
@@ -427,6 +440,12 @@ export function AppStateProvider({
       setActiveCompanyIdState(storedCompanyId);
     } else {
       setActiveCompanyIdState(resolvedSession.companyId);
+    }
+
+    if (storedUiLanguage === "es" || storedUiLanguage === "en") {
+      setUiLanguageState(storedUiLanguage);
+    } else {
+      setUiLanguageState(resolveInitialUiLanguage(initialData.settings[resolvedSession.companyId]?.locale));
     }
 
     if (resolvedSession.authenticated) {
@@ -449,6 +468,10 @@ export function AppStateProvider({
   useEffect(() => {
     window.localStorage.setItem(companyStorageKey, activeCompanyId);
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(uiLanguageStorageKey, uiLanguage);
+  }, [uiLanguage]);
 
   const activeCompany =
     data.companies.find((company) => company.id === activeCompanyId) ?? data.companies[0];
@@ -506,6 +529,7 @@ export function AppStateProvider({
     isSavingModules,
     isSavingUsers,
     isProvisioningCompany,
+    uiLanguage,
     session: {
       ...session,
       companyId: activeCompany.id,
@@ -527,6 +551,13 @@ export function AppStateProvider({
       } else {
         void refreshPlatformState(companyId);
       }
+    },
+    setUiLanguage(language) {
+      setUiLanguageState(language);
+      window.localStorage.setItem(uiLanguageStorageKey, language);
+    },
+    localizeText(input) {
+      return translateText(input, uiLanguage);
     },
     async signIn(credentials) {
       const apiResponse = await loginWithApi(credentials, apiOptions);

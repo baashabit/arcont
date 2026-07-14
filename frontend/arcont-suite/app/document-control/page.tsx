@@ -166,8 +166,292 @@ function validateDocumentCreateForm(input: {
   return null;
 }
 
+function createDocumentExample() {
+  return {
+    documentType: "RFI",
+    subject: "Interferencia entre estructura e instalaciones en nivel 4",
+    projectName: "Torre Demo Acabados",
+    owner: "Project coordination",
+    status: "issued" as DocumentControlItemContract["status"],
+    revisionCount: "0",
+    turnaroundDays: "2",
+    openComments: "3",
+    health: "watch" as DocumentControlItemContract["health"],
+    nextAction: "Emitir RFI consolidado y escalar revision tecnica antes del siguiente corte de obra."
+  };
+}
+
+function buildDocumentContinuityGate(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return {
+      tone: "info" as const,
+      label: "No item selected",
+      summary: "Choose a document-control item to verify whether it can really continue through review, response or approval.",
+      checks: ["Select an item from the current coordination board."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (item.status === "blocked") {
+    checks.push("Item is already blocked in coordination flow.");
+  }
+
+  if (item.openComments > 0 && item.status === "approved") {
+    checks.push("Approved posture conflicts with open comments.");
+  }
+
+  if (item.openComments > 0) {
+    checks.push(`${item.openComments} comment(s) still remain open.`);
+  }
+
+  if (item.turnaroundDays > 10) {
+    checks.push(`Turnaround has already stretched to ${item.turnaroundDays} days.`);
+  }
+
+  if (item.health === "critical") {
+    checks.push("Health posture is critical and still needs coordination recovery.");
+  }
+
+  if (checks.length > 0) {
+    return {
+      tone:
+        item.status === "blocked" || item.health === "critical"
+          ? "danger" as const
+          : "warning" as const,
+      label:
+        item.status === "blocked" || item.health === "critical"
+          ? "Do not advance yet"
+          : "Advance with control",
+      summary:
+        item.status === "blocked" || item.health === "critical"
+          ? "The document item still has hard coordination blockers before it should continue downstream."
+          : "The item can continue, but review debt or response aging still needs closure first.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for continuity",
+    summary: "Comments, turnaround and health posture are aligned for clean coordination continuity.",
+    checks: [
+      "Continue into projects, quality or compliance without rebuilding the same issue context.",
+      "Keep the same owner and next action attached to the live document item."
+    ]
+  };
+}
+
+function buildDocumentHumanStep(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return "Select an item to identify the next human move.";
+  }
+
+  if (item.status === "blocked") {
+    return "Unblock the coordination issue first, then return to review with a concrete response owner.";
+  }
+
+  if (item.openComments > 0 || item.status === "awaiting_response") {
+    return "Close comment ownership, chase the pending response and re-enter review in the same operating cycle.";
+  }
+
+  return "Confirm the final approval owner and archive the release evidence while the response context is still current.";
+}
+
+function buildDocumentWhyNow(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return "Choose a document item to understand why document control should care right now.";
+  }
+
+  if (item.status === "blocked" || item.health === "critical") {
+    return `${item.code} is effectively blocked, so unresolved document flow here can immediately distort release, customer handover or field continuity.`;
+  }
+
+  if (item.openComments > 0) {
+    return `${item.code} still carries ${item.openComments} open comments, so acting now prevents the team from normalizing unresolved review debt.`;
+  }
+
+  if (item.status === "awaiting_response") {
+    return `${item.code} is still waiting on response, so delay here can turn a solvable coordination item into a cross-domain blocker.`;
+  }
+
+  return `${item.code} is still operationally active, so document control should protect continuity before another team starts working from stale or incomplete evidence.`;
+}
+
+function buildDocumentDownstreamEffect(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return "Select a document item to inspect what it can block downstream.";
+  }
+
+  if (item.status === "blocked" || item.health === "critical" || item.openComments > 0) {
+    return "The downstream effect is release delay, compliance friction and weaker handover confidence across projects and quality.";
+  }
+
+  if (item.status === "awaiting_response") {
+    return "A slow response here can propagate into project continuity, quality release and warranty or customer delivery timing.";
+  }
+
+  return "The downstream effect is mainly traceability discipline: keep quality, compliance and delivery teams aligned around the same controlled document context.";
+}
+
+function buildDocumentReportBack(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return "Choose a document item to define the next report-back window.";
+  }
+
+  if (item.status === "blocked" || item.health === "critical" || item.openComments > 0) {
+    return "Report back before the next release or handover cutoff with comment closure status and the exact response owner.";
+  }
+
+  if (item.status === "awaiting_response") {
+    return "Report back in the same operating cycle once the missing response is explicit enough to move the item forward.";
+  }
+
+  return "Report back at the next document-control refresh confirming the item stayed healthy through review and delivery follow-through.";
+}
+
+function buildDocumentRouteSummary(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return "Use document control as the coordination lane between review comments, technical answers, compliance and final delivery traceability.";
+  }
+
+  if (item.status === "blocked" || item.health === "critical") {
+    return "This item should route first through coordination recovery before quality, compliance or delivery keep depending on it.";
+  }
+
+  if (item.openComments > 0 || item.status === "awaiting_response") {
+    return "This item should route through comment closure and formal response before downstream teams assume the package is stable.";
+  }
+
+  return "This item can continue through compliance, projects or post-sale with the current controlled-document context intact.";
+}
+
+function buildDocumentOperationalLinks(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return [
+      { label: "Open quality", href: "/quality" },
+      { label: "Open compliance", href: "/compliance" },
+      { label: "Open projects", href: "/projects" }
+    ];
+  }
+
+  if (item.status === "blocked" || item.health === "critical") {
+    return [
+      { label: "Open quality", href: "/quality" },
+      { label: "Open projects", href: "/projects" },
+      { label: "Open compliance", href: "/compliance" }
+    ];
+  }
+
+  if (item.openComments > 0 || item.status === "awaiting_response") {
+    return [
+      { label: "Open compliance", href: "/compliance" },
+      { label: "Open quality", href: "/quality" },
+      { label: "Open post-sale", href: "/post-sale" }
+    ];
+  }
+
+  return [
+    { label: "Open compliance", href: "/compliance" },
+    { label: "Open post-sale", href: "/post-sale" },
+    { label: "Open projects", href: "/projects" }
+  ];
+}
+
+function buildCreateDocumentGate(input: {
+  documentType: string;
+  subject: string;
+  projectName: string;
+  owner: string;
+  status: DocumentControlItemContract["status"];
+  revisionCount: number;
+  turnaroundDays: number;
+  openComments: number;
+  health: DocumentControlItemContract["health"];
+  nextAction: string;
+}) {
+  const checks: string[] = [];
+
+  if ([input.documentType, input.subject, input.projectName, input.owner].some((value) => value.trim().length < 3)) {
+    checks.push("Document type, subject, project and owner still need more specific capture.");
+  }
+
+  if ([input.revisionCount, input.turnaroundDays, input.openComments].some((value) => !Number.isFinite(value) || value < 0)) {
+    checks.push("Revisions, turnaround days and open comments must be zero or greater.");
+  }
+
+  if (input.status === "approved") {
+    checks.push("Document items cannot start as approved.");
+  }
+
+  if (input.openComments > 0 && input.health === "healthy") {
+    checks.push("Healthy status is blocked while open comments remain active.");
+  }
+
+  if (input.status === "awaiting_response" && input.openComments === 0) {
+    checks.push("Awaiting response requires at least one open comment.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs enough detail for coordination or response follow-through.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock =
+      input.status === "approved" ||
+      (input.openComments > 0 && input.health === "healthy") ||
+      (input.status === "awaiting_response" && input.openComments === 0);
+
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not create yet" : "Create with control",
+      summary: hardBlock
+        ? "The document intake still breaks core traceability rules before it should become a live item."
+        : "The item can be created, but coordination should tighten ownership before downstream continuity depends on it.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to create",
+    summary: "The intake is coherent enough to become a live technical coordination item.",
+    checks: [
+      "The created item should be immediately usable by projects, quality or compliance without repeating the same story.",
+      "Keep the same owner and next action attached to the live document item."
+    ]
+  };
+}
+
+function buildCreateDocumentHumanStep(input: {
+  status: DocumentControlItemContract["status"];
+  openComments: number;
+  turnaroundDays: number;
+  health: DocumentControlItemContract["health"];
+  nextAction: string;
+}) {
+  if (input.status === "awaiting_response" && input.openComments <= 0) {
+    return "Add the pending comment or response gap first so the item has a real downstream reason to exist.";
+  }
+
+  if (input.openComments > 0 || input.health === "critical") {
+    return "Create the item and immediately assign comment ownership so projects, quality or compliance can continue without guessing.";
+  }
+
+  if (input.turnaroundDays > 10) {
+    return "Clarify who owns the delayed turnaround before the item is normalized into technical debt.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Make the next action more specific before persisting the item.";
+  }
+
+  return "Create the item and continue into the exact downstream owner while the technical context is still current.";
+}
+
 function DocumentControlPageContent() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -198,6 +482,14 @@ function DocumentControlPageContent() {
     health: "watch" as DocumentControlItemContract["health"],
     nextAction: ""
   });
+  const createFormNumbers = useMemo(
+    () => ({
+      revisionCount: Number(createForm.revisionCount),
+      turnaroundDays: Number(createForm.turnaroundDays),
+      openComments: Number(createForm.openComments)
+    }),
+    [createForm.openComments, createForm.revisionCount, createForm.turnaroundDays]
+  );
 
   useEffect(() => {
     const project = searchParams.get("project");
@@ -207,11 +499,6 @@ function DocumentControlPageContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -253,7 +540,7 @@ function DocumentControlPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const projectOptions = useMemo(() => {
     if (!overview) {
@@ -369,6 +656,40 @@ function DocumentControlPageContent() {
   }, [documentTypeFilter, pathname, projectFilter, router, searchParams]);
 
   const selectedStory = useMemo(() => buildDocumentBridge(selectedItem, bridgeContext), [bridgeContext, selectedItem]);
+  const documentContinuityGate = useMemo(() => buildDocumentContinuityGate(selectedItem), [selectedItem]);
+  const documentHumanStep = useMemo(() => buildDocumentHumanStep(selectedItem), [selectedItem]);
+  const documentWhyNow = useMemo(() => buildDocumentWhyNow(selectedItem), [selectedItem]);
+  const documentDownstreamEffect = useMemo(() => buildDocumentDownstreamEffect(selectedItem), [selectedItem]);
+  const documentReportBack = useMemo(() => buildDocumentReportBack(selectedItem), [selectedItem]);
+  const documentRouteSummary = useMemo(() => buildDocumentRouteSummary(selectedItem), [selectedItem]);
+  const documentOperationalLinks = useMemo(() => buildDocumentOperationalLinks(selectedItem), [selectedItem]);
+  const createDocumentGate = useMemo(
+    () =>
+      buildCreateDocumentGate({
+        documentType: createForm.documentType,
+        subject: createForm.subject,
+        projectName: createForm.projectName,
+        owner: createForm.owner,
+        status: createForm.status,
+        revisionCount: createFormNumbers.revisionCount,
+        turnaroundDays: createFormNumbers.turnaroundDays,
+        openComments: createFormNumbers.openComments,
+        health: createForm.health,
+        nextAction: createForm.nextAction
+      }),
+    [createForm, createFormNumbers]
+  );
+  const createDocumentHumanStep = useMemo(
+    () =>
+      buildCreateDocumentHumanStep({
+        status: createForm.status,
+        openComments: createFormNumbers.openComments,
+        turnaroundDays: createFormNumbers.turnaroundDays,
+        health: createForm.health,
+        nextAction: createForm.nextAction
+      }),
+    [createForm.health, createForm.nextAction, createForm.status, createFormNumbers]
+  );
 
   const actionOptions = useMemo(() => (selectedItem ? documentActionOptions(selectedItem) : []), [selectedItem]);
 
@@ -379,7 +700,7 @@ function DocumentControlPageContent() {
   }, [selectedItemId, selectedItem?.id, selectedItem?.nextAction]);
 
   async function handleItemAction(status: DocumentControlItemContract["status"], suggestedNextAction: string) {
-    if (!selectedItem || !session.accessToken) {
+    if (!selectedItem) {
       return;
     }
 
@@ -443,7 +764,7 @@ function DocumentControlPageContent() {
   }
 
   async function handleCreateItem() {
-    if (!overview || !session.accessToken) {
+    if (!overview) {
       return;
     }
 
@@ -579,11 +900,43 @@ function DocumentControlPageContent() {
               />
             </section>
 
+            {isDemoMode ? (
+              <Card
+                title="Operable demo mode"
+                description="Document-control items can be created and moved locally so coordination walkthroughs no longer depend on production auth."
+                aside={<Badge tone="warning">browser-persisted</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">What works</div>
+                    <div>Create RFIs or submittals, move them through review states, and validate comment-driven coordination behavior.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Recommended test</div>
+                    <div>Create a new RFI for an active project, send it to review, then inspect its impact from Dashboard or Operations.</div>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
+            <section className="grid cols1">
+              <Card
+                title="Technical coordination workflow"
+                description="This route should already let a coordinator raise, review and route a technical document issue into the right downstream lane."
+              >
+                <p className="sectionText">
+                  Create an RFI or submittal, move it through review and response states, then continue into `projects`,
+                  `quality`, `compliance` or `post-sale` depending on whether the unresolved issue is delaying execution,
+                  release or handover.
+                </p>
+              </Card>
+            </section>
+
             <section className="grid cols2">
               <Card title="Document board" description="Live RFIs, submittals, transmittals and meeting-note control.">
                 <FilterBar summary={`${filteredItems.length} document-control items match the current operating filters`}>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? "demo operable" : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "docs ready"}</Badge>
                   <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
@@ -697,6 +1050,36 @@ function DocumentControlPageContent() {
                       <div>{selectedItem.openComments}</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Continuity gate</div>
+                      <div className="tableCellStack">
+                        <Badge tone={documentContinuityGate.tone}>{documentContinuityGate.label}</Badge>
+                        <span className="tableCellMuted">{documentContinuityGate.summary}</span>
+                        {documentContinuityGate.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">{check}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{documentHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{documentWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{documentDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{documentRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{documentReportBack}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Next action</div>
                       <div>
                         <input
@@ -721,9 +1104,11 @@ function DocumentControlPageContent() {
                     <div className="detailRow">
                       <div className="detailLabel">Operational links</div>
                       <div className="row gap wrap">
-                        <Link className="buttonGhost" href="/quality">Open quality</Link>
-                        <Link className="buttonGhost" href="/compliance">Open compliance</Link>
-                        <Link className="buttonGhost" href="/post-sale">Open post-sale</Link>
+                        {documentOperationalLinks.map((link, index) => (
+                          <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
                       </div>
                     </div>
                     <div className="detailRow">
@@ -777,6 +1162,33 @@ function DocumentControlPageContent() {
 
             <section className="grid cols2">
               <Card title="Register document item" description="Create a live RFI, submittal or controlled issue directly in the tenant backend.">
+                <div className="row gap wrap" style={{ marginBottom: 16 }}>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDocumentExample())}>
+                    Load demo example
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm({
+                        documentType: "RFI",
+                        subject: "",
+                        projectName: "Proyecto central",
+                        owner: "Project coordination",
+                        status: "issued",
+                        revisionCount: "0",
+                        turnaroundDays: "0",
+                        openComments: "0",
+                        health: "watch",
+                        nextAction: ""
+                      })
+                    }
+                  >
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/projects">Open projects</Link>
+                  <Link className="buttonGhost" href="/quality">Open quality</Link>
+                </div>
                 <div className="detailGrid">
                   <label className="detailRow">
                     <div className="detailLabel">Type</div>
@@ -827,6 +1239,38 @@ function DocumentControlPageContent() {
                     <div className="detailLabel">Next action</div>
                     <input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} placeholder="Describe the next coordination or response action" />
                   </label>
+                </div>
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">Creation gate</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createDocumentGate.tone}>{createDocumentGate.label}</Badge>
+                        <span>{createDocumentGate.summary}</span>
+                      </div>
+                      {createDocumentGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">
+                          {check}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Next human step</div>
+                    <div>{createDocumentHumanStep}</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Immediate downstream</div>
+                    <div>
+                      {createForm.status === "blocked"
+                        ? "This item should go back into technical coordination before any downstream team assumes continuity."
+                        : createForm.status === "awaiting_response"
+                          ? "This item should continue into the response owner path, not stay parked in document control."
+                          : createForm.health === "critical" || Number(createForm.openComments) > 0
+                            ? "This item should continue into projects, quality or compliance with explicit comment ownership."
+                            : "This item can continue into the next coordination lane with a clean enough technical story."}
+                    </div>
+                  </div>
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateItem()}>
@@ -886,12 +1330,16 @@ function DocumentControlPageContent() {
             title="Document control overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open projects", href: "/projects" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading document control overview" : "Document control overview not loaded yet"}
-            description="This route now expects a live backend document-control response for the active tenant."
+            description={
+              isDemoMode
+                ? "This route should load demo or live document-control signals so technical coordination can be tested end to end."
+                : "This route is still waiting for enough document-control signals for the active tenant."
+            }
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

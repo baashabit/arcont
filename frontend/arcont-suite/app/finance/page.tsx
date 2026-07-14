@@ -88,8 +88,204 @@ function buildFinanceStory(item: FinanceLedgerItemContract | null, riskCount: nu
   };
 }
 
+function buildFinanceReleaseGate(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return {
+      tone: "info" as const,
+      label: "No finance signal selected",
+      summary: "Choose a finance signal to verify whether it can really operate as controlled or still needs intervention.",
+      checks: ["Select a finance row from the active board."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (item.satStatus === "critical") {
+    checks.push("Signal is already in critical fiscal posture.");
+  }
+
+  if (item.urgentItems > 0) {
+    checks.push(`${item.urgentItems} urgent item(s) still remain open.`);
+  }
+
+  if (item.closeReadiness < 90) {
+    checks.push(`Close readiness is only ${item.closeReadiness}%.`);
+  }
+
+  if (item.cashImpact < 0) {
+    checks.push(`Cash impact remains negative at MXN ${Math.abs(item.cashImpact).toLocaleString()}.`);
+  }
+
+  if (checks.length > 0) {
+    const hardBlock = item.satStatus === "critical" || item.urgentItems > 0;
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not release yet" : "Operate with control",
+      summary: hardBlock
+        ? "This signal still carries hard blockers before finance should treat it as controlled."
+        : "The signal can continue, but readiness or cash posture still need tighter financial control.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for continuity",
+    summary: "Urgency, readiness and cash posture are aligned for controlled financial continuity.",
+    checks: [
+      "Continue into treasury, payables or supplier fiscal follow-through without rebuilding the same context.",
+      "Keep the same owner and note attached until the financial checkpoint is formally closed."
+    ]
+  };
+}
+
+function buildFinanceHumanStep(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return "Select a finance signal to identify the next human move.";
+  }
+
+  if (item.satStatus === "critical" || item.urgentItems > 0) {
+    return "Clear the urgent fiscal or payable blocker first, then re-check whether the signal can fall back into a controlled posture.";
+  }
+
+  if (item.closeReadiness < 90) {
+    return "Raise close readiness and keep the responsible finance owner in the same operating cycle before treating this lane as stable.";
+  }
+
+  if (item.cashImpact < 0) {
+    return "Protect the cash position before promoting this signal as a safe downstream release condition.";
+  }
+
+  return "Confirm the controlled checkpoint and keep treasury, payables and supplier follow-through aligned while context is still current.";
+}
+
+function buildFinanceWhyNow(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return "Select a finance signal to understand why it deserves attention right now.";
+  }
+
+  if (item.satStatus === "critical") {
+    return "SAT posture is already critical, so finance delay here can immediately distort treasury, AP and supplier confidence.";
+  }
+
+  if (item.urgentItems > 0) {
+    return `${item.urgentItems} urgent finance item(s) are still open, so this lane is already active operating pressure rather than passive accounting status.`;
+  }
+
+  if (item.closeReadiness < 90) {
+    return "Close readiness is still weak enough that finance can distort treasury or payables timing if not tightened now.";
+  }
+
+  if (item.cashImpact < 0) {
+    return "Negative cash impact means this signal can affect short-term treasury confidence even if accounting posture looks manageable.";
+  }
+
+  return "This signal is relatively stable, but finance still needs to preserve continuity across treasury, AP and supplier fiscal follow-through.";
+}
+
+function buildFinanceDownstreamEffect(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return "Select a finance signal to inspect what it can block downstream.";
+  }
+
+  if (item.satStatus === "critical" || item.urgentItems > 0) {
+    return "This signal can immediately block accounts payable release, treasury execution and supplier confidence if left unresolved.";
+  }
+
+  if (item.closeReadiness < 90) {
+    return "Weak close readiness can propagate into treasury timing, management reporting and operational release confidence.";
+  }
+
+  if (item.cashImpact < 0) {
+    return "Negative cash pressure here can force treasury prioritization and alter payment sequencing upstream.";
+  }
+
+  return "The downstream effect is mainly continuity discipline: keep AP, treasury and supplier posture aligned so the lane stays controlled.";
+}
+
+function buildFinanceReportBackWindow(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return "Select a finance signal to define the next report-back window.";
+  }
+
+  if (item.satStatus === "critical" || item.urgentItems > 0) {
+    return "Report back before the next treasury or AP cutoff with blocker containment status and the exact released checkpoint.";
+  }
+
+  if (item.closeReadiness < 90) {
+    return "Report back in the same operating cycle once close readiness crosses the controlled threshold.";
+  }
+
+  if (item.cashImpact < 0) {
+    return "Report back as soon as treasury confirms the negative cash effect is contained or resequenced.";
+  }
+
+  return "Report back on the next finance refresh confirming the lane stayed controlled through treasury, payables and supplier follow-through.";
+}
+
+function buildFinanceRouteSummary(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return "Use finance as the command lane between supplier posture, payables, treasury release and close readiness.";
+  }
+
+  if (item.satStatus === "critical" || item.urgentItems > 0) {
+    return "This lane should route first through payables and treasury containment before anyone treats the checkpoint as released.";
+  }
+
+  if (item.closeReadiness < 90) {
+    return "This lane should route through close-evidence cleanup and finance ownership before treasury trusts the release path.";
+  }
+
+  if (item.cashImpact < 0) {
+    return "This lane should route through treasury sequencing and cash prioritization before supplier promises are widened.";
+  }
+
+  return "This lane can continue through treasury, AP and supplier follow-through without rebuilding the same finance context.";
+}
+
+function buildFinanceOperationalLinks(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return [
+      { label: "Open finance", href: "/finance" },
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open payables", href: "/accounts-payable" }
+    ];
+  }
+
+  if (item.satStatus === "critical" || item.urgentItems > 0) {
+    return [
+      { label: "Open payables", href: "/accounts-payable" },
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open supplier master", href: "/supplier-master" }
+    ];
+  }
+
+  if (item.closeReadiness < 90) {
+    return [
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open supplier master", href: "/supplier-master" }
+    ];
+  }
+
+  if (item.cashImpact < 0) {
+    return [
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open cash flow", href: "/cash-flow" },
+      { label: "Open payables", href: "/accounts-payable" }
+    ];
+  }
+
+  return [
+    { label: "Open treasury", href: "/treasury/payment-runs" },
+    { label: "Open payables", href: "/accounts-payable" },
+    { label: "Open supplier master", href: "/supplier-master" }
+  ];
+}
+
 export default function FinancePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<FinanceOverviewContract | null>(null);
   const [treasuryOverview, setTreasuryOverview] = useState<TreasuryPaymentRunsOverviewContract | null>(null);
   const [accountsPayableOverview, setAccountsPayableOverview] = useState<Awaited<ReturnType<typeof fetchAccountsPayableOverview>> | null>(null);
@@ -105,11 +301,6 @@ export default function FinancePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -157,7 +348,7 @@ export default function FinancePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredItems = useMemo(() => {
     if (!overview) {
@@ -216,6 +407,13 @@ export default function FinancePage() {
   );
 
   const selectedStory = useMemo(() => buildFinanceStory(selectedItem, selectedRisks.length), [selectedItem, selectedRisks.length]);
+  const selectedReleaseGate = useMemo(() => buildFinanceReleaseGate(selectedItem), [selectedItem]);
+  const selectedHumanStep = useMemo(() => buildFinanceHumanStep(selectedItem), [selectedItem]);
+  const selectedWhyNow = useMemo(() => buildFinanceWhyNow(selectedItem), [selectedItem]);
+  const selectedDownstreamEffect = useMemo(() => buildFinanceDownstreamEffect(selectedItem), [selectedItem]);
+  const selectedReportBack = useMemo(() => buildFinanceReportBackWindow(selectedItem), [selectedItem]);
+  const selectedRouteSummary = useMemo(() => buildFinanceRouteSummary(selectedItem), [selectedItem]);
+  const selectedOperationalLinks = useMemo(() => buildFinanceOperationalLinks(selectedItem), [selectedItem]);
   const actionOptions = useMemo(() => (selectedItem ? financeActionOptions(selectedItem) : []), [selectedItem]);
 
   useEffect(() => {
@@ -244,7 +442,7 @@ export default function FinancePage() {
     satStatus: FinanceLedgerItemContract["satStatus"],
     suggestedNote: string
   ) {
-    if (!selectedItem || !session.accessToken) {
+    if (!selectedItem) {
       return;
     }
 
@@ -366,6 +564,26 @@ export default function FinancePage() {
               />
             </section>
 
+            <section className="grid cols2">
+              <Card
+                title="Finance command walkthrough"
+                description="Use finance as the cross-domain command view for supplier posture, AP pressure, treasury release and close readiness."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    This command layer is now testable without backend auth so operators can validate the financial story and escalation flow end to end.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">supplier posture</Badge>
+                    <Badge tone="info">accounts payable</Badge>
+                    <Badge tone="info">treasury</Badge>
+                    <Badge tone="info">close readiness</Badge>
+                  </div>
+                </div>
+              </Card>
+            </section>
+
             {treasuryOverview ? (
               <section className="grid cols3">
                 <KpiCard
@@ -419,6 +637,7 @@ export default function FinancePage() {
                   <Link className="button" href="/supplier-master">Supplier Master</Link>
                   <Link className="buttonGhost" href="/accounts-payable">Accounts Payable</Link>
                   <Link className="buttonGhost" href="/treasury/payment-runs">Treasury Runs</Link>
+                  <Link className="buttonGhost" href="/cash-flow">Cash Flow</Link>
                 </div>
               </Card>
 
@@ -440,9 +659,7 @@ export default function FinancePage() {
                     onChange={(event) => setSearchFilter(event.target.value)}
                     placeholder="Search metric, code or value"
                   />
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
-                  </Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "finance ready"}</Badge>
                 </FilterBar>
                 <DataTable
@@ -518,6 +735,40 @@ export default function FinancePage() {
                       <div>{selectedItem.closeReadiness}%</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Release gate</div>
+                      <div className="tableCellStack">
+                        <div className="row gap wrap" style={{ alignItems: "center" }}>
+                          <Badge tone={selectedReleaseGate.tone}>{selectedReleaseGate.label}</Badge>
+                          <span>{selectedReleaseGate.summary}</span>
+                        </div>
+                        {selectedReleaseGate.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">
+                            {check}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Note</div>
                       <div>
                         <input
@@ -526,6 +777,16 @@ export default function FinancePage() {
                           onChange={(event) => setNoteDraft(event.target.value)}
                           placeholder="Describe the current fiscal, payable or close action"
                         />
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Operational links</div>
+                      <div className="row gap wrap">
+                        {selectedOperationalLinks.map((link) => (
+                          <Link key={`${link.href}-${link.label}`} className="buttonGhost" href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
                       </div>
                     </div>
                     <div className="detailRow">
@@ -565,6 +826,15 @@ export default function FinancePage() {
                           <Link className="buttonGhost" href="/treasury/payment-runs">
                             Open treasury
                           </Link>
+                          <Link className="buttonGhost" href="/supplier-master">
+                            Open supplier master
+                          </Link>
+                          <Link className="buttonGhost" href="/estimations">
+                            Open estimations
+                          </Link>
+                          <Link className="buttonGhost" href="/dashboard">
+                            Open dashboard
+                          </Link>
                         </div>
                         {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
                         {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
@@ -594,11 +864,12 @@ export default function FinancePage() {
                     <div className="detailRow"><div className="detailLabel">Current focus</div><div>{treasuryOverview.focusRun?.code ?? "No active focus run"}</div></div>
                     <div className="detailRow"><div className="detailLabel">Next treasury action</div><div>{treasuryOverview.focusRun?.nextAction ?? "No treasury action pending"}</div></div>
                   </div>
-                  <div className="row gap wrap" style={{ marginTop: 16 }}>
-                    <Link className="button" href="/treasury/payment-runs">Open Treasury Runs</Link>
-                    <Link className="buttonGhost" href="/accounts-payable">Open Accounts Payable</Link>
-                  </div>
-                </Card>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/treasury/payment-runs">Open Treasury Runs</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Open Accounts Payable</Link>
+                  <Link className="buttonGhost" href="/cash-flow">Open Cash Flow</Link>
+                </div>
+              </Card>
 
                 <Card title="Treasury eligibility blockers" description="Invoices that treasury cannot include in the next clean run.">
                   {treasuryOverview.unavailableInvoices.length > 0 ? (
@@ -720,13 +991,14 @@ export default function FinancePage() {
             title="Finance overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open treasury", href: "/treasury/payment-runs" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading finance overview" : "Finance overview not loaded yet"}
-            description="This route now expects a live backend finance response for the active tenant."
+            description="This route should be operable with live or demo finance data for the active tenant."
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
+            secondaryAction={{ label: "Open cash flow", href: "/cash-flow" }}
           />
         )}
       </ModuleGate>

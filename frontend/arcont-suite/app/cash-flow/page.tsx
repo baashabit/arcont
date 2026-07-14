@@ -116,8 +116,161 @@ function buildCashFlowStory(line: CashFlowLineContract | null, riskCount: number
   };
 }
 
+function buildCashFlowWhyNow(line: CashFlowLineContract | null) {
+  if (!line) {
+    return "Choose a stream to understand why it deserves attention right now.";
+  }
+
+  if (line.health === "critical") {
+    return "This stream is already in critical posture, so treasury delay here can immediately distort payment timing and confidence.";
+  }
+
+  if (line.weeklyNet < 0) {
+    return "A negative weekly net means the stream is already threatening short-term liquidity if left unattended.";
+  }
+
+  if (line.confidencePercent < 75) {
+    return "Low forecast confidence means direction and treasury may be sequencing payments on unstable assumptions.";
+  }
+
+  if (line.openPressureItems > 0) {
+    return `${line.openPressureItems} open pressure item(s) still make this stream operationally active, not just a forecast line.`;
+  }
+
+  return "This stream is relatively stable, but still needs disciplined follow-through to preserve liquidity continuity.";
+}
+
+function buildCashFlowDownstreamEffect(line: CashFlowLineContract | null) {
+  if (!line) {
+    return "Choose a stream to inspect what it can block downstream.";
+  }
+
+  if (line.health === "critical" || line.weeklyNet < 0) {
+    return "The downstream effect is payment prioritization, treasury release tension and higher execution pressure on finance and AP.";
+  }
+
+  if (line.confidencePercent < 75) {
+    return "The downstream effect is sequencing risk: treasury can schedule against a projection that still moves too much.";
+  }
+
+  if (line.openPressureItems > 0) {
+    return "The downstream effect is operational drag across AP, supplier conversations and weekly cash planning.";
+  }
+
+  return "The downstream effect is mostly continuity discipline: keep finance, AP and treasury aligned so the stream stays controlled.";
+}
+
+function buildCashFlowReportBack(line: CashFlowLineContract | null) {
+  if (!line) {
+    return "Choose a stream to define the next report-back window.";
+  }
+
+  if (line.health === "critical" || line.weeklyNet < 0) {
+    return "Report back before the next disbursement cycle with containment status and updated net liquidity outlook.";
+  }
+
+  if (line.confidencePercent < 75) {
+    return "Report back once forecast confidence is refreshed enough for treasury to trust the sequence.";
+  }
+
+  if (line.openPressureItems > 0) {
+    return "Report back in the same operating cycle once the open pressure items are explicitly owned or cleared.";
+  }
+
+  return "Report back on the next treasury refresh confirming the stream stayed controlled and predictable.";
+}
+
+function buildCashFlowHumanStep(line: CashFlowLineContract | null) {
+  if (!line) {
+    return "Choose a stream to see the next treasury move.";
+  }
+
+  if (line.health === "critical") {
+    return "Contain the highest-pressure disbursement or collection item now and assign an owner before treasury sequences anything else around this stream.";
+  }
+
+  if (line.weeklyNet < 0) {
+    return "Re-sequence the immediate outflow pressure and confirm whether AP or treasury can delay, split or re-prioritize the next cash event.";
+  }
+
+  if (line.confidencePercent < 75) {
+    return "Refresh the forecast inputs first so treasury is not acting on a stream that still moves too much week to week.";
+  }
+
+  if (line.openPressureItems > 0) {
+    return "Clear the named pressure items now and confirm which one still blocks a clean treasury or finance decision.";
+  }
+
+  return "Keep the stream under weekly review and move directly into treasury or finance execution without rebuilding the liquidity context.";
+}
+
+function buildCashFlowRouteSummary(line: CashFlowLineContract | null) {
+  if (!line) {
+    return "Use cash flow as the weekly liquidity lane between AP, treasury, suppliers and finance sequencing.";
+  }
+
+  if (line.health === "critical") {
+    return "This stream should route first through treasury containment and payment reprioritization before a wider finance promise is made.";
+  }
+
+  if (line.weeklyNet < 0) {
+    return "This stream should route through treasury and AP resequencing before the gap starts distorting execution timing.";
+  }
+
+  if (line.confidencePercent < 75) {
+    return "This stream should route through forecast refresh and finance review before treasury trusts the next move.";
+  }
+
+  if (line.openPressureItems > 0) {
+    return "This stream should route through the named pressure owner first so liquidity assumptions are not left half-explicit.";
+  }
+
+  return "This stream can continue through treasury, finance and AP without rebuilding the same liquidity context.";
+}
+
+function buildCashFlowOperationalLinks(line: CashFlowLineContract | null) {
+  if (!line) {
+    return [
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open finance", href: "/finance" }
+    ];
+  }
+
+  if (line.health === "critical") {
+    return [
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open supplier master", href: "/supplier-master" }
+    ];
+  }
+
+  if (line.weeklyNet < 0) {
+    return [
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open accounts payable", href: "/accounts-payable" }
+    ];
+  }
+
+  if (line.confidencePercent < 75) {
+    return [
+      { label: "Open finance", href: "/finance" },
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open supplier master", href: "/supplier-master" }
+    ];
+  }
+
+  return [
+    { label: "Open treasury", href: "/treasury/payment-runs" },
+    { label: "Open finance", href: "/finance" },
+    { label: "Open accounts payable", href: "/accounts-payable" }
+  ];
+}
+
 export default function CashFlowPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<CashFlowOverviewContract | null>(null);
   const [accountsPayableOverview, setAccountsPayableOverview] = useState<Awaited<ReturnType<typeof fetchAccountsPayableOverview>> | null>(null);
   const [supplierMasterOverview, setSupplierMasterOverview] = useState<Awaited<ReturnType<typeof fetchSupplierMasterOverview>> | null>(null);
@@ -134,11 +287,6 @@ export default function CashFlowPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -186,7 +334,7 @@ export default function CashFlowPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredLines = useMemo(() => {
     if (!overview) {
@@ -221,6 +369,12 @@ export default function CashFlowPage() {
   );
 
   const selectedStory = useMemo(() => buildCashFlowStory(selectedLine, selectedRisks.length), [selectedLine, selectedRisks.length]);
+  const selectedWhyNow = useMemo(() => buildCashFlowWhyNow(selectedLine), [selectedLine]);
+  const selectedDownstreamEffect = useMemo(() => buildCashFlowDownstreamEffect(selectedLine), [selectedLine]);
+  const selectedReportBack = useMemo(() => buildCashFlowReportBack(selectedLine), [selectedLine]);
+  const selectedHumanStep = useMemo(() => buildCashFlowHumanStep(selectedLine), [selectedLine]);
+  const selectedRouteSummary = useMemo(() => buildCashFlowRouteSummary(selectedLine), [selectedLine]);
+  const selectedOperationalLinks = useMemo(() => buildCashFlowOperationalLinks(selectedLine), [selectedLine]);
   const treasuryChainPressure = useMemo(
     () =>
       (supplierMasterOverview?.summary.criticalSuppliers ?? 0) +
@@ -257,7 +411,7 @@ export default function CashFlowPage() {
   }, [selectedLineId, selectedLine?.id, selectedLine?.nextAction]);
 
   async function handleAction(health: CashFlowLineContract["health"], suggestedNextAction: string) {
-    if (!selectedLine || !session.accessToken) {
+    if (!selectedLine) {
       return;
     }
 
@@ -353,6 +507,24 @@ export default function CashFlowPage() {
 
             <section className="grid cols2">
               <Card
+                title="Cash outlook walkthrough"
+                description="Use this board to test weekly liquidity decisions driven by AP, supplier posture and treasury execution."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    The screen is now operable for human testing even without backend auth: review pressure, update stream health and follow the release chain.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">supplier master</Badge>
+                    <Badge tone="info">accounts payable</Badge>
+                    <Badge tone="info">treasury</Badge>
+                    <Badge tone="info">cash flow</Badge>
+                  </div>
+                </div>
+              </Card>
+
+              <Card
                 title="Treasury release lane"
                 description="Cash flow now reads supplier fiscal posture, accounts payable blockers and treasury execution in one lane."
                 aside={
@@ -371,6 +543,7 @@ export default function CashFlowPage() {
                 <Link className="button" href="/supplier-master">Open supplier master</Link>
                 <Link className="buttonGhost" href="/accounts-payable">Open accounts payable</Link>
                 <Link className="buttonGhost" href="/treasury/payment-runs">Open treasury</Link>
+                <Link className="buttonGhost" href="/finance">Open finance</Link>
               </div>
             </Card>
 
@@ -406,9 +579,7 @@ export default function CashFlowPage() {
                       placeholder="Stream, code, source or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
-                  </Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "cash flow ready"}</Badge>
                   <Badge tone={filteredSummary.criticalStreams > 0 ? "danger" : filteredSummary.weeklyNet < 0 ? "warning" : "success"}>
                     {filteredSummary.criticalStreams > 0
@@ -492,6 +663,26 @@ export default function CashFlowPage() {
                       <div className="detailLabel">Liquidity coverage</div>
                       <div>{selectedLine.liquidityCoverageWeeks.toFixed(1)} weeks</div>
                     </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
 
                     <label className="stack" htmlFor="cash-flow-next-action">
                       <span className="detailLabel">Next action</span>
@@ -504,6 +695,13 @@ export default function CashFlowPage() {
                         placeholder="Describe the treasury, collection or payment action required next"
                       />
                     </label>
+                    <div className="row gap wrap">
+                      {selectedOperationalLinks.map((link, index) => (
+                        <Link key={`${link.href}-${link.label}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
 
                     <div className="cluster">
                       {lineActions.map((action) => (
@@ -527,6 +725,9 @@ export default function CashFlowPage() {
                       </Link>
                       <Link className="buttonGhost" href="/treasury/payment-runs">
                         Open treasury
+                      </Link>
+                      <Link className="buttonGhost" href="/supplier-master">
+                        Open supplier master
                       </Link>
                     </div>
 
@@ -598,7 +799,9 @@ export default function CashFlowPage() {
         ) : (
           <EmptyState
             title={error ?? "Cash flow unavailable"}
-            description="We could not load the treasury projection for the selected company."
+            description="We could not load the treasury projection for the selected company. In demo mode this screen should still be testable through the connected treasury, AP and supplier flow."
+            primaryAction={{ label: "Open treasury", href: "/treasury/payment-runs" }}
+            secondaryAction={{ label: "Open finance", href: "/finance" }}
           />
         )}
       </ModuleGate>

@@ -143,6 +143,7 @@ function pickFocusLine(lines: CostControlLineContract[]) {
 
 export default function CostControlPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<CostControlOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,11 +157,6 @@ export default function CostControlPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -191,7 +187,7 @@ export default function CostControlPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const projectOptions = useMemo(() => {
     if (!overview) {
@@ -263,7 +259,7 @@ export default function CostControlPage() {
     suggestedNextAction: string,
     successMessage?: string
   ) {
-    if (!selectedLine || !session.accessToken) {
+    if (!selectedLine) {
       return;
     }
 
@@ -354,6 +350,23 @@ export default function CostControlPage() {
             </section>
 
             <section className="grid cols2">
+              <Card
+                title="Cost walkthrough"
+                description="Operate forecast drift, procurement blockage and cash exposure from a practical execution-finance board."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    This page is already useful for human tests: review line health, push sourcing states and inspect forecast pressure without waiting for production backend flows.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">cost control</Badge>
+                    <Badge tone="info">forecast</Badge>
+                    <Badge tone="info">cash exposure</Badge>
+                  </div>
+                </div>
+              </Card>
+
               <Card title="Cost board" description="Budget, commitment and forecast posture across the active company cost lines.">
                 <FilterBar summary={`${filteredLines.length} cost lines in the active tenant`}>
                   <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
@@ -380,9 +393,7 @@ export default function CostControlPage() {
                     onChange={(event) => setSearchFilter(event.target.value)}
                     placeholder="Search package, code or project"
                   />
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
-                  </Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "cost view ready"}</Badge>
                 </FilterBar>
                 <DataTable
@@ -635,12 +646,12 @@ export default function CostControlPage() {
             title="Cost control overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open budget book", href: "/budget-book" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading cost control overview" : "Cost control overview not loaded yet"}
-            description="This route expects a live backend cost-control response for the active tenant."
+            description="Open a cost line to test forecast, procurement and cash exposure in demo mode or with the live tenant backend."
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

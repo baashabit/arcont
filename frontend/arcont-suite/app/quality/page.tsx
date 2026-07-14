@@ -127,8 +127,362 @@ function buildQualityStory(inspection: QualityInspectionContract | null, bridge:
   };
 }
 
+function createQualityExample() {
+  return {
+    projectName: "Torre Demo Acabados",
+    areaName: "Frente Acabados",
+    checklistName: "Liberacion de muros y detalles",
+    contractorName: "Acabados Integrales",
+    severity: "critical" as QualityInspectionContract["severity"],
+    openFindings: "4",
+    evidenceCompletion: "62",
+    releaseReadiness: "48",
+    reworkRate: "18",
+    status: "blocked" as QualityInspectionContract["status"],
+    nextAction: "Corregir hallazgos mayores y completar evidencia antes de reactivar la liberacion."
+  };
+}
+
+function createQualityPreset(
+  preset: "release_ready" | "evidence_gap" | "blocked_release"
+): ReturnType<typeof createQualityExample> {
+  switch (preset) {
+    case "release_ready":
+      return {
+        projectName: "Torre Demo Acabados",
+        areaName: "Frente Acabados",
+        checklistName: "Liberacion final de detalles",
+        contractorName: "Acabados Integrales",
+        severity: "major" as QualityInspectionContract["severity"],
+        openFindings: "1",
+        evidenceCompletion: "94",
+        releaseReadiness: "92",
+        reworkRate: "4",
+        status: "pending_release" as QualityInspectionContract["status"],
+        nextAction: "Cerrar observación menor y ejecutar walkthrough final de liberacion."
+      };
+    case "evidence_gap":
+      return {
+        projectName: "Torre Demo Acabados",
+        areaName: "Frente Pintura",
+        checklistName: "Evidencia de liberacion por area",
+        contractorName: "Pinturas del Sureste",
+        severity: "major" as QualityInspectionContract["severity"],
+        openFindings: "2",
+        evidenceCompletion: "58",
+        releaseReadiness: "63",
+        reworkRate: "9",
+        status: "in_progress" as QualityInspectionContract["status"],
+        nextAction: "Completar evidencia faltante y reservar reinspeccion antes del siguiente cierre."
+      };
+    default:
+      return createQualityExample();
+  }
+}
+
+function buildCreateInspectionGate(input: {
+  projectName: string;
+  areaName: string;
+  checklistName: string;
+  contractorName: string;
+  severity: QualityInspectionContract["severity"];
+  status: QualityInspectionContract["status"];
+  openFindings: number;
+  evidenceCompletion: number;
+  releaseReadiness: number;
+  reworkRate: number;
+  nextAction: string;
+}) {
+  const checks: string[] = [];
+
+  if ([input.projectName, input.areaName, input.checklistName, input.contractorName].some((value) => value.trim().length < 3)) {
+    checks.push("Project, area, checklist and contractor still need more specific capture.");
+  }
+
+  if (!Number.isFinite(input.openFindings) || input.openFindings < 0) {
+    checks.push("Open findings must be a valid non-negative number.");
+  }
+
+  if (!Number.isFinite(input.evidenceCompletion) || input.evidenceCompletion < 0 || input.evidenceCompletion > 100) {
+    checks.push("Evidence completion must stay between 0 and 100.");
+  }
+
+  if (!Number.isFinite(input.releaseReadiness) || input.releaseReadiness < 0 || input.releaseReadiness > 100) {
+    checks.push("Release readiness must stay between 0 and 100.");
+  }
+
+  if (!Number.isFinite(input.reworkRate) || input.reworkRate < 0) {
+    checks.push("Rework rate must be a valid non-negative number.");
+  }
+
+  if (input.status === "pending_release" && input.openFindings > 3) {
+    checks.push("Pending release inspections require at most 3 open findings.");
+  }
+
+  if (input.status === "pending_release" && input.evidenceCompletion < 85) {
+    checks.push("Pending release inspections require at least 85% evidence.");
+  }
+
+  if (input.releaseReadiness < input.evidenceCompletion - 45) {
+    checks.push("Release readiness looks too weak compared with current evidence posture.");
+  }
+
+  if (input.severity === "critical" && input.status === "pending_release" && input.releaseReadiness < 90) {
+    checks.push("Critical inspections should not enter release review below 90% release readiness.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs enough detail for correction or release follow-through.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock =
+      (input.status === "pending_release" && input.openFindings > 3) ||
+      (input.status === "pending_release" && input.evidenceCompletion < 85) ||
+      (input.severity === "critical" && input.status === "pending_release" && input.releaseReadiness < 90);
+
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not create yet" : "Create with control",
+      summary: hardBlock
+        ? "This inspection would open with a hard release blocker."
+        : "The inspection can be created, but release discipline still needs tightening.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to create",
+    summary: "The inspection has enough structure to enter the release lane cleanly.",
+    checks: [
+      "The created inspection will become the current focus item immediately.",
+      "Keep findings, evidence and next release action attached from the first capture."
+    ]
+  };
+}
+
+function buildCreateInspectionHumanStep(input: {
+  status: QualityInspectionContract["status"];
+  openFindings: number;
+  evidenceCompletion: number;
+  releaseReadiness: number;
+  nextAction: string;
+}) {
+  if (input.status === "pending_release" && input.evidenceCompletion < 85) {
+    return "Close the evidence gap first so release review does not start already compromised.";
+  }
+
+  if (input.status === "pending_release" && input.openFindings > 3) {
+    return "Reduce open findings before moving this inspection into release review.";
+  }
+
+  if (input.releaseReadiness < 75) {
+    return "Create the inspection and route the next action straight into field correction before promising release.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Clarify the immediate correction or release step before persisting the inspection.";
+  }
+
+  return "Create the inspection and continue directly into field correction, evidence closure or release walkthrough.";
+}
+
+function buildCreateInspectionDestination(input: {
+  status: QualityInspectionContract["status"];
+  evidenceCompletion: number;
+  releaseReadiness: number;
+  openFindings: number;
+}) {
+  if (input.status === "blocked" || input.openFindings > 3) {
+    return {
+      label: "Open field",
+      href: "/field",
+      description: "Correction work still belongs in field before quality can treat release as real."
+    };
+  }
+
+  if (input.evidenceCompletion < 85) {
+    return {
+      label: "Open document control",
+      href: "/document-control",
+      description: "Evidence posture is still weak, so the next move should reinforce technical documentation."
+    };
+  }
+
+  if (input.releaseReadiness < 75) {
+    return {
+      label: "Open daily log",
+      href: "/daily-log",
+      description: "The release lane is still weak enough that site supervision should see the continuity impact."
+    };
+  }
+
+  return {
+    label: "Open compliance",
+    href: "/compliance",
+    description: "If findings and evidence are under control, continue into release and compliance discipline."
+  };
+}
+
+function buildQualityWorkflow(inspection: QualityInspectionContract | null) {
+  if (!inspection) {
+    return "Use quality as the technical release lane between field execution, correction work and final release posture.";
+  }
+
+  if (inspection.status === "blocked") {
+    return "A blocked inspection should route immediately back into field correction, evidence capture and asset continuity before release is reconsidered.";
+  }
+
+  if (inspection.status === "pending_release") {
+    return "A pending-release inspection should close findings and evidence fast so the team can make a clean release decision.";
+  }
+
+  return "An active inspection should keep field correction, contractor follow-up and release readiness aligned in the same lane.";
+}
+
+function buildQualityWhyNow(inspection: QualityInspectionContract | null) {
+  if (!inspection) {
+    return "Select an inspection to understand why quality should act right now.";
+  }
+
+  if (inspection.status === "blocked" || inspection.openFindings > 3) {
+    return `${inspection.areaName} is already under blocked or heavy-findings posture, so delaying action now will keep release and site continuity artificially stuck.`;
+  }
+
+  if (inspection.evidenceCompletion < 85) {
+    return `${inspection.areaName} still lacks enough evidence to support a credible release decision, so waiting only passes weak closeout downstream.`;
+  }
+
+  if (inspection.releaseReadiness < 75 || inspection.projectStatus === "blocked") {
+    return `${inspection.areaName} still carries weak release posture, so this inspection matters now because field and closeout decisions still depend on it.`;
+  }
+
+  return `${inspection.areaName} is near release, so the useful action now is to close the last technical gaps before another review cycle is wasted.`;
+}
+
+function buildQualityDownstreamEffect(inspection: QualityInspectionContract | null) {
+  if (!inspection) {
+    return "Select an inspection to inspect which downstream lane absorbs the impact.";
+  }
+
+  if (inspection.status === "blocked") {
+    return "If this inspection stays blocked, field execution, daily supervision and release planning will all inherit the stall next.";
+  }
+
+  if (inspection.evidenceCompletion < 85) {
+    return "If evidence remains weak, document control, compliance and close-control will inherit incomplete release support and avoidable rework.";
+  }
+
+  if (inspection.releaseReadiness < 75 || inspection.openFindings > 0) {
+    return "If findings or readiness do not improve, field correction and final release sequencing will keep looping around the same unresolved area.";
+  }
+
+  return "If this inspection closes cleanly, release, compliance and downstream turnover can move without rebuilding the technical story.";
+}
+
+function buildQualityHumanStep(inspection: QualityInspectionContract | null) {
+  if (!inspection) {
+    return "Select an inspection to define the next human handoff.";
+  }
+
+  if (inspection.status === "blocked") {
+    return "Tell field and the contractor exactly what must be corrected, who owns it and when the next walkthrough happens.";
+  }
+
+  if (inspection.evidenceCompletion < 85) {
+    return "Tell the evidence owner what is still missing before anyone treats this area as ready for release review.";
+  }
+
+  if (inspection.openFindings > 0) {
+    return "Tell the contractor which findings remain open and when quality expects the corrected package back for reinspection.";
+  }
+
+  return "Tell the release owner and downstream control team that the area is ready for the next formal release step.";
+}
+
+function buildQualityReportBack(inspection: QualityInspectionContract | null) {
+  if (!inspection) {
+    return "Select an inspection to define when the responsible owner should report back.";
+  }
+
+  if (inspection.status === "blocked" || inspection.openFindings > 3) {
+    return "Report back in the same operating cycle with correction ownership, evidence status and the next reinspection moment.";
+  }
+
+  if (inspection.evidenceCompletion < 85) {
+    return "Report back once the missing evidence is explicit enough to support release review without hidden gaps.";
+  }
+
+  if (inspection.releaseReadiness < 75 || inspection.openFindings > 0) {
+    return "Report back when findings and readiness are already aligned enough for a credible release decision.";
+  }
+
+  return "Report back at the next release checkpoint confirming the area truly moved out of correction and into clean release posture.";
+}
+
+function buildQualityRouteSummary(inspection: QualityInspectionContract | null) {
+  if (!inspection) {
+    return "Use quality as the release lane between field correction, evidence control and final compliance-ready closure.";
+  }
+
+  if (inspection.status === "blocked" || inspection.openFindings > 3) {
+    return "This inspection should route first through field correction and evidence recovery before release is considered credible again.";
+  }
+
+  if (inspection.evidenceCompletion < 85) {
+    return "This inspection should route through stronger evidence and document discipline before downstream teams assume release is defensible.";
+  }
+
+  if (inspection.releaseReadiness < 75 || inspection.openFindings > 0) {
+    return "This inspection should route through correction closure and reinspection before compliance or closeout inherit the same weak area.";
+  }
+
+  return "This inspection can continue through compliance and downstream turnover with the current technical story intact.";
+}
+
+function buildQualityOperationalLinks(inspection: QualityInspectionContract | null) {
+  if (!inspection) {
+    return [
+      { label: "Open field", href: "/field" },
+      { label: "Open document control", href: "/document-control" },
+      { label: "Open compliance", href: "/compliance" }
+    ];
+  }
+
+  if (inspection.status === "blocked" || inspection.openFindings > 3) {
+    return [
+      { label: "Open field", href: "/field" },
+      { label: "Open daily log", href: "/daily-log" },
+      { label: "Open equipment", href: "/equipment" }
+    ];
+  }
+
+  if (inspection.evidenceCompletion < 85) {
+    return [
+      { label: "Open document control", href: "/document-control" },
+      { label: "Open field", href: "/field" },
+      { label: "Open compliance", href: "/compliance" }
+    ];
+  }
+
+  if (inspection.releaseReadiness < 75 || inspection.openFindings > 0) {
+    return [
+      { label: "Open field", href: "/field" },
+      { label: "Open compliance", href: "/compliance" },
+      { label: "Open daily log", href: "/daily-log" }
+    ];
+  }
+
+  return [
+    { label: "Open compliance", href: "/compliance" },
+    { label: "Open document control", href: "/document-control" },
+    { label: "Open field", href: "/field" }
+  ];
+}
+
 function QualityPageContent() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session } = useAppState();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -161,6 +515,15 @@ function QualityPageContent() {
     status: "in_progress" as QualityInspectionContract["status"],
     nextAction: ""
   });
+  const createFormNumbers = useMemo(
+    () => ({
+      openFindings: Number(createForm.openFindings),
+      evidenceCompletion: Number(createForm.evidenceCompletion),
+      releaseReadiness: Number(createForm.releaseReadiness),
+      reworkRate: Number(createForm.reworkRate)
+    }),
+    [createForm.evidenceCompletion, createForm.openFindings, createForm.releaseReadiness, createForm.reworkRate]
+  );
 
   useEffect(() => {
     const project = searchParams.get("project");
@@ -170,11 +533,6 @@ function QualityPageContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -212,7 +570,7 @@ function QualityPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const selectedInspection = useMemo(
     () => overview?.inspectionsBoard.find((item) => item.id === selectedInspectionId) ?? overview?.focusInspection ?? null,
@@ -268,6 +626,12 @@ function QualityPageContent() {
     () => overview?.risks.filter((risk) => risk.inspectionId === selectedInspection?.id) ?? [],
     [overview, selectedInspection]
   );
+  const selectedWhyNow = useMemo(() => buildQualityWhyNow(selectedInspection), [selectedInspection]);
+  const selectedDownstreamEffect = useMemo(() => buildQualityDownstreamEffect(selectedInspection), [selectedInspection]);
+  const selectedHumanStep = useMemo(() => buildQualityHumanStep(selectedInspection), [selectedInspection]);
+  const selectedReportBack = useMemo(() => buildQualityReportBack(selectedInspection), [selectedInspection]);
+  const selectedRouteSummary = useMemo(() => buildQualityRouteSummary(selectedInspection), [selectedInspection]);
+  const selectedOperationalLinks = useMemo(() => buildQualityOperationalLinks(selectedInspection), [selectedInspection]);
 
   const filteredRisks = useMemo(() => {
     if (!overview) {
@@ -327,6 +691,44 @@ function QualityPageContent() {
   );
 
   const selectedStory = useMemo(() => buildQualityStory(selectedInspection, bridgeContext), [bridgeContext, selectedInspection]);
+  const createInspectionGate = useMemo(
+    () =>
+      buildCreateInspectionGate({
+        projectName: createForm.projectName,
+        areaName: createForm.areaName,
+        checklistName: createForm.checklistName,
+        contractorName: createForm.contractorName,
+        severity: createForm.severity,
+        status: createForm.status,
+        openFindings: createFormNumbers.openFindings,
+        evidenceCompletion: createFormNumbers.evidenceCompletion,
+        releaseReadiness: createFormNumbers.releaseReadiness,
+        reworkRate: createFormNumbers.reworkRate,
+        nextAction: createForm.nextAction
+      }),
+    [createForm, createFormNumbers]
+  );
+  const createInspectionHumanStep = useMemo(
+    () =>
+      buildCreateInspectionHumanStep({
+        status: createForm.status,
+        openFindings: createFormNumbers.openFindings,
+        evidenceCompletion: createFormNumbers.evidenceCompletion,
+        releaseReadiness: createFormNumbers.releaseReadiness,
+        nextAction: createForm.nextAction
+      }),
+    [createForm.nextAction, createForm.status, createFormNumbers]
+  );
+  const createInspectionDestination = useMemo(
+    () =>
+      buildCreateInspectionDestination({
+        status: createForm.status,
+        evidenceCompletion: createFormNumbers.evidenceCompletion,
+        releaseReadiness: createFormNumbers.releaseReadiness,
+        openFindings: createFormNumbers.openFindings
+      }),
+    [createForm.status, createFormNumbers]
+  );
 
   useEffect(() => {
     setNextActionDraft(selectedInspection?.nextAction ?? "");
@@ -335,7 +737,7 @@ function QualityPageContent() {
   }, [selectedInspectionId, selectedInspection?.id, selectedInspection?.nextAction]);
 
   async function handleInspectionAction(status: QualityInspectionContract["status"], suggestedNextAction: string) {
-    if (!selectedInspection || !session.accessToken) {
+    if (!selectedInspection) {
       return;
     }
 
@@ -394,7 +796,7 @@ function QualityPageContent() {
   }
 
   async function handleCreateInspection() {
-    if (!overview || !session.accessToken) {
+    if (!overview) {
       return;
     }
 
@@ -551,6 +953,38 @@ function QualityPageContent() {
               />
             </section>
 
+            <section className="grid cols1">
+              <Card
+                title="Release workflow"
+                description="This route should already let site and quality teams move from findings to release without depending on a live auth-only flow."
+              >
+                <p className="sectionText">
+                  Select an inspection, move it between correction and release states, and continue into `document-control`,
+                  `field`, `equipment` or `compliance` depending on whether the blocker is evidence, coordination, asset continuity or closeout posture.
+                </p>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Quality continuity"
+                description="Quality should bridge field execution, technical evidence and release control instead of acting as a standalone checklist."
+                aside={<Badge tone={filteredSummary.executionRiskInspections > 0 ? "danger" : filteredSummary.openFindings > 0 ? "warning" : "success"}>{filteredSummary.executionRiskInspections > 0 ? "risk lane" : filteredSummary.openFindings > 0 ? "open findings" : "stable lane"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildQualityWorkflow(selectedInspection)}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Technical rule</div><div>Release should happen only when findings, evidence and field constraints are coherent enough for a real handoff.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Operational jump</div><div>Move into `field`, `daily-log`, `equipment` or `document-control` according to the actual reason release is not clean yet.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/field">Open field</Link>
+                  <Link className="buttonGhost" href="/daily-log">Open daily log</Link>
+                  <Link className="buttonGhost" href="/equipment">Open equipment</Link>
+                  <Link className="buttonGhost" href="/document-control">Open document control</Link>
+                </div>
+              </Card>
+            </section>
+
             <section className="grid cols3">
               <Card title="Equipment readiness" description="Current fleet posture attached to quality release.">
                 <p className="sectionText">
@@ -572,8 +1006,8 @@ function QualityPageContent() {
             <section className="grid cols2">
               <Card title="Inspection board" description="Live inspection, punch list and non-conformance signals.">
                 <FilterBar summary={`${filteredInspections.length} quality inspections match the current operating filters`}>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={!session.accessToken ? "warning" : "success"}>
+                    {!session.accessToken ? "demo mode" : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "quality ready"}</Badge>
                   <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
@@ -705,6 +1139,26 @@ function QualityPageContent() {
                       <div>{selectedInspection.reworkRate}%</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Next action</div>
                       <div>
                         <input
@@ -729,9 +1183,11 @@ function QualityPageContent() {
                     <div className="detailRow">
                       <div className="detailLabel">Operational links</div>
                       <div className="row gap wrap">
-                        <Link className="buttonGhost" href="/document-control">Open document control</Link>
-                        <Link className="buttonGhost" href="/field">Open field</Link>
-                        <Link className="buttonGhost" href="/equipment">Open equipment</Link>
+                        {selectedOperationalLinks.map((link, index) => (
+                          <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
                       </div>
                     </div>
                     <div className="detailRow">
@@ -767,6 +1223,43 @@ function QualityPageContent() {
 
             <section className="grid cols2">
               <Card title="Register inspection" description="Create a live quality incident directly in the tenant backend.">
+                <div className="row gap wrap" style={{ marginBottom: 16 }}>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createQualityExample())}>
+                    Load demo example
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createQualityPreset("release_ready"))}>
+                    Release-ready preset
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createQualityPreset("evidence_gap"))}>
+                    Evidence-gap preset
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createQualityPreset("blocked_release"))}>
+                    Blocked-release preset
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm({
+                        projectName: "Proyecto central",
+                        areaName: "Frente 1",
+                        checklistName: "Inspeccion de calidad",
+                        contractorName: "Contratista principal",
+                        severity: "major",
+                        openFindings: "2",
+                        evidenceCompletion: "70",
+                        releaseReadiness: "65",
+                        reworkRate: "8",
+                        status: "in_progress",
+                        nextAction: ""
+                      })
+                    }
+                  >
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/document-control">Open document control</Link>
+                  <Link className="buttonGhost" href="/compliance">Open compliance</Link>
+                </div>
                 <div className="detailGrid">
                   <label className="detailRow">
                     <div className="detailLabel">Project</div>
@@ -822,10 +1315,40 @@ function QualityPageContent() {
                     <input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} placeholder="Describe the correction or release action required" />
                   </label>
                 </div>
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">Creation gate</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createInspectionGate.tone}>{createInspectionGate.label}</Badge>
+                        <span>{createInspectionGate.summary}</span>
+                      </div>
+                      {createInspectionGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">
+                          {check}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Next human step</div>
+                    <div>{createInspectionHumanStep}</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Immediate downstream</div>
+                    <div className="tableCellStack">
+                      <span>{createInspectionDestination.description}</span>
+                      <span className="tableCellMuted">The quality lane should move immediately into the real correction or release domain, not stop at registration.</span>
+                    </div>
+                  </div>
+                </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateInspection()}>
                     {isCreating ? "Saving..." : "Add inspection"}
                   </button>
+                  <Link className="buttonGhost" href={createInspectionDestination.href}>
+                    {createInspectionDestination.label}
+                  </Link>
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
                 </div>
               </Card>
@@ -880,12 +1403,16 @@ function QualityPageContent() {
             title="Quality overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open field", href: "/field" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading quality overview" : "Quality overview not loaded yet"}
-            description="This route now expects a live backend quality response for the active tenant."
+            description={
+              !session.accessToken
+                ? "This route should load demo or live quality data so release walkthroughs can be tested end to end."
+                : "This route expects the live quality response for the active tenant."
+            }
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

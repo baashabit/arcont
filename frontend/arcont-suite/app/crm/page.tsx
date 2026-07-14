@@ -104,8 +104,184 @@ function buildCommercialBridge(bucket: CrmLeadBucketContract | null, bridge: Com
   };
 }
 
+function buildCrmWorkflow(bucket: CrmLeadBucketContract | null) {
+  if (!bucket) {
+    return "Use CRM as the commercial origin that should already explain downstream collection and cash-flow pressure.";
+  }
+
+  if (bucket.health === "critical") {
+    return "A critical commercial bucket should trigger immediate review across collections, cash flow and project readiness before revenue is treated as dependable.";
+  }
+
+  if (bucket.health === "watch") {
+    return "A watch bucket should be stabilized before reservations and projected cash are used as operating assumptions.";
+  }
+
+  return "A healthy bucket should still stay connected to collections, finance and project delivery readiness.";
+}
+
+function buildCrmContinuationGate(bucket: CrmLeadBucketContract | null) {
+  if (!bucket) {
+    return {
+      tone: "info" as const,
+      label: "No bucket selected",
+      summary: "Choose a commercial bucket to verify whether demand is really stable enough to support downstream planning.",
+      checks: ["Select a bucket from the active commercial board."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (bucket.health === "critical") {
+    checks.push("Bucket is already in critical commercial posture.");
+  }
+
+  if (bucket.conversionRate < 20) {
+    checks.push(`Conversion is only ${bucket.conversionRate}%.`);
+  }
+
+  if (bucket.reservations < 10) {
+    checks.push(`${bucket.reservations} reservation(s) still leave the lane below stable demand threshold.`);
+  }
+
+  if (bucket.forecastRevenue < 1_000_000) {
+    checks.push(`Forecast revenue is only MXN ${bucket.forecastRevenue.toLocaleString()}.`);
+  }
+
+  if (bucket.openOpportunities < 5) {
+    checks.push(`${bucket.openOpportunities} open opportunity(ies) still leave the bucket with a thin pipeline.`);
+  }
+
+  if (checks.length > 0) {
+    return {
+      tone: bucket.health === "critical" || bucket.reservations < 5 || bucket.conversionRate < 15 ? "danger" as const : "warning" as const,
+      label: bucket.health === "critical" || bucket.reservations < 5 || bucket.conversionRate < 15 ? "Do not trust yet" : "Continue with control",
+      summary:
+        bucket.health === "critical" || bucket.reservations < 5 || bucket.conversionRate < 15
+          ? "This bucket still carries hard commercial weakness before finance or delivery should trust it."
+          : "The bucket can continue, but conversion, reservations or forecast still need tighter commercial control.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for continuity",
+    summary: "Demand, reservations and forecast posture are aligned for controlled downstream planning.",
+    checks: [
+      "Continue into estimations, finance or projects without rebuilding the same commercial context.",
+      "Keep the same owner and active signal attached while the commercial window is still current."
+    ]
+  };
+}
+
+function buildCrmHumanStep(bucket: CrmLeadBucketContract | null) {
+  if (!bucket) {
+    return "Select a bucket to identify the next human move.";
+  }
+
+  if (bucket.health === "critical") {
+    return "Escalate the commercial owner now and recover visits, closing certainty or reservation traction before using this lane in downstream assumptions.";
+  }
+
+  if (bucket.reservations < 10 || bucket.conversionRate < 20) {
+    return "Push the next commercial conversion action, secure more reservations and re-check the finance bridge in the same cycle.";
+  }
+
+  if (bucket.forecastRevenue < 1_000_000) {
+    return "Protect forecast quality before handing this lane to finance or project planning as a dependable signal.";
+  }
+
+  return "Confirm the next downstream jump and keep collections, cash flow and project readiness aligned while traction is still fresh.";
+}
+
+function buildCrmWhyNow(bucket: CrmLeadBucketContract | null) {
+  if (!bucket) {
+    return "Select a commercial bucket to understand why it deserves attention right now.";
+  }
+
+  if (bucket.health === "critical") {
+    return "The bucket is already critical, so delay here can contaminate collections, forecast and project assumptions immediately.";
+  }
+
+  if (bucket.reservations < 10) {
+    return "Reservation traction is still weak, so this lane should not be treated as dependable demand yet.";
+  }
+
+  if (bucket.conversionRate < 20) {
+    return "Conversion is below the stable threshold, so the next downstream promise is weaker than the pipeline headline suggests.";
+  }
+
+  return "The lane looks commercially stable enough to keep moving, but it still needs an explicit downstream handoff while traction is current.";
+}
+
+function buildCrmDownstreamEffect(bucket: CrmLeadBucketContract | null) {
+  if (!bucket) {
+    return "Select a commercial bucket to inspect what downstream lane will absorb the impact.";
+  }
+
+  if (bucket.health === "critical") {
+    return "The downstream effect is weaker collections, more treasury uncertainty and lower confidence when projects or delivery plan around this demand.";
+  }
+
+  if (bucket.reservations < 10 || bucket.conversionRate < 20) {
+    return "Weak commercial traction here can distort estimations, cash flow and project-readiness decisions before the portfolio notices.";
+  }
+
+  return "The downstream effect is mostly continuity alignment: keep estimations, finance and projects using the same commercial reality.";
+}
+
+function buildCrmReportBack(bucket: CrmLeadBucketContract | null) {
+  if (!bucket) {
+    return "Select a commercial bucket to define the next report-back window.";
+  }
+
+  if (bucket.health === "critical") {
+    return "Report back before the next commercial cutoff with owner confirmation and evidence that conversion or reservations actually recovered.";
+  }
+
+  if (bucket.reservations < 10 || bucket.conversionRate < 20) {
+    return "Report back in the same operating cycle once the next conversion action and reservation movement are explicit.";
+  }
+
+  return "Report back at the next commercial rhythm check confirming the lane stayed coherent through collections, finance and project planning.";
+}
+
+function buildCrmOperationalLinks(bucket: CrmLeadBucketContract | null) {
+  if (!bucket) {
+    return [
+      { label: "Open estimations", href: "/estimations" },
+      { label: "Open cash flow", href: "/cash-flow" },
+      { label: "Open finance", href: "/finance" }
+    ];
+  }
+
+  if (bucket.health === "critical") {
+    return [
+      { label: "Open estimations", href: "/estimations" },
+      { label: "Open cash flow", href: "/cash-flow" },
+      { label: "Open projects", href: "/projects" }
+    ];
+  }
+
+  if (bucket.reservations < 10 || bucket.conversionRate < 20) {
+    return [
+      { label: "Open estimations", href: "/estimations" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open projects", href: "/projects" }
+    ];
+  }
+
+  return [
+    { label: "Open projects", href: "/projects" },
+    { label: "Open finance", href: "/finance" },
+    { label: "Open post-sale", href: "/post-sale" }
+  ];
+}
+
 export default function CrmPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.accessToken;
   const [overview, setOverview] = useState<CrmOverviewContract | null>(null);
   const [commercialBridge, setCommercialBridge] = useState<CommercialBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -119,11 +295,6 @@ export default function CrmPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -173,7 +344,7 @@ export default function CrmPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredBuckets = useMemo(() => {
     if (!overview) {
@@ -222,6 +393,12 @@ export default function CrmPage() {
   );
 
   const selectedStory = useMemo(() => buildCommercialBridge(selectedBucket, commercialBridge), [commercialBridge, selectedBucket]);
+  const selectedContinuationGate = useMemo(() => buildCrmContinuationGate(selectedBucket), [selectedBucket]);
+  const selectedHumanStep = useMemo(() => buildCrmHumanStep(selectedBucket), [selectedBucket]);
+  const selectedWhyNow = useMemo(() => buildCrmWhyNow(selectedBucket), [selectedBucket]);
+  const selectedDownstreamEffect = useMemo(() => buildCrmDownstreamEffect(selectedBucket), [selectedBucket]);
+  const selectedReportBack = useMemo(() => buildCrmReportBack(selectedBucket), [selectedBucket]);
+  const selectedOperationalLinks = useMemo(() => buildCrmOperationalLinks(selectedBucket), [selectedBucket]);
 
   const actionOptions = useMemo(() => (selectedBucket ? crmActionOptions(selectedBucket) : []), [selectedBucket]);
 
@@ -251,7 +428,7 @@ export default function CrmPage() {
     health: CrmLeadBucketContract["health"],
     suggestedSignal: string
   ) {
-    if (!selectedBucket || !session.accessToken) {
+    if (!selectedBucket) {
       return;
     }
 
@@ -346,6 +523,39 @@ export default function CrmPage() {
               />
             </section>
 
+            <section className="grid cols1">
+              <Card
+                title="Commercial workflow"
+                description="This route should already be usable for human validation, even before the live tenant backend is connected."
+              >
+                <p className="sectionText">
+                  Use the board to filter buckets, open one commercial lane, rewrite the active signal and move it between
+                  `critical`, `watch` and `healthy`. The linked shortcuts connect the commercial queue to estimations,
+                  cash-flow and finance so the operator can understand downstream impact without leaving the operating flow.
+                </p>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Commercial continuity"
+                description="CRM should be the first layer of the customer chain, not a disconnected sales board."
+                aside={<Badge tone={filteredBuckets.some((bucket) => bucket.health === "critical") ? "danger" : filteredBuckets.some((bucket) => bucket.health === "watch") ? "warning" : "success"}>{filteredBuckets.some((bucket) => bucket.health === "critical") ? "critical pipeline" : filteredBuckets.some((bucket) => bucket.health === "watch") ? "watch pipeline" : "stable pipeline"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildCrmWorkflow(selectedBucket)}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Commercial use</div><div>Use this view to decide whether demand is strong enough to support collection, treasury and delivery assumptions.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Expected jump</div><div>Move into estimations, cash flow, finance or projects depending on where the customer chain actually becomes fragile.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/estimations">Open estimations</Link>
+                  <Link className="buttonGhost" href="/cash-flow">Open cash flow</Link>
+                  <Link className="buttonGhost" href="/finance">Open finance</Link>
+                  <Link className="buttonGhost" href="/post-sale">Open post-sale</Link>
+                </div>
+              </Card>
+            </section>
+
             <section className="grid cols2">
               <Card title="Commercial board" description="Live project demand, conversion and reservation pressure.">
                 <FilterBar summary={`${filteredBuckets.length} commercial buckets match the current operating filters`}>
@@ -368,8 +578,8 @@ export default function CrmPage() {
                       placeholder="Project, segment, owner or signal"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? `demo mode · ${source}` : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "crm ready"}</Badge>
                   <Badge tone={filteredBuckets.some((bucket) => bucket.health === "critical") ? "danger" : filteredBuckets.some((bucket) => bucket.health === "watch") ? "warning" : "success"}>
@@ -464,20 +674,41 @@ export default function CrmPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Continuation gate</div>
+                      <div className="tableCellStack">
+                        <div className="row gap wrap" style={{ alignItems: "center" }}>
+                          <Badge tone={selectedContinuationGate.tone}>{selectedContinuationGate.label}</Badge>
+                          <span>{selectedContinuationGate.summary}</span>
+                        </div>
+                        {selectedContinuationGate.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">{check}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Operational links</div>
                       <div className="row gap wrap">
-                        <Link className="buttonGhost" href="/estimations">
-                          Open estimations
-                        </Link>
-                        <Link className="buttonGhost" href="/cash-flow">
-                          Open cash flow
-                        </Link>
-                        <Link className="buttonGhost" href="/finance">
-                          Open finance
-                        </Link>
-                        <Link className="buttonGhost" href="/projects">
-                          Open projects
-                        </Link>
+                        {selectedOperationalLinks.map((link) => (
+                          <Link key={`${link.href}-${link.label}`} className="buttonGhost" href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
                       </div>
                     </div>
                     <div className="detailRow">
@@ -590,12 +821,16 @@ export default function CrmPage() {
             title="CRM overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open estimations", href: "/estimations" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading CRM overview" : "CRM overview not loaded yet"}
-            description="This route now expects a live backend CRM response for the active tenant."
+            description={
+              isDemoMode
+                ? "This route should load demo CRM data for the active company so commercial teams can validate the workflow."
+                : "This route expects the live CRM backend for the active tenant."
+            }
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

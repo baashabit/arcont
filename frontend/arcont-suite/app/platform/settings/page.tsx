@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +74,32 @@ function recommendedModuleTone(enabled: boolean, required: boolean) {
   return enabled ? "info" as const : "warning" as const;
 }
 
+function buildSettingsWorkflow(input: {
+  companyName: string;
+  enabledModules: number;
+  blockedChecks: number;
+  warningChecks: number;
+  satEnabled: boolean;
+} | null) {
+  if (!input) {
+    return null;
+  }
+
+  return {
+    tenantRead:
+      input.blockedChecks > 0
+        ? `${input.companyName} still has ${input.blockedChecks} blocked readiness checks, so this tenant is not yet truly pilot-ready.`
+        : `${input.companyName} has no blocked readiness checks and can continue into operational rollout.`,
+    modularRead:
+      input.enabledModules > 2
+        ? `${input.companyName} already has ${input.enabledModules} enabled modules, which supports a realistic modular deployment posture.`
+        : `${input.companyName} still needs broader module activation to reflect a fuller client setup.`,
+    fiscalRead: input.satEnabled
+      ? `${input.companyName} already has SAT enabled, so fiscal setup can anchor finance and procurement flows.`
+      : `${input.companyName} still has SAT disabled, so fiscal rollout remains incomplete for Mexico-focused production use.`
+  };
+}
+
 const emptyUserForm = {
   fullName: "",
   email: "",
@@ -101,6 +128,7 @@ export default function PlatformSettingsPage() {
     source,
     session
   } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [form, setForm] = useState({
     timezone: "",
     locale: "",
@@ -127,11 +155,6 @@ export default function PlatformSettingsPage() {
   }, [activeCompany.id, refreshCompanyDetail]);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setReadiness(null);
-      return;
-    }
-
     let cancelled = false;
 
     void fetchPlatformSystemReadiness(activeCompany.id, {
@@ -146,7 +169,7 @@ export default function PlatformSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   useEffect(() => {
     setForm({
@@ -211,6 +234,17 @@ export default function PlatformSettingsPage() {
       user.roleKey.toLowerCase().includes(normalizedFilter)
     );
   }, [activeUsers, usersFilter]);
+  const settingsWorkflow = useMemo(
+    () =>
+      buildSettingsWorkflow({
+        companyName: activeCompany.tradeName,
+        enabledModules: enabledModules.length,
+        blockedChecks: readiness?.summary.blockedChecks ?? 0,
+        warningChecks: readiness?.summary.warningChecks ?? 0,
+        satEnabled: form.satEnabled
+      }),
+    [activeCompany.tradeName, enabledModules.length, form.satEnabled, readiness?.summary.blockedChecks, readiness?.summary.warningChecks]
+  );
 
   async function handleSaveSettings() {
     const nextForm = {
@@ -403,14 +437,32 @@ export default function PlatformSettingsPage() {
         />
       </section>
 
+      <section className="grid cols3">
+        <Card title="Tenant continuity" description="How this tenant should move from settings into usable rollout.">
+          <p className="sectionText">
+            {settingsWorkflow?.tenantRead ?? "Tenant continuity will appear once the active company context is loaded."}
+          </p>
+        </Card>
+        <Card title="Modular continuity" description="Settings should stay tied to module packaging and user rollout.">
+          <p className="sectionText">
+            {settingsWorkflow?.modularRead ?? "Modular continuity will appear once enabled modules are loaded."}
+          </p>
+        </Card>
+        <Card title="Fiscal continuity" description="Fiscal setup must remain visible before finance and procurement go live.">
+          <p className="sectionText">
+            {settingsWorkflow?.fiscalRead ?? "Fiscal continuity will appear once settings are loaded."}
+          </p>
+        </Card>
+      </section>
+
       <section className="grid cols2">
         <Card
           title="Configuration detail"
           description={`Settings aligned to ${activeCompany.tradeName}. This form now persists through PUT /platform/settings/:companyId.`}
           aside={
             <div className="tagRow">
-              <Badge tone={source === "api" && session.authenticated ? "success" : "warning"}>
-                {source === "api" && session.authenticated ? "live settings api" : "fallback settings"}
+              <Badge tone={isDemoMode ? "warning" : "success"}>
+                {isDemoMode ? "demo operable" : "live settings api"}
               </Badge>
               <Badge tone="gold">{activeCompany.countryCode}</Badge>
             </div>
@@ -472,6 +524,15 @@ export default function PlatformSettingsPage() {
           </div>
 
           <div className="row gap wrap" style={{ marginTop: 16 }}>
+            <Link className="button secondary" href="/platform/companies">
+              Open companies
+            </Link>
+            <Link className="buttonGhost" href="/platform/modules">
+              Open modules
+            </Link>
+            <Link className="buttonGhost" href="/platform/users">
+              Open users
+            </Link>
             {settingsError ? <Badge tone="danger">{settingsError}</Badge> : null}
             {settingsMessage ? <Badge tone="success">{settingsMessage}</Badge> : null}
           </div>
@@ -490,6 +551,9 @@ export default function PlatformSettingsPage() {
                   <option value="warning">Warning</option>
                   <option value="blocked">Blocked</option>
                 </select>
+                <Badge tone={isDemoMode ? "warning" : "success"}>
+                  {isDemoMode ? "demo-backed readiness" : "live readiness"}
+                </Badge>
               </FilterBar>
               <div className="list">
               {filteredReadinessChecks.map((check) => (
@@ -525,6 +589,14 @@ export default function PlatformSettingsPage() {
           <FilterBar summary={`${filteredCompanyModules.length} modules match the current search`}>
             <input className="field" type="search" value={modulesFilter} onChange={(event) => setModulesFilter(event.target.value)} placeholder="Module, area or description" style={{ minWidth: 220 }} />
           </FilterBar>
+          <div className="row gap wrap" style={{ marginBottom: 16 }}>
+            <Link className="button secondary" href="/platform/modules">
+              Open modules
+            </Link>
+            <Link className="buttonGhost" href="/platform/companies">
+              Open companies
+            </Link>
+          </div>
           <div className="list">
             {filteredCompanyModules.map((entry) => {
               const required = requiredPlatformModules.has(entry.module.key);
@@ -577,6 +649,14 @@ export default function PlatformSettingsPage() {
           <FilterBar summary={`${filteredUsers.length} users match the current search`}>
             <input className="field" type="search" value={usersFilter} onChange={(event) => setUsersFilter(event.target.value)} placeholder="User, email or role" style={{ minWidth: 220 }} />
           </FilterBar>
+          <div className="row gap wrap" style={{ marginBottom: 16 }}>
+            <Link className="button secondary" href="/platform/users">
+              Open users
+            </Link>
+            <Link className="buttonGhost" href="/platform/companies">
+              Open companies
+            </Link>
+          </div>
           <div className="detailGrid">
             <label className="detailRow">
               <div className="detailLabel">Full name</div>

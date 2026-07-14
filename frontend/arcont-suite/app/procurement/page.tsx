@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -82,8 +83,29 @@ function procurementActionOptions(procurementPackage: ProcurementPackageContract
   }
 }
 
+function buildProcurementWorkflow(procurementPackage: ProcurementPackageContract | null) {
+  if (!procurementPackage) {
+    return null;
+  }
+
+  return {
+    sourcingRead:
+      procurementPackage.status === "blocked"
+        ? `${procurementPackage.code} is blocked and needs a practical unblock before any award or receiving flow can move.`
+        : `${procurementPackage.code} is still operable from sourcing through approval without leaving this board.`,
+    executionBridge: procurementPackage.strategic
+      ? `${procurementPackage.projectName} depends on a strategic package that should stay connected to requisitions, supplier control and purchase orders.`
+      : `${procurementPackage.projectName} can keep moving if sourcing, award and downstream purchase order release remain aligned.`,
+    approvalPressure:
+      procurementPackage.status === "awaiting_approval"
+        ? `Approval pressure is active now: ${procurementPackage.approvalHours}h already elapsed with ${procurementPackage.bidCount} bids in play.`
+        : `Approval pressure is currently moderate with ${procurementPackage.bidCount} bids and ${procurementPackage.approvalHours}h in the cycle.`
+  };
+}
+
 export default function ProcurementPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.accessToken;
   const [overview, setOverview] = useState<ProcurementOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,11 +119,6 @@ export default function ProcurementPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -132,7 +149,7 @@ export default function ProcurementPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredPackages = useMemo(() => {
     if (!overview) {
@@ -190,6 +207,7 @@ export default function ProcurementPage() {
     () => (selectedPackage ? procurementActionOptions(selectedPackage) : []),
     [selectedPackage]
   );
+  const procurementWorkflow = useMemo(() => buildProcurementWorkflow(selectedPackage), [selectedPackage]);
 
   useEffect(() => {
     if (!overview) {
@@ -214,7 +232,7 @@ export default function ProcurementPage() {
   }, [selectedPackageId, selectedPackage?.id, selectedPackage?.nextAction]);
 
   async function handlePackageAction(status: ProcurementPackageContract["status"], suggestedNextAction: string) {
-    if (!selectedPackage || !session.accessToken) {
+    if (!selectedPackage) {
       return;
     }
 
@@ -311,6 +329,51 @@ export default function ProcurementPage() {
               />
             </section>
 
+            <section className="grid cols1">
+              <Card
+                title="Sourcing workflow"
+                description="This route should already support practical operator testing before the procurement backend is fully connected."
+              >
+                <p className="sectionText">
+                  Filter the package board, open a package, rewrite the next action and move it between `draft`,
+                  `sourcing`, `awaiting_approval`, `blocked` and `awarded`. The purpose is to validate real buying flow,
+                  not only display a static status wall.
+                </p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/procurement/requisitions">
+                    Open requisitions
+                  </Link>
+                  <Link className="buttonGhost" href="/procurement/purchase-orders">
+                    Open purchase orders
+                  </Link>
+                  <Link className="buttonGhost" href="/supplier-control">
+                    Open supplier control
+                  </Link>
+                  <Link className="buttonGhost" href="/inventory/receiving">
+                    Open receiving
+                  </Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Sourcing continuity" description="Current read of whether the package can keep moving through procurement.">
+                <p className="sectionText">
+                  {procurementWorkflow?.sourcingRead ?? "Choose a package to inspect sourcing continuity."}
+                </p>
+              </Card>
+              <Card title="Execution bridge" description="How sourcing should stay tied to field demand and order release.">
+                <p className="sectionText">
+                  {procurementWorkflow?.executionBridge ?? "Choose a package to inspect execution bridge."}
+                </p>
+              </Card>
+              <Card title="Approval pressure" description="Fast operational read of the approval posture.">
+                <p className="sectionText">
+                  {procurementWorkflow?.approvalPressure ?? "Choose a package to inspect approval pressure."}
+                </p>
+              </Card>
+            </section>
+
             <section className="grid cols2">
               <Card title="Sourcing board" description="Live packages, budget pressure and award readiness.">
                 <FilterBar summary={`${filteredPackages.length} packages match the current operating filters`}>
@@ -343,8 +406,8 @@ export default function ProcurementPage() {
                       placeholder="Package, code, project or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? `demo mode · ${source}` : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "board ready"}</Badge>
                   <Badge tone={filteredPackages.some((item) => item.status === "blocked") ? "danger" : filteredSummary.strategicPackages > 0 ? "warning" : "success"}>
@@ -452,6 +515,14 @@ export default function ProcurementPage() {
                       <div className="detailLabel">Actions</div>
                       <div className="tableCellStack">
                         <div className="emptyActions">
+                          <button
+                            className="button secondary"
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() => void handlePackageAction(selectedPackage.status, selectedPackage.nextAction)}
+                          >
+                            {isSaving ? "Saving..." : "Save next action"}
+                          </button>
                           {actionOptions.map((option) => (
                             <button
                               key={option.label}
@@ -463,6 +534,20 @@ export default function ProcurementPage() {
                               {isSaving ? "Saving..." : option.label}
                             </button>
                           ))}
+                        </div>
+                        <div className="row gap wrap">
+                          <Link className="button secondary" href="/procurement/requisitions">
+                            Open requisitions
+                          </Link>
+                          <Link className="buttonGhost" href="/procurement/purchase-orders">
+                            Open purchase orders
+                          </Link>
+                          <Link className="buttonGhost" href="/supplier-control">
+                            Open supplier control
+                          </Link>
+                          <Link className="buttonGhost" href="/estimations">
+                            Open estimations
+                          </Link>
                         </div>
                         {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
                         {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
@@ -521,12 +606,16 @@ export default function ProcurementPage() {
             title="Procurement overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open requisitions", href: "/procurement/requisitions" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading procurement overview" : "Procurement overview not loaded yet"}
-            description="This route now expects a live backend procurement response for the active tenant."
+            description={
+              isDemoMode
+                ? "This route should load demo sourcing data for the active company so buyers and operations can test the flow."
+                : "This route expects the live procurement backend for the active tenant."
+            }
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

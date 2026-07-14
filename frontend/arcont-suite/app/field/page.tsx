@@ -125,6 +125,76 @@ function captureModeMeta(mode: FieldCaptureMode) {
   }
 }
 
+function captureModeLabel(mode: FieldCaptureMode) {
+  switch (mode) {
+    case "daily_log":
+      return { es: "Bitácora diaria", en: "Daily log" };
+    case "quality_incident":
+      return { es: "Incidencia de calidad", en: "Quality issue" };
+    case "material_request":
+      return { es: "Solicitud de material", en: "Material request" };
+    case "document_control":
+      return { es: "RFI / documento", en: "RFI / document" };
+    default:
+      return { es: "Falla de equipo", en: "Equipment issue" };
+  }
+}
+
+function captureConstraintSpanish(form: FieldCaptureForm) {
+  switch (form.mode) {
+    case "material_request":
+      return form.posture === "critical"
+        ? { label: "Abastecimiento en riesgo", description: "El frente puede detenerse si compras no confirma la ruta de suministro y la fecha de entrega." }
+        : { label: "Solicitud lista para compras", description: "La necesidad ya tiene contexto suficiente para que compras inicie el abastecimiento." };
+    case "quality_incident":
+      return form.posture === "critical"
+        ? { label: "Liberación bloqueada", description: "No cierres este frente hasta que calidad confirme corrección, evidencia y reinspección." }
+        : { label: "Seguimiento de calidad", description: "El hallazgo debe tener responsable y fecha de reinspección antes del siguiente corte." };
+    case "document_control":
+      return { label: "Respuesta técnica pendiente", description: "La ejecución debe esperar la respuesta formal del RFI o la revisión documental correspondiente." };
+    case "equipment_issue":
+      return form.posture === "critical"
+        ? { label: "Equipo bloqueando el frente", description: "Protege el frente, define respaldo y registra quién resolverá la falla." }
+        : { label: "Equipo en seguimiento", description: "Confirma mantenimiento o sustitución antes de comprometer el siguiente turno." };
+    default:
+      return form.posture === "critical"
+        ? { label: "Bitácora bajo presión", description: "El siguiente responsable debe conocer el bloqueo y el plan de recuperación antes del cambio de turno." }
+        : { label: "Bitácora lista para revisión", description: "El avance y la siguiente acción quedan listos para supervisión y seguimiento." };
+  }
+}
+
+function captureDestinationSpanish(mode: FieldCaptureMode) {
+  switch (mode) {
+    case "material_request":
+      return { label: "Abrir requisiciones", description: "Después de guardar, continúa en requisiciones para aprobar, cotizar y dar seguimiento al suministro." };
+    case "quality_incident":
+      return { label: "Abrir calidad", description: "Después de guardar, continúa en calidad para controlar corrección, evidencia y liberación." };
+    case "document_control":
+      return { label: "Abrir control documental", description: "Después de guardar, emite o continúa el RFI en control documental." };
+    case "equipment_issue":
+      return { label: "Abrir equipos", description: "Después de guardar, controla la falla, mantenimiento o reemplazo desde equipos." };
+    default:
+      return { label: "Abrir bitácora diaria", description: "Después de guardar, continúa en la bitácora diaria para la revisión de supervisión." };
+  }
+}
+
+function routeSpanishLabel(href: string) {
+  switch (href) {
+    case "/quality":
+      return "Abrir calidad";
+    case "/equipment":
+      return "Abrir equipos";
+    case "/procurement/requisitions":
+      return "Abrir requisiciones";
+    case "/document-control":
+      return "Abrir control documental";
+    case "/daily-log":
+      return "Abrir bitácora diaria";
+    default:
+      return "Abrir operaciones";
+  }
+}
+
 function createCaptureForm(mode: FieldCaptureMode): FieldCaptureForm {
   switch (mode) {
     case "daily_log":
@@ -215,8 +285,495 @@ function createCaptureForm(mode: FieldCaptureMode): FieldCaptureForm {
   }
 }
 
+function createCaptureExample(mode: FieldCaptureMode, projectName: string): FieldCaptureForm {
+  switch (mode) {
+    case "daily_log":
+      return {
+        mode,
+        projectName,
+        frontName: "Frente Cimentacion",
+        owner: "Luis Operaciones",
+        summary: "Avance parcial con frente listo para siguiente colado",
+        detail: "Se cerraron actividades de acero y el frente queda listo para coordinar el siguiente vaciado.",
+        metricLabel: "Progress",
+        metricValue: "42",
+        category: "Operations",
+        requestedItems: "1",
+        budgetAmount: "0",
+        supplierCoverage: "0",
+        nextAction: "Subir evidencia, cerrar bitacora y confirmar cuadrilla del siguiente turno.",
+        posture: "watch"
+      };
+    case "quality_incident":
+      return {
+        mode,
+        projectName,
+        frontName: "Frente Acabados",
+        owner: "Quality lead",
+        summary: "Hallazgos de alineacion en muros interiores",
+        detail: "La inspeccion detecto desviacion en tres puntos y falta evidencia completa de correccion.",
+        metricLabel: "Open findings",
+        metricValue: "3",
+        category: "Quality",
+        requestedItems: "1",
+        budgetAmount: "0",
+        supplierCoverage: "0",
+        nextAction: "Corregir hallazgos, reinspeccionar y cerrar evidencia en el mismo turno.",
+        posture: "critical"
+      };
+    case "material_request":
+      return {
+        mode,
+        projectName,
+        frontName: "Frente Block",
+        owner: "Warehouse coordinator",
+        summary: "Faltante de block y mortero para continuidad del frente",
+        detail: "El consumo actual deja menos de un turno de material disponible en obra.",
+        metricLabel: "Requested volume",
+        metricValue: "120 m2",
+        category: "Field materials",
+        requestedItems: "2",
+        budgetAmount: "185000",
+        supplierCoverage: "2",
+        nextAction: "Emitir requisicion y confirmar la primera entrega antes del corte de mañana.",
+        posture: "critical"
+      };
+    case "document_control":
+      return {
+        mode,
+        projectName,
+        frontName: "Frente Instalaciones",
+        owner: "Document control",
+        summary: "RFI por interferencia entre arquitectura e instalaciones",
+        detail: "La cuadrilla encontro conflicto de planos en un frente activo que ya impacta continuidad.",
+        metricLabel: "Open comments",
+        metricValue: "4",
+        category: "RFI",
+        requestedItems: "1",
+        budgetAmount: "0",
+        supplierCoverage: "0",
+        nextAction: "Emitir RFI, adjuntar evidencia y escalar revision tecnica hoy mismo.",
+        posture: "watch"
+      };
+    default:
+      return {
+        mode,
+        projectName,
+        frontName: "Frente Movimiento de tierra",
+        owner: "Equipment supervisor",
+        summary: "Retroexcavadora fuera de servicio",
+        detail: "El equipo quedo detenido en maniobra y ya compromete la continuidad del frente.",
+        metricLabel: "Downtime",
+        metricValue: "6 h",
+        category: "Equipment",
+        requestedItems: "1",
+        budgetAmount: "0",
+        supplierCoverage: "0",
+        nextAction: "Abrir contingencia, pedir respaldo y cerrar diagnostico mecanico en campo.",
+        posture: "critical"
+      };
+  }
+}
+
+function modeFollowUpLinks(mode: FieldCaptureMode) {
+  switch (mode) {
+    case "material_request":
+      return [
+        { label: "Open requisitions", href: "/procurement/requisitions" },
+        { label: "Open purchase orders", href: "/procurement/purchase-orders" }
+      ];
+    case "daily_log":
+      return [
+        { label: "Open daily log", href: "/daily-log" },
+        { label: "Open operations", href: "/operations" }
+      ];
+    case "quality_incident":
+      return [
+        { label: "Open quality", href: "/quality" },
+        { label: "Open projects", href: "/projects" }
+      ];
+    case "document_control":
+      return [
+        { label: "Open document control", href: "/document-control" },
+        { label: "Open compliance", href: "/compliance" }
+      ];
+    default:
+      return [
+        { label: "Open equipment", href: "/equipment" },
+        { label: "Open operations", href: "/operations" }
+      ];
+  }
+}
+
+function buildFieldWorkflowSummary(mode: FieldCaptureMode) {
+  switch (mode) {
+    case "daily_log":
+      return "Capture the front signal in field, formalize it in the daily log and keep operations aligned before the next shift.";
+    case "quality_incident":
+      return "Capture the issue in field, route it into quality and return only when release readiness is real.";
+    case "material_request":
+      return "Capture the shortage in field, push it into requisitions or receiving and confirm downstream continuity at the front.";
+    case "document_control":
+      return "Capture the interference in field, route it into document control and close the technical answer before execution resumes.";
+    default:
+      return "Capture the equipment issue in field, route it into equipment control and verify the front is protected while the asset recovers.";
+  }
+}
+
+function buildFieldConstraintSummary(form: FieldCaptureForm) {
+  switch (form.mode) {
+    case "material_request": {
+      const supplierCoverage = Number(form.supplierCoverage) || 0;
+      const budgetAmount = Number(form.budgetAmount) || 0;
+
+      if (supplierCoverage === 0) {
+        return {
+          tone: "danger" as const,
+          label: "Supply path not covered",
+          description: "This shortage still has no supplier path, so procurement must react before the front loses continuity."
+        };
+      }
+
+      if (form.posture === "critical" || supplierCoverage < 2) {
+        return {
+          tone: "warning" as const,
+          label: "Tight supply coverage",
+          description: `Only ${supplierCoverage} supplier path${supplierCoverage === 1 ? "" : "s"} back this request and the front is still exposed.`
+        };
+      }
+
+      return {
+        tone: "success" as const,
+        label: "Material request actionable",
+        description: budgetAmount > 0
+          ? "The shortage already has budget context and enough supplier coverage to continue into procurement."
+          : "The shortage already has enough supplier coverage to continue into procurement."
+      };
+    }
+    case "equipment_issue":
+      return {
+        tone: form.posture === "critical" ? "danger" as const : "warning" as const,
+        label: form.posture === "critical" ? "Machinery is the blocker" : "Machinery needs attention",
+        description: "This capture should protect the front first, then continue into equipment control and field replanning."
+      };
+    case "quality_incident":
+      return {
+        tone: form.posture === "critical" ? "danger" as const : "warning" as const,
+        label: form.posture === "critical" ? "Release blocked by quality" : "Quality follow-up required",
+        description: "The next step should happen in quality, not inside field, once the finding is captured with enough context."
+      };
+    case "document_control":
+      return {
+        tone: "warning" as const,
+        label: "Technical answer pending",
+        description: "Execution should continue only after the document issue is routed into formal review and the answer returns to site."
+      };
+    default:
+      return {
+        tone: form.posture === "critical" ? "warning" as const : "success" as const,
+        label: form.posture === "critical" ? "Daily log under pressure" : "Daily log actionable",
+        description: "Use this capture to formalize the front story and then continue in daily log or operations."
+      };
+  }
+}
+
+function buildFieldNextDestination(form: FieldCaptureForm) {
+  switch (form.mode) {
+    case "material_request":
+      return {
+        label: "Open requisitions",
+        href: "/procurement/requisitions",
+        description: "Field should hand this shortage into requisitions first, then continue to purchase orders and receiving."
+      };
+    case "equipment_issue":
+      return {
+        label: "Open equipment",
+        href: "/equipment",
+        description: "The machine issue should move into equipment control while field protects the affected front."
+      };
+    case "quality_incident":
+      return {
+        label: "Open quality",
+        href: "/quality",
+        description: "The captured incident should continue in quality until release readiness is recovered."
+      };
+    case "document_control":
+      return {
+        label: "Open document control",
+        href: "/document-control",
+        description: "The captured interference should continue through the formal RFI or document review path."
+      };
+    default:
+      return {
+        label: "Open daily log",
+        href: "/daily-log",
+        description: "The field note should continue in daily log so supervision can approve, flag or reroute the next move."
+      };
+  }
+}
+
+function buildHumanNextStep(form: FieldCaptureForm) {
+  switch (form.mode) {
+    case "material_request":
+      return "Confirm requested volume, identify who will chase the requisition and define the delivery checkpoint at site.";
+    case "equipment_issue":
+      return "Protect the front, call maintenance or backup equipment, and document who owns the recovery window.";
+    case "quality_incident":
+      return "Name the finding owner, define the reinspection moment and keep the front from closing early.";
+    case "document_control":
+      return "Assign who will emit the RFI, what evidence goes with it and when the answer must return to field.";
+    default:
+      return "Describe the real next move clearly enough that supervision can act without asking field to restate the same issue.";
+  }
+}
+
+function buildSignalDestination(signal: FieldSignal | null) {
+  if (!signal) {
+    return {
+      label: "No active module",
+      href: "/field",
+      description: "Select a field signal to see where the operating handoff should continue."
+    };
+  }
+
+  switch (signal.area) {
+    case "Material request":
+    case "Materials":
+      return {
+        label: "Open requisitions",
+        href: "/procurement/requisitions",
+        description: "This signal should continue through the supply chain before the front runs out of continuity."
+      };
+    case "Equipment":
+      return {
+        label: "Open equipment",
+        href: "/equipment",
+        description: "This signal should continue in equipment control while field protects the affected front."
+      };
+    case "Quality":
+    case "Quality incident":
+      return {
+        label: "Open quality",
+        href: "/quality",
+        description: "This signal should continue in quality until release readiness is recovered."
+      };
+    case "Documentation":
+    case "Document control":
+      return {
+        label: "Open document control",
+        href: "/document-control",
+        description: "This signal should continue through the formal technical review path."
+      };
+    case "Daily log":
+      return {
+        label: "Open daily log",
+        href: "/daily-log",
+        description: "This field signal should be formalized in daily log so supervision can act on it."
+      };
+    default:
+      return {
+        label: "Open operations",
+        href: "/operations",
+        description: "This signal needs cross-domain follow-up from the operations board."
+      };
+  }
+}
+
+function buildSignalHumanStep(signal: FieldSignal | null) {
+  if (!signal) {
+    return "Select a signal to identify the next human action.";
+  }
+
+  if (signal.area === "Equipment") {
+    return "Protect the front, confirm whether backup equipment is needed and assign a recovery owner.";
+  }
+
+  if (signal.area === "Material request" || signal.area === "Materials") {
+    return "Confirm the shortage, define who chases the requisition and state where the delivery lands in field.";
+  }
+
+  if (signal.area === "Quality" || signal.area === "Quality incident") {
+    return "Assign the finding owner, define the reinspection point and keep the front from closing too early.";
+  }
+
+  if (signal.area === "Documentation" || signal.area === "Document control") {
+    return "State who emits the document request and when the answer must return to the front.";
+  }
+
+  return "Keep the next action concrete enough that the downstream team can continue without asking field to restate the issue.";
+}
+
+function buildSignalWhyNow(signal: FieldSignal | null) {
+  if (!signal) {
+    return "Select a field signal to understand why the front needs action right now.";
+  }
+
+  if (signal.posture === "critical") {
+    return `${signal.title} is already in critical posture, so waiting now can turn a field issue into a direct production stop.`;
+  }
+
+  if (!signal.projectName?.trim()) {
+    return `${signal.title} still lacks project context, so this is the point where the handoff can fail before another team even starts.`;
+  }
+
+  if (!signal.nextAction?.trim() || signal.nextAction.trim().length < 12) {
+    return `${signal.title} already needs a clearer next move, so field should tighten it now before downstream teams work on assumptions.`;
+  }
+
+  return `${signal.title} is already a live operating signal, so clarifying its route now prevents field from rewriting the same story in another module.`;
+}
+
+function buildSignalDownstreamEffect(signal: FieldSignal | null) {
+  if (!signal) {
+    return "Select a field signal to inspect which downstream lane will absorb the impact.";
+  }
+
+  if (signal.area === "Equipment") {
+    return "What happens here now affects equipment continuity, daily supervision and front resequencing at the same time.";
+  }
+
+  if (signal.area === "Material request" || signal.area === "Materials") {
+    return "What happens here now affects requisitions, purchase orders, receiving and whether the front stays supplied or stops.";
+  }
+
+  if (signal.area === "Quality" || signal.area === "Quality incident") {
+    return "What happens here now affects release readiness, daily log approval and whether the front continues with hidden rework risk.";
+  }
+
+  if (signal.area === "Documentation" || signal.area === "Document control") {
+    return "What happens here now affects technical response timing and whether field keeps working with unresolved drawing ambiguity.";
+  }
+
+  return "What happens here now affects supervision, operations and the next shift handoff because this signal is already part of active site continuity.";
+}
+
+function buildSignalRouteSummary(signal: FieldSignal | null) {
+  if (!signal) {
+    return "Use field as the first capture layer between site reality and the module that must own the next operating move.";
+  }
+
+  if (signal.posture === "critical") {
+    return "This signal should route first through containment and front protection before normal downstream continuation.";
+  }
+
+  if (signal.area === "Equipment") {
+    return "This signal should route through equipment control and then daily supervision without rebuilding the field story.";
+  }
+
+  if (signal.area === "Material request" || signal.area === "Materials") {
+    return "This signal should route through requisitions, supplier commitment and receiving while preserving front urgency.";
+  }
+
+  if (signal.area === "Quality" || signal.area === "Quality incident") {
+    return "This signal should route through quality closure before supervision treats the front as releasable.";
+  }
+
+  if (signal.area === "Documentation" || signal.area === "Document control") {
+    return "This signal should route through document control and technical answer before field assumes continuity is safe.";
+  }
+
+  return "This signal can continue through daily log or operations with the current field context intact.";
+}
+
+function buildSignalOperationalLinks(signal: FieldSignal | null, destination: { label: string; href: string }) {
+  if (!signal) {
+    return [
+      { label: "Open operations", href: "/operations" },
+      { label: "Open daily log", href: "/daily-log" },
+      { label: "Open quality", href: "/quality" }
+    ];
+  }
+
+  if (signal.posture === "critical") {
+    return [
+      { label: destination.label, href: destination.href },
+      { label: "Open operations", href: "/operations" },
+      { label: "Open daily log", href: "/daily-log" }
+    ];
+  }
+
+  if (signal.area === "Equipment") {
+    return [
+      { label: destination.label, href: destination.href },
+      { label: "Open daily log", href: "/daily-log" },
+      { label: "Open operations", href: "/operations" }
+    ];
+  }
+
+  if (signal.area === "Material request" || signal.area === "Materials") {
+    return [
+      { label: destination.label, href: destination.href },
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open movements", href: "/inventory/movements" }
+    ];
+  }
+
+  if (signal.area === "Quality" || signal.area === "Quality incident") {
+    return [
+      { label: destination.label, href: destination.href },
+      { label: "Open daily log", href: "/daily-log" },
+      { label: "Open operations", href: "/operations" }
+    ];
+  }
+
+  return [
+    { label: destination.label, href: destination.href },
+    { label: "Open operations", href: "/operations" },
+    { label: "Open daily log", href: "/daily-log" }
+  ];
+}
+
+function buildSignalReadiness(signal: FieldSignal | null) {
+  if (!signal) {
+    return {
+      tone: "info" as const,
+      label: "No signal selected",
+      summary: "Choose a field signal to verify whether it is really ready for downstream execution.",
+      checks: ["Select a signal from the active field list."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (!signal.projectName?.trim()) {
+    checks.push("Project context is still missing for downstream follow-up.");
+  }
+
+  if (!signal.owner?.trim()) {
+    checks.push("Owner assignment is still missing.");
+  }
+
+  if (!signal.nextAction?.trim() || signal.nextAction.trim().length < 12) {
+    checks.push("Next action is still too generic for another team to continue without clarification.");
+  }
+
+  if (signal.posture === "critical") {
+    checks.push("Current posture is critical, so the front must stay protected before normal continuation.");
+  }
+
+  if (checks.length > 0) {
+    return {
+      tone: signal.posture === "critical" ? "danger" as const : "warning" as const,
+      label: signal.posture === "critical" ? "Escalate before downstream" : "Needs clearer handoff",
+      summary:
+        signal.posture === "critical"
+          ? "The signal still carries blockers that should be controlled before normal downstream continuation."
+          : "The signal can continue, but the handoff should be tightened first.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for downstream",
+    summary: "The signal already has enough context to continue into the next module without rewriting the same story.",
+    checks: ["Open the recommended module and execute the stated next action."]
+  };
+}
+
 function FieldPageContent() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const searchParams = useSearchParams();
   const [signals, setSignals] = useState<FieldSignal[]>([]);
   const [customSignals, setCustomSignals] = useState<FieldSignal[]>([]);
@@ -227,22 +784,20 @@ function FieldPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState<FieldCaptureForm>(() => createCaptureForm("daily_log"));
+  const [selectedSignalId, setSelectedSignalId] = useState<string | null>(null);
   const [postureFilter, setPostureFilter] = useState<"all" | FieldSignal["posture"]>("all");
   const [areaFilter, setAreaFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
+  const [workspaceView, setWorkspaceView] = useState<"capture" | "priorities" | "control">("capture");
+  const t = (es: string, en: string) => localizeText({ es, en });
   const projectQuery = searchParams.get("projectName")?.trim() ?? "";
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setSignals([]);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
 
-    void Promise.all([
+    void Promise.allSettled([
       fetchProjectsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchHrOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchQualityOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
@@ -252,65 +807,73 @@ function FieldPageContent() {
       fetchIntegrationOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
       fetchDocumentControlOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
     ])
-      .then(([projects, hr, quality, inventory, equipment, fieldMaterials, integrations, documentControl]) => {
+      .then((results) => {
         if (cancelled) {
           return;
         }
 
-        if (!projects || !hr || !quality || !inventory || !equipment || !fieldMaterials || !integrations || !documentControl) {
-          setError("Field app could not assemble all live site signals.");
-          return;
-        }
+        const [projectsResult, hrResult, qualityResult, inventoryResult, equipmentResult, fieldMaterialsResult, integrationsResult, documentControlResult] =
+          results;
+        const projects = projectsResult.status === "fulfilled" ? projectsResult.value : null;
+        const hr = hrResult.status === "fulfilled" ? hrResult.value : null;
+        const quality = qualityResult.status === "fulfilled" ? qualityResult.value : null;
+        const inventory = inventoryResult.status === "fulfilled" ? inventoryResult.value : null;
+        const equipment = equipmentResult.status === "fulfilled" ? equipmentResult.value : null;
+        const fieldMaterials = fieldMaterialsResult.status === "fulfilled" ? fieldMaterialsResult.value : null;
+        const integrations = integrationsResult.status === "fulfilled" ? integrationsResult.value : null;
+        const documentControl = documentControlResult.status === "fulfilled" ? documentControlResult.value : null;
 
         setMaterialOverview(fieldMaterials);
         setProjectsOverview(projects);
 
         const nextSignals: FieldSignal[] = [];
 
-        nextSignals.push(
-          ...projects.projects.slice(0, 3).map((project) => ({
-            id: `project-anchor-${project.id}`,
-            title: project.name,
-            detail: `${project.activeFronts} fronts · ${project.progress}% progress · ${project.nextMilestone}`,
-            owner: project.client,
-            area: "Project anchor",
-            projectName: project.name,
-            nextAction:
-              project.status === "planning"
-                ? "Open first field capture or quality checkpoint to activate this project in site execution."
-                : project.nextMilestone,
-            posture: (
-              project.status === "blocked"
-                ? "critical"
-                : project.status === "at_risk" || project.status === "planning"
-                  ? "watch"
-                  : "healthy"
-            ) as FieldSignal["posture"]
-          }))
-        );
+        if (projects) {
+          nextSignals.push(
+            ...projects.projects.slice(0, 3).map((project) => ({
+              id: `project-anchor-${project.id}`,
+              title: project.name,
+              detail: `${project.activeFronts} fronts · ${project.progress}% progress · ${project.nextMilestone}`,
+              owner: project.client,
+              area: "Project anchor",
+              projectName: project.name,
+              nextAction:
+                project.status === "planning"
+                  ? "Open first field capture or quality checkpoint to activate this project in site execution."
+                  : project.nextMilestone,
+              posture: (
+                project.status === "blocked"
+                  ? "critical"
+                  : project.status === "at_risk" || project.status === "planning"
+                    ? "watch"
+                    : "healthy"
+              ) as FieldSignal["posture"]
+            }))
+          );
 
-        if (projects.focusProject) {
-          nextSignals.push({
-            id: projects.focusProject.id,
-            title: projects.focusProject.name,
-            detail: `${projects.focusProject.activeFronts} active fronts · ${projects.focusProject.progress}% progress`,
-            owner: projects.focusProject.client,
-            area: "Project progress",
-            projectName: projects.focusProject.name,
-            nextAction:
-              projects.focusProject.progress >= 85
-                ? "Close remaining fronts and protect turnover readiness."
-                : "Review blockers in active fronts and recover weekly progress rhythm.",
-            posture:
-              projects.focusProject.budgetHealth === "critical"
-                ? "critical"
-                : projects.focusProject.budgetHealth === "warning"
-                  ? "watch"
-                  : "healthy"
-          });
+          if (projects.focusProject) {
+            nextSignals.push({
+              id: projects.focusProject.id,
+              title: projects.focusProject.name,
+              detail: `${projects.focusProject.activeFronts} active fronts · ${projects.focusProject.progress}% progress`,
+              owner: projects.focusProject.client,
+              area: "Project progress",
+              projectName: projects.focusProject.name,
+              nextAction:
+                projects.focusProject.progress >= 85
+                  ? "Close remaining fronts and protect turnover readiness."
+                  : "Review blockers in active fronts and recover weekly progress rhythm.",
+              posture:
+                projects.focusProject.budgetHealth === "critical"
+                  ? "critical"
+                  : projects.focusProject.budgetHealth === "warning"
+                    ? "watch"
+                    : "healthy"
+            });
+          }
         }
 
-        if (hr.focusWorkforce) {
+        if (hr?.focusWorkforce) {
           nextSignals.push({
             id: hr.focusWorkforce.id,
             title: hr.focusWorkforce.frontName,
@@ -330,7 +893,7 @@ function FieldPageContent() {
           });
         }
 
-        if (quality.focusInspection) {
+        if (quality?.focusInspection) {
           nextSignals.push({
             id: quality.focusInspection.id,
             title: quality.focusInspection.areaName,
@@ -351,7 +914,7 @@ function FieldPageContent() {
           });
         }
 
-        if (inventory.focusLocation) {
+        if (inventory?.focusLocation) {
           nextSignals.push({
             id: inventory.focusLocation.id,
             title: inventory.focusLocation.locationName,
@@ -371,7 +934,7 @@ function FieldPageContent() {
           });
         }
 
-        if (equipment.focusMachine) {
+        if (equipment?.focusMachine) {
           nextSignals.push({
             id: equipment.focusMachine.id,
             title: equipment.focusMachine.machineName,
@@ -384,7 +947,7 @@ function FieldPageContent() {
           });
         }
 
-        if (integrations.focusStream) {
+        if (integrations?.focusStream) {
           nextSignals.push({
             id: integrations.focusStream.id,
             title: integrations.focusStream.streamName,
@@ -396,7 +959,7 @@ function FieldPageContent() {
           });
         }
 
-        if (documentControl.focusItem) {
+        if (documentControl?.focusItem) {
           nextSignals.push({
             id: documentControl.focusItem.id,
             title: documentControl.focusItem.subject,
@@ -410,7 +973,7 @@ function FieldPageContent() {
         }
 
         if (nextSignals.length === 0) {
-          setError("Field app did not receive actionable signals.");
+          setError("Field app did not receive enough actionable site signals yet.");
           return;
         }
 
@@ -425,7 +988,7 @@ function FieldPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   useEffect(() => {
     if (createForm.projectName || !projectsOverview?.projects.length) {
@@ -514,6 +1077,39 @@ function FieldPageContent() {
     () => prioritySignals.find((signal) => signal.area === "Equipment") ?? null,
     [prioritySignals]
   );
+  const selectedSignal = useMemo(
+    () => filteredSignals.find((signal) => signal.id === selectedSignalId) ?? prioritySignals[0] ?? filteredSignals[0] ?? null,
+    [filteredSignals, prioritySignals, selectedSignalId]
+  );
+  const followUpLinks = useMemo(() => modeFollowUpLinks(createForm.mode), [createForm.mode]);
+  const constraintSummary = useMemo(() => buildFieldConstraintSummary(createForm), [createForm]);
+  const nextDestination = useMemo(() => buildFieldNextDestination(createForm), [createForm]);
+  const constraintSummarySpanish = useMemo(() => captureConstraintSpanish(createForm), [createForm]);
+  const nextDestinationSpanish = useMemo(() => captureDestinationSpanish(createForm.mode), [createForm.mode]);
+  const humanNextStep = useMemo(() => buildHumanNextStep(createForm), [createForm]);
+  const signalDestination = useMemo(() => buildSignalDestination(selectedSignal), [selectedSignal]);
+  const signalHumanStep = useMemo(() => buildSignalHumanStep(selectedSignal), [selectedSignal]);
+  const signalWhyNow = useMemo(() => buildSignalWhyNow(selectedSignal), [selectedSignal]);
+  const signalDownstreamEffect = useMemo(() => buildSignalDownstreamEffect(selectedSignal), [selectedSignal]);
+  const signalRouteSummary = useMemo(() => buildSignalRouteSummary(selectedSignal), [selectedSignal]);
+  const signalOperationalLinks = useMemo(
+    () => buildSignalOperationalLinks(selectedSignal, signalDestination),
+    [selectedSignal, signalDestination]
+  );
+  const signalReadiness = useMemo(() => buildSignalReadiness(selectedSignal), [selectedSignal]);
+  const selectedDestinationSpanishLabel = useMemo(() => routeSpanishLabel(signalDestination.href), [signalDestination.href]);
+
+  useEffect(() => {
+    if (filteredSignals.length === 0) {
+      setSelectedSignalId(null);
+      return;
+    }
+
+    const isVisible = filteredSignals.some((signal) => signal.id === selectedSignalId);
+    if (!isVisible) {
+      setSelectedSignalId(filteredSignals[0]?.id ?? null);
+    }
+  }, [filteredSignals, selectedSignalId]);
 
   async function handleCreateSignal() {
     const title = createForm.summary.trim();
@@ -652,7 +1248,7 @@ function FieldPageContent() {
       persistedDailyLog = true;
     }
 
-    if (createForm.mode === "material_request" && session.accessToken) {
+    if (createForm.mode === "material_request") {
       const response = await createFieldMaterialRequest(
         activeCompany.id,
         {
@@ -873,18 +1469,269 @@ function FieldPageContent() {
 
   return (
     <AppShell
-      title="Field mobile app"
-      eyebrow="Site execution"
-      description="A field-first view for progress, quality, materials, evidence and connectivity from the active site."
+      title={{ es: "Avance de obra", en: "Field progress" }}
+      eyebrow={{ es: "Ejecución de obra", en: "Site execution" }}
+      description={{
+        es: "Registra avance, incidencias y necesidades del frente; después envíalas al equipo que las resolverá.",
+        en: "Capture progress, issues and site needs, then route them to the team that will resolve them."
+      }}
       actions={
-        <Badge tone={session.authenticated ? "success" : "warning"}>
-          {isLoading ? "refreshing" : session.authenticated ? "live backend" : source}
+        <Badge tone={isDemoMode ? "warning" : "success"}>
+          {isLoading ? t("actualizando", "refreshing") : isDemoMode ? t("demo operable", "operable demo") : t("backend activo", "live backend")}
         </Badge>
       }
     >
-      <ModuleGate moduleKeys={["projects.control"]} requiredPermissions={["projects:*"]} title="Field App">
+      <ModuleGate moduleKeys={["projects.control"]} requiredPermissions={["projects:*"]} title={t("Campo", "Field") }>
         {visibleSignals.length > 0 ? (
           <>
+            <section className="fieldWorkbench">
+              <div className="fieldWorkbenchIntro">
+                <span className="eyebrow">
+                  {t("Registro operativo", "Operational capture")}
+                  <span className="mono">{t("obra activa", "active site")}</span>
+                </span>
+                <h2>{t("¿Qué necesitas registrar ahora?", "What do you need to capture now?")}</h2>
+                <p>
+                  {t(
+                    "Elige el tipo de registro, captura lo indispensable y deja listo el siguiente responsable. Los controles detallados quedan fuera de este primer paso.",
+                    "Choose the record type, capture the essentials and set the next owner. Detailed controls stay out of this first step."
+                  )}
+                </p>
+                <div className="fieldModeRail" role="list" aria-label={t("Tipos de registro", "Record types")}>
+                  {(["daily_log", "quality_incident", "material_request", "document_control", "equipment_issue"] as FieldCaptureMode[]).map((mode) => {
+                    const active = createForm.mode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={`fieldModeButton ${active ? "fieldModeButtonActive" : ""}`}
+                        aria-pressed={active}
+                        onClick={() => {
+                          setCreateForm((current) => ({
+                            ...createCaptureForm(mode),
+                            projectName: current.projectName,
+                            frontName: current.frontName,
+                            owner: current.owner
+                          }));
+                          setWorkspaceView("capture");
+                        }}
+                      >
+                        {localizeText(captureModeLabel(mode))}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="fieldWorkbenchSnapshot">
+                <span>{t("Contexto del registro", "Capture context")}</span>
+                <strong>{createForm.projectName || t("Selecciona un proyecto", "Select a project")}</strong>
+                <p>{createForm.frontName || t("Frente pendiente", "Front pending")}</p>
+                <div className="fieldWorkbenchCounts">
+                  <div>
+                    <strong>{filteredMetrics.critical}</strong>
+                    <span>{t("críticos", "critical")}</span>
+                  </div>
+                  <div>
+                    <strong>{filteredMetrics.watch}</strong>
+                    <span>{t("en seguimiento", "watching")}</span>
+                  </div>
+                  <div>
+                    <strong>{materialOverview?.summary.linkedRequisitions ?? 0}</strong>
+                    <span>{t("req. ligadas", "linked reqs")}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div className="fieldWorkspaceTabs" role="tablist" aria-label={t("Vistas de campo", "Field views")}>
+              {([
+                ["capture", t("Registrar", "Capture")],
+                ["priorities", t("Pendientes", "Priorities")],
+                ["control", t("Control", "Control")]
+              ] as const).map(([view, label]) => (
+                <button
+                  key={view}
+                  type="button"
+                  role="tab"
+                  aria-selected={workspaceView === view}
+                  className={`fieldWorkspaceTab ${workspaceView === view ? "fieldWorkspaceTabActive" : ""}`}
+                  onClick={() => setWorkspaceView(view)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {workspaceView === "capture" ? (
+              <section className="grid cols2">
+                <Card
+                  title={t("Nuevo registro", "New record")}
+                  description={t("Completa lo mínimo para que el siguiente equipo pueda actuar sin pedirte la misma información otra vez.", "Complete the essentials so the next team can act without asking for the same information again.")}
+                  aside={<Badge tone={constraintSummary.tone}>{localizeText(captureModeLabel(createForm.mode))}</Badge>}
+                >
+                  <div className="captureCompactGrid">
+                    <label className="captureField captureFieldWide">
+                      <span>{t("Proyecto", "Project")}</span>
+                      {projectsOverview?.projects.length ? (
+                        <select
+                          className="selectField"
+                          value={createForm.projectName}
+                          onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                        >
+                          {projectsOverview.projects.map((project) => (
+                            <option key={project.id} value={project.name}>
+                              {project.code} · {project.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input className="field" value={createForm.projectName} onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))} />
+                      )}
+                    </label>
+                    <label className="captureField">
+                      <span>{t("Frente", "Front")}</span>
+                      <input className="field" value={createForm.frontName} onChange={(event) => setCreateForm((current) => ({ ...current, frontName: event.target.value }))} placeholder={t("Ej. Cimentación", "E.g. Foundation")} />
+                    </label>
+                    <label className="captureField">
+                      <span>{t("Responsable", "Owner")}</span>
+                      <input className="field" value={createForm.owner} onChange={(event) => setCreateForm((current) => ({ ...current, owner: event.target.value }))} placeholder={t("Ej. Residente de obra", "E.g. Site superintendent")} />
+                    </label>
+                    <label className="captureField captureFieldWide">
+                      <span>{t("Resumen", "Summary")}</span>
+                      <input className="field" value={createForm.summary} onChange={(event) => setCreateForm((current) => ({ ...current, summary: event.target.value }))} placeholder={captureModeMeta(createForm.mode).summaryPlaceholder} />
+                    </label>
+                    <label className="captureField captureFieldWide">
+                      <span>{t("Qué ocurrió", "What happened")}</span>
+                      <input className="field" value={createForm.detail} onChange={(event) => setCreateForm((current) => ({ ...current, detail: event.target.value }))} placeholder={captureModeMeta(createForm.mode).detailPlaceholder} />
+                    </label>
+                    <label className="captureField">
+                      <span>{t("Indicador", "Metric")}</span>
+                      <input className="field" value={createForm.metricLabel} onChange={(event) => setCreateForm((current) => ({ ...current, metricLabel: event.target.value }))} placeholder={captureModeMeta(createForm.mode).metricLabelPlaceholder} />
+                    </label>
+                    <label className="captureField">
+                      <span>{t("Valor", "Value")}</span>
+                      <input className="field" value={createForm.metricValue} onChange={(event) => setCreateForm((current) => ({ ...current, metricValue: event.target.value }))} placeholder={captureModeMeta(createForm.mode).metricValuePlaceholder} />
+                    </label>
+                    <label className="captureField">
+                      <span>{t("Estado", "Status")}</span>
+                      <select className="selectField" value={createForm.posture} onChange={(event) => setCreateForm((current) => ({ ...current, posture: event.target.value as FieldSignal["posture"] }))}>
+                        <option value="healthy">{t("sin bloqueo", "clear")}</option>
+                        <option value="watch">{t("en seguimiento", "watch")}</option>
+                        <option value="critical">{t("crítico", "critical")}</option>
+                      </select>
+                    </label>
+                    <label className="captureField captureFieldWide">
+                      <span>{t("Siguiente acción", "Next action")}</span>
+                      <input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} placeholder={captureModeMeta(createForm.mode).nextActionPlaceholder} />
+                    </label>
+                  </div>
+
+                  {createForm.mode === "material_request" ? (
+                    <details className="captureDetails">
+                      <summary>{t("Datos de compra y abastecimiento", "Procurement and supply details")}</summary>
+                      <div className="captureCompactGrid">
+                        <label className="captureField"><span>{t("Categoría", "Category")}</span><input className="field" value={createForm.category} onChange={(event) => setCreateForm((current) => ({ ...current, category: event.target.value }))} /></label>
+                        <label className="captureField"><span>{t("Partidas", "Items")}</span><input className="field" type="number" min="1" value={createForm.requestedItems} onChange={(event) => setCreateForm((current) => ({ ...current, requestedItems: event.target.value }))} /></label>
+                        <label className="captureField"><span>{t("Presupuesto estimado", "Estimated budget")}</span><input className="field" type="number" min="0" value={createForm.budgetAmount} onChange={(event) => setCreateForm((current) => ({ ...current, budgetAmount: event.target.value }))} /></label>
+                        <label className="captureField"><span>{t("Proveedores disponibles", "Available suppliers")}</span><input className="field" type="number" min="0" value={createForm.supplierCoverage} onChange={(event) => setCreateForm((current) => ({ ...current, supplierCoverage: event.target.value }))} /></label>
+                      </div>
+                    </details>
+                  ) : null}
+
+                  {error ? <p className="formError">{error}</p> : null}
+                  <div className="row gap wrap" style={{ marginTop: 20 }}>
+                    <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateSignal()}>
+                      {isCreating ? t("Guardando...", "Saving...") : t("Guardar registro", "Save record")}
+                    </button>
+                    <button type="button" className="buttonGhost" onClick={() => setCreateForm((current) => createCaptureExample(current.mode, current.projectName || projectsOverview?.projects[0]?.name || "Proyecto central"))}>
+                      {t("Cargar ejemplo", "Load example")}
+                    </button>
+                    {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                  </div>
+                </Card>
+
+                <div className="fieldWorkspaceSideStack">
+                  <Card title={t("Validación rápida", "Quick validation")} description={t("El registro debe dejar claro qué se detiene y quién continúa.", "The record must make clear what is blocked and who continues.")} aside={<Badge tone={constraintSummary.tone}>{t(constraintSummarySpanish.label, constraintSummary.label)}</Badge>}>
+                    <p className="sectionText">{t(constraintSummarySpanish.description, constraintSummary.description)}</p>
+                    <div className="detailGrid" style={{ marginTop: 16 }}>
+                      <div className="detailRow"><div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div><div>{t("Confirma responsable, fecha de respuesta y condición para liberar o continuar el frente.", humanNextStep)}</div></div>
+                    </div>
+                  </Card>
+                  <Card title={t("Entrega al siguiente módulo", "Handoff to next module")} description={t(nextDestinationSpanish.description, nextDestination.description)}>
+                    <Link className="button secondary" href={nextDestination.href}>{t(nextDestinationSpanish.label, nextDestination.label)}</Link>
+                    <p className="sectionText" style={{ marginTop: 16 }}>{t("Guarda primero el registro; después usa este acceso para continuar el flujo.", "Save the record first, then use this shortcut to continue the flow.")}</p>
+                  </Card>
+                </div>
+              </section>
+            ) : null}
+
+            {workspaceView === "priorities" ? (
+              <section className="grid cols2">
+                <Card title={t("Frentes que requieren decisión", "Fronts needing a decision")} description={t("Filtra los pendientes y abre uno para entender el siguiente movimiento.", "Filter open items and open one to understand the next move.")} aside={<Badge tone={filteredMetrics.critical > 0 ? "danger" : "success"}>{filteredMetrics.critical} {t("críticos", "critical")}</Badge>}>
+                  <FilterBar summary={`${filteredSignals.length} ${t("señales visibles", "visible signals")}`}>
+                    <select className="field" value={postureFilter} onChange={(event) => setPostureFilter(event.target.value as typeof postureFilter)}>
+                      <option value="all">{t("Todos los estados", "All statuses")}</option>
+                      <option value="critical">{t("Crítico", "Critical")}</option>
+                      <option value="watch">{t("En seguimiento", "Watch")}</option>
+                      <option value="healthy">{t("Sin bloqueo", "Clear")}</option>
+                    </select>
+                    <select className="field" value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
+                      <option value="all">{t("Todas las áreas", "All areas")}</option>
+                      {areaOptions.map((area) => <option key={area} value={area}>{area}</option>)}
+                    </select>
+                    <input className="field" type="search" value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder={t("Buscar frente, responsable o acción", "Search front, owner or action")} />
+                  </FilterBar>
+                  <div className="list">
+                    {filteredSignals.map((signal) => (
+                      <button key={signal.id} type="button" className={`listItem ${selectedSignal?.id === signal.id ? "listItemSelected" : ""}`} onClick={() => setSelectedSignalId(signal.id)}>
+                        <div><strong>{signal.title}</strong><p>{signal.projectName ? `${signal.projectName} · ${signal.detail}` : signal.detail}</p></div>
+                        <Badge tone={postureTone(signal.posture)}>{signal.area}</Badge>
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+
+                <Card title={selectedSignal?.title ?? t("Selecciona un pendiente", "Select a pending item")} description={selectedSignal ? `${selectedSignal.area} · ${selectedSignal.owner}` : t("Selecciona un frente de la lista para ver su ruta.", "Select a front from the list to see its route.")}>
+                  {selectedSignal ? (
+                    <div className="detailGrid">
+                      <div className="detailRow"><div className="detailLabel">{t("Qué ocurre", "What is happening")}</div><div>{selectedSignal.detail}</div></div>
+                      <div className="detailRow"><div className="detailLabel">{t("Acción requerida", "Required action")}</div><div>{selectedSignal.nextAction}</div></div>
+                      <div className="detailRow"><div className="detailLabel">{t("Impacto", "Impact")}</div><div>{t("Este pendiente impacta supervisión, la operación y el siguiente turno si no se atiende a tiempo.", signalDownstreamEffect)}</div></div>
+                      <div className="detailRow"><div className="detailLabel">{t("Continuar en", "Continue in")}</div><div>{t(`Este pendiente debe continuar en ${selectedDestinationSpanishLabel}.`, signalDestination.description)}</div></div>
+                    </div>
+                  ) : <EmptyState title={t("Sin selección", "Nothing selected")} description={t("Elige un registro para continuar.", "Choose a record to continue.")} />}
+                  {selectedSignal ? <div className="row gap wrap" style={{ marginTop: 20 }}><Link className="button" href={signalDestination.href}>{t(selectedDestinationSpanishLabel, signalDestination.label)}</Link><Link className="buttonGhost" href="/operations">{t("Ver operaciones", "Open operations")}</Link></div> : null}
+                </Card>
+              </section>
+            ) : null}
+
+            {workspaceView === "control" ? (
+              <>
+                <section className="grid cols3">
+                  <KpiCard label={t("Frentes críticos", "Critical fronts")} value={String(filteredMetrics.critical)} footnote={t("Requieren una acción o escalamiento hoy.", "Require an action or escalation today.")} />
+                  <KpiCard label={t("Evidencia estimada", "Estimated evidence")} value={String(filteredMetrics.photosLinked)} footnote={t("Registros con evidencia por completar o revisar.", "Records with evidence to complete or review.")} />
+                  <KpiCard label={t("Requisiciones ligadas", "Linked requisitions")} value={String(materialOverview?.summary.linkedRequisitions ?? 0)} footnote={t("Solicitudes de campo que ya entraron a compras.", "Field requests already sent to procurement.")} />
+                </section>
+                <section className="grid cols2">
+                  <Card title={t("Cadena de abastecimiento", "Supply chain")} description={t("Lo capturado en campo debe continuar hasta la recepción, no quedarse como aviso.", "What is captured in the field must continue through receiving, not remain a notice.")}>
+                    <div className="detailGrid">
+                      <div className="detailRow"><div className="detailLabel">{t("Solicitudes abiertas", "Open requests")}</div><div>{materialOverview?.summary.openRequests ?? 0}</div></div>
+                      <div className="detailRow"><div className="detailLabel">{t("Solicitudes críticas", "Critical requests")}</div><div>{materialOverview?.summary.criticalRequests ?? 0}</div></div>
+                      <div className="detailRow"><div className="detailLabel">{t("En foco", "In focus")}</div><div>{materialOverview?.focusRequest ? `${materialOverview.focusRequest.frontName} · ${materialOverview.focusRequest.summary}` : t("Sin solicitud prioritaria", "No priority request")}</div></div>
+                    </div>
+                    <div className="row gap wrap" style={{ marginTop: 20 }}><Link className="button" href="/procurement/requisitions">{t("Abrir requisiciones", "Open requisitions")}</Link><Link className="buttonGhost" href="/inventory/receiving">{t("Abrir recepción", "Open receiving")}</Link></div>
+                  </Card>
+                  <Card title={t("Ritmo de supervisión", "Supervision rhythm")} description={t("Usa estos accesos después de capturar; no como sustituto de registrar la operación.", "Use these shortcuts after capturing, not as a substitute for recording the operation.")}>
+                    <div className="row gap wrap"><Link className="buttonGhost" href="/daily-log">{t("Bitácora diaria", "Daily log")}</Link><Link className="buttonGhost" href="/quality">{t("Calidad", "Quality")}</Link><Link className="buttonGhost" href="/equipment">{t("Equipos", "Equipment")}</Link></div>
+                  </Card>
+                </section>
+              </>
+            ) : null}
+
+            <details className="fieldAdvanced">
+              <summary>{t("Abrir contexto y controles avanzados", "Open advanced context and controls")}</summary>
+              <div className="fieldAdvancedContent">
             <section className="grid cols4">
               <KpiCard
                 label="Captures today"
@@ -912,6 +1759,66 @@ function FieldPageContent() {
                 footnote="Field material requests already linked into live procurement requisitions."
               />
             </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Field workflow"
+                description="Field should act as the fast capture layer for real site issues, not as an isolated dashboard."
+                aside={<Badge tone={filteredMetrics.critical > 0 ? "danger" : filteredMetrics.watch > 0 ? "warning" : "success"}>{filteredMetrics.critical > 0 ? "critical fronts" : filteredMetrics.watch > 0 ? "watch fronts" : "stable fronts"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildFieldWorkflowSummary(createForm.mode)}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Capture purpose</div><div>Use field to start the issue with enough context so the downstream module does not need the user to retype the same operational story.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Expected outcome</div><div>After capture, jump immediately into the module that will actually resolve the blockage and come back only to confirm continuity.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/daily-log">Open daily log</Link>
+                  <Link className="buttonGhost" href="/quality">Open quality</Link>
+                  <Link className="buttonGhost" href="/equipment">Open equipment</Link>
+                  <Link className="buttonGhost" href="/inventory/movements">Open movements</Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card
+                title="Captured blocker"
+                description="What kind of operational constraint the current capture is actually describing."
+                aside={<Badge tone={constraintSummary.tone}>{constraintSummary.label}</Badge>}
+              >
+                <p className="sectionText">{constraintSummary.description}</p>
+              </Card>
+              <Card title="Next module" description="Where the user should continue after recording the field issue.">
+                <p className="sectionText">{nextDestination.description}</p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button secondary" href={nextDestination.href}>
+                    {nextDestination.label}
+                  </Link>
+                </div>
+              </Card>
+              <Card title="Next human step" description="The handoff should still be clear even before any other module opens.">
+                <p className="sectionText">{humanNextStep}</p>
+              </Card>
+            </section>
+
+            {isDemoMode ? (
+              <Card
+                title="Operable demo mode"
+                description="Field capture stays testable even if only projects and equipment signals are currently available."
+                aside={<Badge tone="warning">partial live graph</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">What works</div>
+                    <div>Create local field captures, filter signals and validate the field-to-project-to-equipment story.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Best walkthrough</div>
+                    <div>Open a project from Projects, jump into Field, add an equipment issue or daily log, then review continuity in Operations.</div>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
 
             <section className="grid cols2">
               <Card title="Field flows" description="The mobile layer now reflects live site pressure across execution areas.">
@@ -952,13 +1859,24 @@ function FieldPageContent() {
                 </FilterBar>
                 <div className="list">
                   {filteredSignals.map((signal) => (
-                    <div className="listItem" key={signal.id}>
+                    <button
+                      type="button"
+                      className="listItem"
+                      key={signal.id}
+                      onClick={() => setSelectedSignalId(signal.id)}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        border: selectedSignal?.id === signal.id ? "1px solid var(--accent-600)" : undefined,
+                        background: selectedSignal?.id === signal.id ? "rgba(15, 118, 110, 0.06)" : undefined
+                      }}
+                    >
                       <div>
                         <strong>{signal.title}</strong>
                         <p>{signal.projectName ? `${signal.projectName} · ${signal.detail}` : signal.detail}</p>
                       </div>
                       <Badge tone={postureTone(signal.posture)}>{signal.area}</Badge>
-                    </div>
+                    </button>
                   ))}
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
@@ -974,20 +1892,72 @@ function FieldPageContent() {
                 </div>
               </Card>
 
-              <Card title="Adoption by role" description="What each field persona needs from the current live mobile stack.">
-                <DataTable
-                  rows={[
-                    ["Resident engineer", "high", "progress and blockers"],
-                    ["Supervisor", "very high", "checklists and evidence"],
-                    ["Field assistant", "high", "capture and follow-up"],
-                    ["Contractor", "medium", "closure and compliance"]
-                  ]}
-                  columns={[
-                    { key: "role", label: "Role", render: (row) => row[0] },
-                    { key: "usage", label: "Usage", render: (row) => row[1] },
-                    { key: "function", label: "Main function", render: (row) => row[2] }
-                  ]}
-                />
+              <Card
+                title={selectedSignal ? selectedSignal.title : "Selected signal"}
+                description={
+                  selectedSignal
+                    ? `${selectedSignal.area} · ${selectedSignal.owner}`
+                    : "Choose a field signal to inspect its operating detail."
+                }
+              >
+                {selectedSignal ? (
+                  <div className="detailGrid">
+                    <div className="detailRow">
+                      <div className="detailLabel">Project</div>
+                      <div>{selectedSignal.projectName ?? "No project name attached"}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Detail</div>
+                      <div>{selectedSignal.detail}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{signalWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{signalDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next action</div>
+                      <div>{selectedSignal.nextAction}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Recommended module</div>
+                      <div>{signalDestination.description}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{signalRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream readiness</div>
+                      <div className="tableCellStack">
+                        <Badge tone={signalReadiness.tone}>{signalReadiness.label}</Badge>
+                        <span className="tableCellMuted">{signalReadiness.summary}</span>
+                        {signalReadiness.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">{check}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{signalHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Actions</div>
+                      <div className="row gap wrap">
+                        {signalOperationalLinks.map((link, index) => (
+                          <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyState title="No signal selected" description="Choose a signal from the field list to inspect its handoff detail." />
+                )}
               </Card>
             </section>
 
@@ -1059,6 +2029,67 @@ function FieldPageContent() {
                     </div>
                   </div>
                 ) : null}
+                {createForm.mode === "material_request" ? (
+                  <Card
+                    title="Material Request Walkthrough"
+                    description="This capture now travels into procurement so the tester can follow one continuous chain."
+                    aside={<Badge tone="info">field to requisition to PO</Badge>}
+                  >
+                    <div className="detailGrid">
+                      <div className="detailRow">
+                        <div className="detailLabel">Step 1</div>
+                        <div>Capture the shortage from the front with requested volume, budget and supplier coverage.</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Step 2</div>
+                        <div>The system creates the linked requisition so procurement can continue sourcing or approval.</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Step 3</div>
+                        <div>Continue into purchase orders and then receiving once supplier commitment is ready.</div>
+                      </div>
+                    </div>
+                    <div className="row gap wrap" style={{ marginTop: 16 }}>
+                      <Link className="buttonGhost" href="/procurement/requisitions">
+                        Open requisitions
+                      </Link>
+                      <Link className="buttonGhost" href="/procurement/purchase-orders">
+                        Open purchase orders
+                      </Link>
+                    </div>
+                    <div className="detailGrid" style={{ marginTop: 16 }}>
+                      <div className="detailRow">
+                        <div className="detailLabel">Coverage check</div>
+                        <div>{Number(createForm.supplierCoverage) || 0} supplier path(s) currently declared for this shortage.</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Delivery checkpoint</div>
+                        <div>The request should leave field only when the next action states who receives the material and where in the front it lands.</div>
+                      </div>
+                    </div>
+                  </Card>
+                ) : null}
+                <div className="row gap wrap" style={{ marginBottom: 16 }}>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm((current) =>
+                        createCaptureExample(
+                          current.mode,
+                          current.projectName || projectsOverview?.projects[0]?.name || "Proyecto central"
+                        )
+                      )
+                    }
+                  >
+                    Load demo example
+                  </button>
+                  {followUpLinks.map((link) => (
+                    <Link key={link.href} className="buttonGhost" href={link.href}>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
                 <div className="tagRow" style={{ marginBottom: 16 }}>
                   {(["daily_log", "quality_incident", "material_request", "document_control", "equipment_issue"] as FieldCaptureMode[]).map((mode) => {
                     const meta = captureModeMeta(mode);
@@ -1234,8 +2265,11 @@ function FieldPageContent() {
 
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateSignal()}>
-                    {isCreating ? "Saving..." : "Add field signal"}
+                    {isCreating ? "Saving..." : createForm.mode === "material_request" ? "Create material request" : "Add field signal"}
                   </button>
+                  <Link className="buttonGhost" href={nextDestination.href}>
+                    {nextDestination.label}
+                  </Link>
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
                 </div>
               </Card>
@@ -1292,6 +2326,9 @@ function FieldPageContent() {
                       <Link className="button secondary" href="/procurement/requisitions">
                         Open requisitions
                       </Link>
+                      <Link className="buttonGhost" href="/procurement/purchase-orders">
+                        Open purchase orders
+                      </Link>
                       <Link className="buttonGhost" href="/inventory/receiving">
                         Open receiving
                       </Link>
@@ -1338,6 +2375,8 @@ function FieldPageContent() {
                 </p>
               </Card>
             </section>
+              </div>
+            </details>
           </>
         ) : error ? (
           <EmptyState

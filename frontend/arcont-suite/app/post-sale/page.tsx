@@ -197,8 +197,149 @@ function buildPostSaleBridge(item: PostSaleCaseContract | null, bridge: PostSale
   };
 }
 
+function buildPostSaleWorkflow(item: PostSaleCaseContract | null) {
+  if (!item) {
+    return "Use post-sale as the live customer continuity lane between delivery, warranty, evidence and final sign-off.";
+  }
+
+  if (item.status === "blocked") {
+    return "A blocked post-sale case should jump immediately into compliance, documents or quality before the customer wait compounds.";
+  }
+
+  if (item.status === "customer_validation") {
+    return "A validation-stage case should close fast only if evidence, visits and findings are coherent enough for real sign-off.";
+  }
+
+  return "An active post-sale case should keep triage, execution and customer closure aligned in the same queue.";
+}
+
+function buildPostSaleWhyNow(item: PostSaleCaseContract | null) {
+  if (!item) {
+    return "Select a post-sale case to understand what should be solved now before customer continuity degrades.";
+  }
+
+  if (item.health === "critical" || item.slaHoursRemaining < 0) {
+    return `${item.assetLabel} is already under customer pressure because the case is ${item.health} with ${item.slaHoursRemaining} SLA hours remaining.`;
+  }
+
+  if (item.openFindings > 0 || item.pendingVisits > 0) {
+    return `${item.assetLabel} still needs coordinated findings closure and visit execution before the promise to the customer becomes harder to keep.`;
+  }
+
+  if (item.status === "customer_validation") {
+    return `The case is close to closure, but ${item.customerName} still needs a clean validation cycle with evidence that fully supports sign-off.`;
+  }
+
+  return `${item.customerName} already expects continuity on ${item.assetLabel}, so this case still needs disciplined follow-through even if the queue looks stable.`;
+}
+
+function buildPostSaleDownstreamEffect(item: PostSaleCaseContract | null) {
+  if (!item) {
+    return "Select a case to inspect what downstream lane will absorb the impact.";
+  }
+
+  if (item.caseType === "delivery") {
+    return "If this delivery case stalls, compliance, document control and revenue recognition around final handover will absorb the delay.";
+  }
+
+  if (item.openFindings > 0) {
+    return "If findings remain open, quality, field execution and customer success will inherit repeated visits and avoidable coordination cost.";
+  }
+
+  if (item.status === "blocked") {
+    return "If the blocker is not cleared, the queue will spill into compliance or document control and keep closure metrics artificially stuck.";
+  }
+
+  return "If this case is resolved cleanly, post-sale can release pressure from quality, compliance and project teams instead of feeding rework back into them.";
+}
+
+function buildPostSaleHumanStep(item: PostSaleCaseContract | null) {
+  if (!item) {
+    return "Select a case to identify the next human move.";
+  }
+
+  if (item.status === "blocked") {
+    return "Clear the blocking dependency first, confirm the owner and only then reopen the customer commitment.";
+  }
+
+  if (item.status === "customer_validation") {
+    return "Run the customer validation touchpoint now and state clearly whether the case closes or reopens with evidence.";
+  }
+
+  if (item.pendingVisits > 0) {
+    return "Lock the next visit, assign the crew and keep the customer informed of the exact service window.";
+  }
+
+  if (item.openFindings > 0) {
+    return "Close the remaining findings with evidence before promising final closure to the customer.";
+  }
+
+  return "Confirm the next owner, the next customer touchpoint and the exact module that receives the case if continuity breaks.";
+}
+
+function buildPostSaleOperationalLinks(item: PostSaleCaseContract | null) {
+  if (!item) {
+    return [
+      { label: "Open post-sale", href: "/post-sale" },
+      { label: "Open compliance", href: "/compliance" },
+      { label: "Open document control", href: "/document-control" }
+    ];
+  }
+
+  if (item.status === "blocked") {
+    return [
+      { label: "Open compliance", href: "/compliance" },
+      { label: "Open document control", href: "/document-control" },
+      { label: "Open projects", href: "/projects" }
+    ];
+  }
+
+  if (item.openFindings > 0) {
+    return [
+      { label: "Open quality", href: "/quality" },
+      { label: "Open projects", href: "/projects" },
+      { label: "Open compliance", href: "/compliance" }
+    ];
+  }
+
+  if (item.caseType === "delivery") {
+    return [
+      { label: "Open document control", href: "/document-control" },
+      { label: "Open compliance", href: "/compliance" },
+      { label: "Open projects", href: "/projects" }
+    ];
+  }
+
+  return [
+    { label: "Open quality", href: "/quality" },
+    { label: "Open projects", href: "/projects" },
+    { label: "Open post-sale", href: "/post-sale" }
+  ];
+}
+
+function buildPostSaleReportBack(item: PostSaleCaseContract | null) {
+  if (!item) {
+    return "Select a case to define the next customer-facing checkpoint.";
+  }
+
+  if (item.status === "blocked") {
+    return "Report back as soon as the blocker owner confirms the dependency is cleared and the case can re-enter execution.";
+  }
+
+  if (item.status === "customer_validation") {
+    return "Report back right after the customer validation touchpoint with explicit sign-off or the exact gap that reopens the case.";
+  }
+
+  if (item.pendingVisits > 0 || item.openFindings > 0) {
+    return "Report back after the next visit and findings update so the SLA and closure path can be recalculated with evidence.";
+  }
+
+  return "Report back in the next operating cycle with the confirmed customer response and updated closure posture.";
+}
+
 export default function PostSalePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.accessToken;
   const [overview, setOverview] = useState<PostSaleOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<PostSaleBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -213,11 +354,6 @@ export default function PostSalePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -259,7 +395,7 @@ export default function PostSalePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredCases = useMemo(() => {
     if (!overview) {
@@ -304,6 +440,11 @@ export default function PostSalePage() {
   );
 
   const selectedStory = useMemo(() => buildPostSaleBridge(selectedCase, bridgeContext), [bridgeContext, selectedCase]);
+  const selectedHumanStep = useMemo(() => buildPostSaleHumanStep(selectedCase), [selectedCase]);
+  const selectedWhyNow = useMemo(() => buildPostSaleWhyNow(selectedCase), [selectedCase]);
+  const selectedDownstreamEffect = useMemo(() => buildPostSaleDownstreamEffect(selectedCase), [selectedCase]);
+  const selectedReportBack = useMemo(() => buildPostSaleReportBack(selectedCase), [selectedCase]);
+  const selectedOperationalLinks = useMemo(() => buildPostSaleOperationalLinks(selectedCase), [selectedCase]);
 
   const actionOptions = useMemo(() => (selectedCase ? postSaleActionOptions(selectedCase) : []), [selectedCase]);
 
@@ -333,7 +474,7 @@ export default function PostSalePage() {
     status: PostSaleCaseContract["status"],
     suggestedNextAction: string
   ) {
-    if (!selectedCase || !session.accessToken) {
+    if (!selectedCase) {
       return;
     }
 
@@ -427,6 +568,37 @@ export default function PostSalePage() {
               />
             </section>
 
+            <section className="grid cols1">
+              <Card
+                title="Customer continuity workflow"
+                description="This queue should already let an operator test real handover and warranty motion before the final backend rollout."
+              >
+                <p className="sectionText">
+                  Pick a case, update the next action, move it through triage, scheduling, execution and validation, and use the linked modules to inspect compliance and document dependencies that still block customer closure.
+                </p>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Post-sale continuity"
+                description="Post-sale should connect delivery, warranty, compliance and documentation in a single customer lane."
+                aside={<Badge tone={filteredSummary.criticalCases > 0 ? "danger" : filteredSummary.urgentCases > 0 ? "warning" : "success"}>{filteredSummary.criticalCases > 0 ? "critical queue" : filteredSummary.urgentCases > 0 ? "urgent queue" : "stable queue"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildPostSaleWorkflow(selectedCase)}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Customer use</div><div>Use this queue to keep the customer promise alive while checking legal, quality and evidence dependencies in parallel.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Expected jump</div><div>Move into compliance, document control or quality based on the real reason the case is not yet closable.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/compliance">Open compliance</Link>
+                  <Link className="buttonGhost" href="/document-control">Open document control</Link>
+                  <Link className="buttonGhost" href="/quality">Open quality</Link>
+                  <Link className="buttonGhost" href="/crm">Open CRM</Link>
+                </div>
+              </Card>
+            </section>
+
             <section className="grid cols3">
               <Card title="Customer delivery signal" description="What the selected case means for real handover or warranty continuity.">
                 <p className="sectionText">
@@ -476,8 +648,8 @@ export default function PostSalePage() {
                       placeholder="Project, customer, asset or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? `demo mode · ${source}` : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "post-sale ready"}</Badge>
                   <Badge tone={filteredSummary.criticalCases > 0 ? "danger" : filteredSummary.urgentCases > 0 ? "warning" : "success"}>
@@ -575,6 +747,22 @@ export default function PostSalePage() {
                       <div>{selectedCase.customerName}</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Next action</div>
                       <div>
                         <input
@@ -588,18 +776,11 @@ export default function PostSalePage() {
                     <div className="detailRow">
                       <div className="detailLabel">Operational links</div>
                       <div className="row gap wrap">
-                        <Link className="buttonGhost" href="/compliance">
-                          Open compliance
-                        </Link>
-                        <Link className="buttonGhost" href="/document-control">
-                          Open document control
-                        </Link>
-                        <Link className="buttonGhost" href="/quality">
-                          Open quality
-                        </Link>
-                        <Link className="buttonGhost" href="/projects">
-                          Open projects
-                        </Link>
+                        {selectedOperationalLinks.map((link) => (
+                          <Link key={`${link.href}-${link.label}`} className="buttonGhost" href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
                       </div>
                     </div>
                     <div className="detailRow">
@@ -710,11 +891,16 @@ export default function PostSalePage() {
             title="Post-sale overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
+            secondaryAction={{ label: "Open compliance", href: "/compliance" }}
           />
         ) : (
           <EmptyState
-            title="Loading post-sale"
-            description="Pulling deliveries, warranties, incidents and customer SLA posture."
+            title={isLoading ? "Loading post-sale" : "Post-sale overview not loaded yet"}
+            description={
+              isDemoMode
+                ? "This route should load demo deliveries, warranties and incidents so human users can validate the queue."
+                : "Pulling deliveries, warranties, incidents and customer SLA posture."
+            }
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

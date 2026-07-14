@@ -92,6 +92,29 @@ function validateCompanyForm(input: ProvisionCompanyRequestContract) {
   return null;
 }
 
+function buildCompanyWorkflow(company: {
+  tradeName: string;
+  status: string;
+  enabledModules: string[];
+  countryCode: string;
+} | null) {
+  if (!company) {
+    return null;
+  }
+
+  return {
+    provisioningRead:
+      company.status === "draft"
+        ? `${company.tradeName} is still in draft and should complete settings, modules and users before a real pilot.`
+        : `${company.tradeName} already has an active tenant posture and can keep moving through module rollout.`,
+    modularRead:
+      company.enabledModules.length > 2
+        ? `${company.tradeName} already has ${company.enabledModules.length} modules enabled, so it can operate as a modular client rollout instead of a monolith.`
+        : `${company.tradeName} still needs more operational modules enabled to feel like a real end-user tenant.`,
+    fiscalRead: `${company.tradeName} is currently provisioned for ${company.countryCode}, so fiscal and localization settings should stay aligned from day one.`
+  };
+}
+
 export default function PlatformCompaniesPage() {
   const {
     activeCompany,
@@ -150,6 +173,20 @@ export default function PlatformCompaniesPage() {
       ),
     [companyForm.enabledModules]
   );
+  const activeCompanyWorkflow = useMemo(
+    () =>
+      buildCompanyWorkflow(
+        activeCompany
+          ? {
+              tradeName: activeCompany.tradeName,
+              status: activeCompany.status,
+              enabledModules: activeCompany.enabledModules,
+              countryCode: activeCompany.countryCode
+            }
+          : null
+      ),
+    [activeCompany]
+  );
 
   function toggleModule(moduleKey: string) {
     setCompanyForm((current) => ({
@@ -192,6 +229,24 @@ export default function PlatformCompaniesPage() {
         <KpiCard label="Catalog breadth" value={String(modules.length)} footnote="Shared platform and operations modules available for provisioning." />
       </section>
 
+      <section className="grid cols3">
+        <Card title="Provisioning continuity" description="How the selected tenant should move from creation into usable rollout.">
+          <p className="sectionText">
+            {activeCompanyWorkflow?.provisioningRead ?? "Choose a tenant to inspect provisioning continuity."}
+          </p>
+        </Card>
+        <Card title="Modular rollout" description="Why tenant creation must stay tied to module packaging from the first day.">
+          <p className="sectionText">
+            {activeCompanyWorkflow?.modularRead ?? "Choose a tenant to inspect modular rollout posture."}
+          </p>
+        </Card>
+        <Card title="Fiscal baseline" description="Country and fiscal posture should already be visible before production onboarding.">
+          <p className="sectionText">
+            {activeCompanyWorkflow?.fiscalRead ?? "Choose a tenant to inspect fiscal baseline."}
+          </p>
+        </Card>
+      </section>
+
       {actionError ? <ErrorBanner error={actionError} /> : null}
       {actionMessage ? (
         <Card title="Last tenant action" description="Latest successful platform-company action executed on the portfolio.">
@@ -227,6 +282,17 @@ export default function PlatformCompaniesPage() {
               placeholder="Search by company, tax id or country"
             />
           </FilterBar>
+          <div className="row gap wrap" style={{ marginBottom: 16 }}>
+            <Link className="button secondary" href="/platform/settings">
+              Open settings
+            </Link>
+            <Link className="buttonGhost" href="/platform/modules">
+              Open modules
+            </Link>
+            <Link className="buttonGhost" href="/platform/users">
+              Open users
+            </Link>
+          </div>
           <DataTable
             rows={visibleCompanies}
             columns={[
@@ -451,6 +517,12 @@ export default function PlatformCompaniesPage() {
               >
                 {isProvisioningCompany ? "Provisioning..." : "Provision tenant"}
               </button>
+              <Link className="buttonGhost" href="/platform/settings">
+                Review settings
+              </Link>
+              <Link className="buttonGhost" href="/platform/modules">
+                Review modules
+              </Link>
             </div>
           </Card>
 
@@ -481,15 +553,18 @@ export default function PlatformCompaniesPage() {
                 <div className="detailLabel">Fiscal</div>
                 <div>{detail.settings.fiscalCountry} · regime {detail.settings.fiscalRegime}</div>
               </div>
-              <div className="detailRow">
-                <div className="detailLabel">Tenant actions</div>
-                <div className="row gap wrap">
-                  <Link className="button secondary" href="/platform/settings">
-                    Open settings
-                  </Link>
-                  <Link className="buttonGhost" href="/platform/users">
-                    Open users
-                  </Link>
+                <div className="detailRow">
+                  <div className="detailLabel">Tenant actions</div>
+                  <div className="row gap wrap">
+                    <Link className="button secondary" href="/platform/settings">
+                      Open settings
+                    </Link>
+                    <Link className="buttonGhost" href="/platform/modules">
+                      Open modules
+                    </Link>
+                    <Link className="buttonGhost" href="/platform/users">
+                      Open users
+                    </Link>
                 </div>
               </div>
             </div>

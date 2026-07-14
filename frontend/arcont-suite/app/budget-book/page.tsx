@@ -140,6 +140,7 @@ function pickFocusLine(lines: BudgetBookLineContract[]) {
 
 export default function BudgetBookPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<BudgetBookOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,11 +154,6 @@ export default function BudgetBookPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -188,7 +184,7 @@ export default function BudgetBookPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredLines = useMemo(() => {
     if (!overview) {
@@ -251,7 +247,7 @@ export default function BudgetBookPage() {
     procurementStatus: BudgetBookLineContract["procurementStatus"],
     suggestedNextAction: string
   ) {
-    if (!selectedLine || !session.accessToken) {
+    if (!selectedLine) {
       return;
     }
 
@@ -342,6 +338,23 @@ export default function BudgetBookPage() {
             </section>
 
             <section className="grid cols2">
+              <Card
+                title="Budget execution walkthrough"
+                description="Operate concepts, quantities and sourcing posture without waiting for the real backend lane."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    This page is now usable for human trials: change procurement posture, inspect generator pressure and connect the concept lane with cash-risk signals.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">budget book</Badge>
+                    <Badge tone="info">procurement</Badge>
+                    <Badge tone="info">collections</Badge>
+                  </div>
+                </div>
+              </Card>
+
               <Card title="Concept board" description="Live catalog of budget concepts with quantity closure and procurement posture.">
                 <FilterBar summary={`${filteredLines.length} concepts match the current operating filters`}>
                   <label className="fieldLabel">
@@ -378,9 +391,7 @@ export default function BudgetBookPage() {
                       placeholder="Concept, project, package, buyer or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
-                  </Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "budget book ready"}</Badge>
                   <Badge tone={filteredSummary.criticalConcepts > 0 ? "danger" : filteredSummary.conceptsAtCashRisk > 0 ? "warning" : "success"}>
                     {filteredSummary.criticalConcepts > 0

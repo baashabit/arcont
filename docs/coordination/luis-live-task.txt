@@ -1,20 +1,34 @@
 Luis activo en PC1
 
 Objetivo actual:
-Endurecer backend/API del flujo `integrations + copilot-context` para que las restricciones no dependan solo del frontend.
+Trabajar `close-control/selected-stream-routing` sobre `close-control` para que el stream seleccionado y el workflow superior ya muestren continuidad operativa hacia finance, treasury, compliance o document-control.
+
+Archivo permitido:
+- `frontend/arcont-suite/app/close-control/page.tsx`
 
 Entregable esperado:
 1. Revisar:
-- `apps/api/src/services/integration-service.ts`
-- revisar si hace falta algun ajuste de contratos o rutas para soportar mejor el copilot-context
+- `frontend/arcont-suite/app/close-control/page.tsx`
 
-2. En integrations:
-- validar `nextAction`
-- reforzar `healthy/watch/critical` con restricciones de alerts, freshness o coverage si aplica
+- reforzar la experiencia del `Selected stream` y del workflow superior
+- hacer mas claro el ruteo operativo
+- mejorar continuidad con finance, treasury, compliance y document-control
+- no rehacer toda la pantalla
 
-3. En copilot-context:
-- si hace falta, ajustar datos compartidos o contratos para que la UI pueda mostrar un contexto mas accionable sin inventar datos
+2. Prioridad puntual:
+- que cierre/finanzas sepan a donde brincar primero desde el stream
+- que el stream mande al modulo correcto segun su estado real
+- mantenerlo listo para pruebas
 
-4. Ejecutar validacion tecnica:
-- `npm run build -w @arcont/api`
-- luego sincronizar a PC2
+3. Ejecutar:
+- `export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 24`
+- `npm run build:web`
+
+4. Mantener todo en `main`.
+5. Reportar archivos tocados.
+
+No hacer:
+- no tocar `frontend/arcont-suite/app/post-sale/page.tsx`
+- no tocar backend/api
+- no tocar auth/login
+- no tocar docs/coordination/antonio-live-task.txt

@@ -143,21 +143,257 @@ function primaryHrefForTask(task: BlackboardTask) {
   }
 }
 
+function buildOperationsWorkflow(tasks: BlackboardTask[]) {
+  if (tasks.length === 0) {
+    return "Use operations as the cross-domain blackboard that routes executive pressure into the exact working module.";
+  }
+
+  const riskCount = tasks.filter((task) => task.lane === "risk").length;
+  if (riskCount > 0) {
+    return `${riskCount} blackboard items are already in risk lane, so operations should dispatch teams into the exact blocked domain before pressure compounds.`;
+  }
+
+  return "Operations should sequence cross-domain work, keep lane ownership visible and reduce the need to hunt through separate modules.";
+}
+
+function buildTaskOperatingState(task: BlackboardTask | null) {
+  if (!task) {
+    return {
+      tone: "info" as const,
+      label: "No signal selected",
+      summary: "Choose a board signal to understand who should move next and where the work should continue.",
+      checks: ["Select a signal from the current operations table."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (task.lane === "risk") {
+    checks.push("This signal is already in risk lane and should move immediately inside the owning domain.");
+  }
+
+  if (task.severity === "critical") {
+    checks.push("Severity is critical, so continuation should happen in the owner module before more board triage.");
+  }
+
+  if (task.lane === "new") {
+    checks.push("This is still intake pressure and needs first-touch ownership.");
+  }
+
+  if (task.lane === "in_progress") {
+    checks.push("The signal is already moving, so operations should protect follow-through instead of re-triaging it.");
+  }
+
+  if (task.lane === "closed") {
+    checks.push("This signal is closed and should only be reopened if a new blocker appears.");
+  }
+
+  return {
+    tone: task.lane === "risk" || task.severity === "critical" ? "danger" as const : task.lane === "new" ? "warning" as const : task.lane === "closed" ? "success" as const : "info" as const,
+    label: task.lane === "risk" ? "Act now" : task.lane === "new" ? "Assign now" : task.lane === "closed" ? "Closed" : "Follow through",
+    summary:
+      task.lane === "risk"
+        ? "Operations should stop browsing and send the team directly into the blocked domain."
+        : task.lane === "new"
+          ? "Operations should confirm first owner and move this out of intake quickly."
+          : task.lane === "closed"
+            ? "The signal is already resolved; keep it as traceability, not active workload."
+            : "The signal already has motion; the next value is disciplined continuation.",
+    checks
+  };
+}
+
+function buildTaskHumanStep(task: BlackboardTask | null) {
+  if (!task) {
+    return "Select a signal to identify the next human move.";
+  }
+
+  if (task.lane === "risk") {
+    return `Contact ${task.owner}, open ${task.domain} and contain the blocker before the next operating cutoff.`;
+  }
+
+  if (task.lane === "new") {
+    return `Assign ${task.owner} as first responder and decide whether ${task.domain} should absorb the work immediately.`;
+  }
+
+  if (task.lane === "closed") {
+    return `Keep ${task.domain} as the historical owner and reopen only if a fresh signal appears.`;
+  }
+
+  return `Keep ${task.owner} moving inside ${task.domain} and verify the next signal before the board refresh.`;
+}
+
+function buildTaskWhyNow(task: BlackboardTask | null) {
+  if (!task) {
+    return "Select a signal to understand why it deserves attention right now.";
+  }
+
+  if (task.severity === "critical") {
+    return `${task.domain} is already carrying a critical signal, so waiting at board level only increases execution risk.`;
+  }
+
+  if (task.lane === "risk") {
+    return `${task.domain} already sits in risk lane and should be treated as an active operating blocker, not just a dashboard item.`;
+  }
+
+  if (task.lane === "new") {
+    return `${task.domain} is still at intake stage, so fast first ownership prevents this from turning into avoidable risk.`;
+  }
+
+  if (task.lane === "closed") {
+    return `${task.domain} is already closed, so the value now is traceability rather than further escalation.`;
+  }
+
+  return `${task.domain} is already in motion and should keep progressing cleanly instead of being re-triaged.`;
+}
+
+function buildTaskDownstreamEffect(task: BlackboardTask | null) {
+  if (!task) {
+    return "Select a signal to inspect what it can block downstream.";
+  }
+
+  switch (task.domain) {
+    case "Projects":
+      return "Project slippage can immediately distort field sequencing, procurement timing and cash expectations.";
+    case "Daily log":
+      return "A weak daily-log handoff can hide site blockers from operations and quality until the next cutoff.";
+    case "Procurement":
+    case "POs":
+    case "Supplier control":
+    case "Supplier master":
+      return "Supply-side blockers can quickly propagate into receiving, field continuity and accounts payable timing.";
+    case "Receiving":
+    case "Movements":
+    case "Inventory":
+      return "Inventory-side friction can stop equipment support or field continuity even when commercial commitments are already in place.";
+    case "Equipment":
+      return "Equipment pressure can halt field execution and force operations to resequence active fronts.";
+    case "Quality":
+    case "Document control":
+    case "Compliance":
+      return "Control-side blockers can prevent release, closeout or safe continuation even when the front looks operational.";
+    case "Finance":
+    case "Cash flow":
+    case "Accounts payable":
+    case "Treasury runs":
+    case "Collections":
+      return "Financial blockers can freeze procurement, supplier confidence or execution continuity if not resolved on time.";
+    default:
+      return `This ${task.domain} signal should be resolved in its owner module before downstream teams start improvising around it.`;
+  }
+}
+
+function buildTaskReportBackWindow(task: BlackboardTask | null) {
+  if (!task) {
+    return "Select a signal to define the next report-back window.";
+  }
+
+  if (task.severity === "critical" || task.lane === "risk") {
+    return "Report back before the next operating cutoff with containment status and the next unblocked owner.";
+  }
+
+  if (task.lane === "new") {
+    return "Report back once first ownership is confirmed and the task leaves intake.";
+  }
+
+  if (task.lane === "closed") {
+    return "Report back only if a fresh blocker reopens the same chain.";
+  }
+
+  return "Report back on the next board refresh confirming the signal really advanced inside the owner module.";
+}
+
+function buildTaskRouteSummary(task: BlackboardTask | null) {
+  if (!task) {
+    return "Use operations as the orchestration layer that routes each blocker into the exact domain that must resolve it.";
+  }
+
+  if (task.lane === "risk" || task.severity === "critical") {
+    return "This signal should route first through its owner module and immediate containment before more board triage happens.";
+  }
+
+  if (task.lane === "new") {
+    return "This signal should route through first ownership and then leave intake quickly so it does not grow into preventable risk.";
+  }
+
+  if (task.lane === "closed") {
+    return "This signal can stay as traceability only; normal routing should focus on live blockers instead.";
+  }
+
+  return "This signal should continue inside its owner module with operations protecting continuity rather than re-triaging it.";
+}
+
+function buildTaskRelatedLinks(task: BlackboardTask | null) {
+  if (!task) {
+    return [
+      { label: "Open operations", href: "/operations" },
+      { label: "Open field", href: "/field" },
+      { label: "Open dashboard", href: "/dashboard" }
+    ];
+  }
+
+  switch (task.domain) {
+    case "Procurement":
+    case "POs":
+    case "Supplier control":
+      return [
+        { label: `Open ${task.domain}`, href: primaryHrefForTask(task) },
+        { label: "Open receiving", href: "/inventory/receiving" },
+        { label: "Open field", href: "/field" }
+      ];
+    case "Receiving":
+    case "Movements":
+    case "Inventory":
+      return [
+        { label: `Open ${task.domain}`, href: primaryHrefForTask(task) },
+        { label: "Open equipment", href: "/equipment" },
+        { label: "Open field", href: "/field" }
+      ];
+    case "Equipment":
+      return [
+        { label: "Open equipment", href: "/equipment" },
+        { label: "Open field", href: "/field" },
+        { label: "Open operations", href: "/operations" }
+      ];
+    case "Quality":
+    case "Document control":
+    case "Compliance":
+      return [
+        { label: `Open ${task.domain}`, href: primaryHrefForTask(task) },
+        { label: "Open projects", href: "/projects" },
+        { label: "Open field", href: "/field" }
+      ];
+    case "Finance":
+    case "Cash flow":
+    case "Accounts payable":
+    case "Treasury runs":
+    case "Collections":
+      return [
+        { label: `Open ${task.domain}`, href: primaryHrefForTask(task) },
+        { label: "Open procurement", href: "/procurement/requisitions" },
+        { label: "Open dashboard", href: "/dashboard" }
+      ];
+    default:
+      return [
+        { label: `Open ${task.domain}`, href: primaryHrefForTask(task) },
+        { label: "Open field", href: "/field" },
+        { label: "Open daily log", href: "/daily-log" }
+      ];
+  }
+}
+
 export default function OperationsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [tasks, setTasks] = useState<BlackboardTask[]>([]);
   const [laneFilter, setLaneFilter] = useState<"all" | BlackboardTask["lane"]>("all");
   const [domainFilter, setDomainFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setTasks([]);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -781,7 +1017,7 @@ export default function OperationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const domainOptions = useMemo(() => Array.from(new Set(tasks.map((task) => task.domain))).sort((left, right) => left.localeCompare(right)), [tasks]);
 
@@ -800,6 +1036,31 @@ export default function OperationsPage() {
       return matchesLane && matchesDomain && matchesSearch;
     });
   }, [domainFilter, laneFilter, searchFilter, tasks]);
+
+  const selectedTask = useMemo(
+    () => filteredTasks.find((task) => task.id == selectedTaskId) ?? filteredTasks[0] ?? null,
+    [filteredTasks, selectedTaskId]
+  );
+
+  const selectedTaskState = useMemo(() => buildTaskOperatingState(selectedTask), [selectedTask]);
+  const selectedTaskHumanStep = useMemo(() => buildTaskHumanStep(selectedTask), [selectedTask]);
+  const selectedTaskWhyNow = useMemo(() => buildTaskWhyNow(selectedTask), [selectedTask]);
+  const selectedTaskDownstreamEffect = useMemo(() => buildTaskDownstreamEffect(selectedTask), [selectedTask]);
+  const selectedTaskReportBackWindow = useMemo(() => buildTaskReportBackWindow(selectedTask), [selectedTask]);
+  const selectedTaskRouteSummary = useMemo(() => buildTaskRouteSummary(selectedTask), [selectedTask]);
+  const selectedTaskLinks = useMemo(() => buildTaskRelatedLinks(selectedTask), [selectedTask]);
+
+  useEffect(() => {
+    if (filteredTasks.length === 0) {
+      setSelectedTaskId(null);
+      return;
+    }
+
+    const visible = filteredTasks.some((task) => task.id === selectedTaskId);
+    if (!visible) {
+      setSelectedTaskId(filteredTasks[0]?.id ?? null);
+    }
+  }, [filteredTasks, selectedTaskId]);
 
   const lanes = useMemo(
     () => ({
@@ -832,6 +1093,42 @@ export default function OperationsPage() {
     () => filteredTasks.filter((task) => task.lane === "risk" || task.severity === "critical").slice(0, 4),
     [filteredTasks]
   );
+  const chainWalkthrough = useMemo(() => {
+    const countFor = (domains: string[]) => filteredTasks.filter((task) => domains.includes(task.domain)).length;
+
+    return [
+      {
+        label: "Field demand",
+        value: countFor(["Daily log", "Field materials"]),
+        href: "/field",
+        cta: "Open field"
+      },
+      {
+        label: "Requisition intake",
+        value: countFor(["Procurement"]),
+        href: "/procurement/requisitions",
+        cta: "Open requisitions"
+      },
+      {
+        label: "PO execution",
+        value: countFor(["POs", "Supplier control", "Supplier master"]),
+        href: "/procurement/purchase-orders",
+        cta: "Open purchase orders"
+      },
+      {
+        label: "Inbound flow",
+        value: countFor(["Receiving", "Movements", "Inventory"]),
+        href: "/inventory/receiving",
+        cta: "Open receiving"
+      },
+      {
+        label: "Financial release",
+        value: countFor(["Accounts payable", "Treasury runs", "Cash flow", "Finance"]),
+        href: "/accounts-payable",
+        cta: "Open finance chain"
+      }
+    ];
+  }, [filteredTasks]);
   const ownerWorkload = useMemo(() => {
     const grouped = new Map<
       string,
@@ -919,8 +1216,8 @@ export default function OperationsPage() {
       eyebrow="Cross-domain coordination"
       description="A single live view of what is blocked, what is aging and who owns the next move across the operating stack."
       actions={
-        <Badge tone={session.authenticated ? "success" : "warning"}>
-          {isLoading ? "refreshing" : session.authenticated ? "live backend" : source}
+        <Badge tone={isDemoMode ? "warning" : "success"}>
+          {isLoading ? "refreshing" : isDemoMode ? "demo operable" : "live backend"}
         </Badge>
       }
     >
@@ -972,6 +1269,11 @@ export default function OperationsPage() {
                 <p className="sectionText">
                   This board now blends projects, field capture, quality, equipment, procurement, finance, compliance, integrations and document control.
                 </p>
+                {isDemoMode ? (
+                  <p className="sectionText" style={{ marginTop: 12 }}>
+                    Demo mode keeps this board usable from the seeded project and equipment flows while the rest of the tenant stack is still being connected.
+                  </p>
+                ) : null}
               </Card>
             </section>
 
@@ -1004,6 +1306,48 @@ export default function OperationsPage() {
             </section>
 
             <section className="grid cols2">
+              <Card
+                title="Operations command lane"
+                description="Operations should be the central blackboard for sequencing pressure across field, supply, finance and close control."
+                aside={<Badge tone={lanes.risk.length > 0 ? "danger" : lanes.new.length > 0 ? "warning" : "success"}>{lanes.risk.length > 0 ? "risk-loaded" : lanes.new.length > 0 ? "new intake" : "stable board"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildOperationsWorkflow(filteredTasks)}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Executive use</div><div>Use this board to decide which domain should act next without reopening every module first.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Expected jump</div><div>Every critical task should send the user directly to the module where the issue will actually be worked.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/dashboard">Open dashboard</Link>
+                  <Link className="buttonGhost" href="/projects">Open projects</Link>
+                  <Link className="buttonGhost" href="/field">Open field</Link>
+                  <Link className="buttonGhost" href="/finance">Open finance</Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card title="Field-to-operations chain" description="The key operating route is now explicit so testers can follow one real flow instead of browsing modules at random.">
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">1. Capture in field</div>
+                    <div>Create a field signal or daily log for the active front and confirm the next operational action.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">2. Validate in daily log</div>
+                    <div>Submit or flag the bitacora so supervision pressure becomes visible and actionable.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">3. Escalate the chain</div>
+                    <div>Continue into requisitions, purchase orders, receiving or finance depending on the blocker source.</div>
+                  </div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/field">Open field</Link>
+                  <Link className="buttonGhost" href="/daily-log">Open daily log</Link>
+                  <Link className="buttonGhost" href="/procurement/requisitions">Open requisitions</Link>
+                </div>
+              </Card>
+
               <Card title="Operational board" description="Live cross-domain signals grouped by execution lane.">
                 <div className="moduleGrid">
                   {(["new", "in_progress", "risk", "closed"] as const).map((lane) => (
@@ -1069,10 +1413,17 @@ export default function OperationsPage() {
                       key: "task",
                       label: "Signal",
                       render: (row) => (
-                        <div className="tableCellStack">
-                          <strong>{row.title}</strong>
-                          <span className="tableCellMuted">{row.detail}</span>
-                        </div>
+                        <button
+                          className="buttonGhost"
+                          type="button"
+                          onClick={() => setSelectedTaskId(row.id)}
+                          style={{ justifyContent: "flex-start", paddingInline: 0 }}
+                        >
+                          <div className="tableCellStack">
+                            <strong>{row.title}</strong>
+                            <span className="tableCellMuted">{row.detail}</span>
+                          </div>
+                        </button>
                       )
                     },
                     {
@@ -1096,6 +1447,31 @@ export default function OperationsPage() {
             </section>
 
             <section className="grid cols2">
+              <Card
+                title={selectedTask ? selectedTask.title : "Selected signal"}
+                description={selectedTask ? `${selectedTask.domain} · ${selectedTask.owner}` : "Choose a board signal to inspect its real continuity path."}
+                aside={<Badge tone={selectedTaskState.tone}>{selectedTaskState.label}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Domain</div><div>{selectedTask?.domain ?? "No domain selected"}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Owner</div><div>{selectedTask?.owner ?? "No owner selected"}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Next signal</div><div>{selectedTask?.dueLabel ?? "No next signal"}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Operating state</div><div className="tableCellStack"><span className="tableCellMuted">{selectedTaskState.summary}</span>{selectedTaskState.checks.map((check) => (<span key={check} className="tableCellMuted">{check}</span>))}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Why now</div><div>{selectedTaskWhyNow}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Next human step</div><div>{selectedTaskHumanStep}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Downstream effect</div><div>{selectedTaskDownstreamEffect}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Route summary</div><div>{selectedTaskRouteSummary}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Report back</div><div>{selectedTaskReportBackWindow}</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  {selectedTaskLinks.map((link, index) => (
+                    <Link key={`${link.href}-${link.label}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </Card>
+
               <Card title="Jump Actions" description="Open the exact module owning the current blocker instead of chasing it manually.">
                 <div className="list">
                   {priorityActions.map((task) => (
@@ -1115,16 +1491,27 @@ export default function OperationsPage() {
                 </div>
               </Card>
 
-              <Card title="Flow Shortcuts" description="Direct entry points into the cross-domain chains that are already active.">
-                <div className="row gap wrap">
-                  <Link className="button" href="/procurement/requisitions">Field to requisitions</Link>
-                  <Link className="buttonGhost" href="/procurement/purchase-orders">Requisitions to PO</Link>
-                  <Link className="buttonGhost" href="/inventory/receiving">PO to receiving</Link>
-                  <Link className="buttonGhost" href="/supplier-control">Supplier blockers</Link>
-                  <Link className="buttonGhost" href="/supplier-master">Supplier fiscal</Link>
-                  <Link className="buttonGhost" href="/accounts-payable">Invoice blockers</Link>
-                  <Link className="buttonGhost" href="/equipment">Equipment blockers</Link>
-                  <Link className="buttonGhost" href="/treasury/payment-runs">Treasury release</Link>
+              <Card title="Supply Chain Walkthrough" description="Follow the exact operating chain from field demand to payment release without losing context.">
+                <div className="list">
+                  {chainWalkthrough.map((step) => (
+                    <div className="listItem" key={step.label}>
+                      <div>
+                        <strong>{step.label}</strong>
+                        <p>{step.value} live signals currently sit in this step of the chain.</p>
+                      </div>
+                      <div className="row gap wrap">
+                        <Badge tone={step.value > 0 ? "warning" : "success"}>{step.value}</Badge>
+                        <Link className="buttonGhost" href={step.href}>
+                          {step.cta}
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/field">Start from field</Link>
+                  <Link className="buttonGhost" href="/supplier-control">Open supplier blockers</Link>
+                  <Link className="buttonGhost" href="/treasury/payment-runs">Open treasury release</Link>
                 </div>
               </Card>
             </section>
@@ -1227,12 +1614,16 @@ export default function OperationsPage() {
             title="Operations blackboard unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open field", href: "/field" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading operations blackboard" : "Operations blackboard not loaded yet"}
-            description="This route aggregates live signals from the other operating modules for the active tenant."
+            description={
+              isDemoMode
+                ? "This route should aggregate demo and live-operable signals from field, daily log, supply chain and finance."
+                : "This route aggregates live signals from the other operating modules for the active tenant."
+            }
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

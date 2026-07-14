@@ -108,8 +108,186 @@ function buildCloseStory(line: CloseControlLineContract | null, riskCount: numbe
   };
 }
 
+function buildCloseRouteSummary(line: CloseControlLineContract | null) {
+  if (!line) {
+    return "Use close control as the command lane for finance, compliance and evidence before month-end release.";
+  }
+
+  if (line.streamType === "finance") {
+    return "Finance-close issues should route through treasury, payables and final close evidence before leadership treats the month as controlled.";
+  }
+
+  if (line.streamType === "compliance") {
+    return "Compliance-close issues should route through legal, post-sale and document remediation before they distort the close room.";
+  }
+
+  return "Document-control issues should route through supporting evidence and close-control checkpoints before the close lane is treated as clean.";
+}
+
+function buildCloseOperationalLinks(line: CloseControlLineContract | null) {
+  if (!line) {
+    return [
+      { label: "Open finance", href: "/finance", tone: "button" as const },
+      { label: "Open compliance", href: "/compliance", tone: "buttonGhost" as const },
+      { label: "Open document control", href: "/document-control", tone: "buttonGhost" as const }
+    ];
+  }
+
+  if (line.streamType === "finance") {
+    return [
+      { label: "Open treasury", href: "/treasury/payment-runs", tone: "button" as const },
+      { label: "Open cash flow", href: "/cash-flow", tone: "buttonGhost" as const },
+      { label: "Open payables", href: "/accounts-payable", tone: "buttonGhost" as const }
+    ];
+  }
+
+  if (line.streamType === "compliance") {
+    return [
+      { label: "Open compliance", href: "/compliance", tone: "button" as const },
+      { label: "Open document control", href: "/document-control", tone: "buttonGhost" as const },
+      { label: "Open finance", href: "/finance", tone: "buttonGhost" as const }
+    ];
+  }
+
+  return [
+    { label: "Open document control", href: "/document-control", tone: "button" as const },
+    { label: "Open compliance", href: "/compliance", tone: "buttonGhost" as const },
+    { label: "Open finance", href: "/finance", tone: "buttonGhost" as const }
+  ];
+}
+
+function buildCloseReleaseGate(line: CloseControlLineContract | null) {
+  if (!line) {
+    return {
+      tone: "info" as const,
+      label: "No stream selected",
+      summary: "Choose a close stream to verify whether it can really move as controlled or still needs intervention.",
+      checks: ["Select a stream from the active close board."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (line.closeHealth === "critical") {
+    checks.push("Stream is already in critical close posture.");
+  }
+
+  if (line.blockingItems > 0) {
+    checks.push(`${line.blockingItems} blocker(s) still remain open.`);
+  }
+
+  if (line.closeReadiness < 92) {
+    checks.push(`Close readiness is only ${line.closeReadiness}%.`);
+  }
+
+  if (line.evidenceCompletion < 90) {
+    checks.push(`Evidence completion is only ${line.evidenceCompletion}%.`);
+  }
+
+  if (line.slaHoursRemaining < 0) {
+    checks.push("Close SLA is already overdue.");
+  } else if (line.slaHoursRemaining <= 12) {
+    checks.push(`Close SLA has only ${line.slaHoursRemaining} hours remaining.`);
+  }
+
+  if (checks.length > 0) {
+    const hardBlock = line.closeHealth === "critical" || line.blockingItems > 0 || line.slaHoursRemaining < 0
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not release yet" : "Operate with control",
+      summary: hardBlock
+        ? "This stream still carries hard blockers before the close room should treat it as controlled."
+        : "The stream can continue, but readiness, evidence or timing still need tighter close control.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for controlled close",
+    summary: "Readiness, evidence and timing are aligned for a controlled close checkpoint.",
+    checks: [
+      "Continue into treasury, compliance or document follow-through without rebuilding the same close context.",
+      "Keep the same owner and next action attached until the checkpoint is formally closed."
+    ]
+  };
+}
+
+function buildCloseHumanStep(line: CloseControlLineContract | null) {
+  if (!line) {
+    return "Select a stream to identify the next human move.";
+  }
+
+  if (line.closeHealth === "critical" || line.blockingItems > 0) {
+    return "Clear the active blocker first, then return to the close room and verify whether readiness and evidence improved enough to downgrade the stream.";
+  }
+
+  if (line.closeReadiness < 92 || line.evidenceCompletion < 90) {
+    return "Complete missing evidence, raise readiness and keep the upstream owner in the same close-control loop.";
+  }
+
+  if (line.slaHoursRemaining <= 12) {
+    return "Escalate the stream owner now and secure the final close checkpoint before the window expires.";
+  }
+
+  return "Confirm the controlled checkpoint and keep downstream finance or compliance release aligned while context is still current.";
+}
+
+function buildCloseWhyNow(line: CloseControlLineContract | null) {
+  if (!line) {
+    return "Choose a close stream to understand why the close room should care right now.";
+  }
+
+  if (line.closeHealth === "critical") {
+    return `${line.code} is already in critical close posture, so delay here can immediately distort the month-end release path.`;
+  }
+
+  if (line.blockingItems > 0) {
+    return `${line.code} still carries ${line.blockingItems} active blocker(s), so the close room should act now before the chain normalizes unresolved debt.`;
+  }
+
+  if (line.slaHoursRemaining <= 12) {
+    return `${line.code} is already close to the SLA wall, so waiting here can turn a controlled stream into an avoidable close failure.`;
+  }
+
+  return `${line.code} is still an active close lane, so the team should protect continuity now instead of assuming the checkpoint will hold by inertia.`;
+}
+
+function buildCloseDownstreamEffect(line: CloseControlLineContract | null) {
+  if (!line) {
+    return "Select a close stream to inspect what it can block downstream.";
+  }
+
+  if (line.closeHealth === "critical" || line.blockingItems > 0) {
+    return "The downstream effect is delayed close release, weaker finance confidence and more pressure on treasury, compliance or document evidence lanes.";
+  }
+
+  if (line.closeReadiness < 92 || line.evidenceCompletion < 90) {
+    return "Weak readiness or evidence here can feed back into finance reporting, compliance release and final project close credibility.";
+  }
+
+  return "The downstream effect is mainly controlled continuity: keep finance, compliance and evidence lanes aligned so the close stream stays clean.";
+}
+
+function buildCloseReportBack(line: CloseControlLineContract | null) {
+  if (!line) {
+    return "Choose a close stream to define the next report-back window.";
+  }
+
+  if (line.closeHealth === "critical" || line.blockingItems > 0) {
+    return "Report back before the next close-room cutoff with blocker containment status and the exact release owner.";
+  }
+
+  if (line.closeReadiness < 92 || line.evidenceCompletion < 90) {
+    return "Report back in the same operating cycle once readiness and evidence are strong enough for the next controlled checkpoint.";
+  }
+
+  return "Report back at the next close-control refresh confirming the stream stayed aligned through finance, compliance and evidence follow-through.";
+}
+
 export default function CloseControlPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<CloseControlOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,11 +301,6 @@ export default function CloseControlPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -158,7 +331,7 @@ export default function CloseControlPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredLines = useMemo(() => {
     if (!overview) {
@@ -193,6 +366,13 @@ export default function CloseControlPage() {
   );
 
   const selectedStory = useMemo(() => buildCloseStory(selectedLine, selectedRisks.length), [selectedLine, selectedRisks.length]);
+  const selectedRouteSummary = useMemo(() => buildCloseRouteSummary(selectedLine), [selectedLine]);
+  const selectedReleaseGate = useMemo(() => buildCloseReleaseGate(selectedLine), [selectedLine]);
+  const selectedHumanStep = useMemo(() => buildCloseHumanStep(selectedLine), [selectedLine]);
+  const selectedCloseWhyNow = useMemo(() => buildCloseWhyNow(selectedLine), [selectedLine]);
+  const selectedCloseDownstreamEffect = useMemo(() => buildCloseDownstreamEffect(selectedLine), [selectedLine]);
+  const selectedCloseReportBack = useMemo(() => buildCloseReportBack(selectedLine), [selectedLine]);
+  const selectedOperationalLinks = useMemo(() => buildCloseOperationalLinks(selectedLine), [selectedLine]);
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
 
@@ -219,7 +399,7 @@ export default function CloseControlPage() {
   }, [selectedLineId, selectedLine?.id, selectedLine?.nextAction]);
 
   async function handleAction(closeHealth: CloseControlLineContract["closeHealth"], suggestedNextAction: string) {
-    if (!selectedLine || !session.accessToken) {
+    if (!selectedLine) {
       return;
     }
 
@@ -309,6 +489,42 @@ export default function CloseControlPage() {
             </section>
 
             <section className="grid cols2">
+              <Card
+                title="Close checkpoint walkthrough"
+                description="Turn close into an operable workflow: monitor blockers, evidence and fiscal exposure instead of a static checklist."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    This page is now usable for tests without backend auth: operators can review streams, change posture and pressure-test the month-end lane.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">close readiness</Badge>
+                    <Badge tone="info">compliance</Badge>
+                    <Badge tone="info">document support</Badge>
+                  </div>
+                </div>
+              </Card>
+
+              <Card
+                title="Close continuity workflow"
+                description="Close control is the operating bridge between finance signals, legal-compliance posture and document evidence."
+                aside={<Badge tone={filteredSummary.criticalStreams > 0 ? "danger" : filteredSummary.overdueStreams > 0 ? "warning" : "success"}>{filteredSummary.criticalStreams > 0 ? "critical lane" : filteredSummary.overdueStreams > 0 ? "overdue lane" : "stable lane"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Route summary</div><div>{selectedRouteSummary}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Checkpoint rule</div><div>No stream should be marked controlled while blockers, low evidence quality or weak readiness remain open.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Operator next step</div><div>Move from close board into the exact upstream module causing the month-end friction, then come back and re-check posture.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  {selectedOperationalLinks.map((link) => (
+                    <Link key={`${link.href}-${link.label}`} className={link.tone} href={link.href}>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </Card>
+
               <Card title="Close board" description="Live close control across finance, compliance and document evidence.">
                 <FilterBar summary={`${filteredLines.length} close streams match the current operating filters`}>
                   <label className="fieldLabel">
@@ -339,9 +555,7 @@ export default function CloseControlPage() {
                       placeholder="Stream, code, type or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
-                  </Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "close control ready"}</Badge>
                   <Badge tone={filteredSummary.criticalStreams > 0 ? "danger" : filteredSummary.overdueStreams > 0 ? "warning" : "success"}>
                     {filteredSummary.criticalStreams > 0
@@ -423,6 +637,40 @@ export default function CloseControlPage() {
                       <div className="detailLabel">Fiscal exposure</div>
                       <div>MXN {selectedLine.fiscalExposure.toLocaleString()}</div>
                     </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Release gate</div>
+                      <div className="tableCellStack">
+                        <div className="row gap wrap" style={{ alignItems: "center" }}>
+                          <Badge tone={selectedReleaseGate.tone}>{selectedReleaseGate.label}</Badge>
+                          <span>{selectedReleaseGate.summary}</span>
+                        </div>
+                        {selectedReleaseGate.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">
+                            {check}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedCloseWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedCloseDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedCloseReportBack}</div>
+                    </div>
 
                     <label className="stack" htmlFor="close-control-next-action">
                       <span className="detailLabel">Next action</span>
@@ -437,18 +685,11 @@ export default function CloseControlPage() {
                     </label>
 
                     <div className="row gap wrap">
-                      <Link className="buttonGhost" href="/accounts-payable">
-                        Open payables
-                      </Link>
-                      <Link className="buttonGhost" href="/document-control">
-                        Open document control
-                      </Link>
-                      <Link className="buttonGhost" href="/compliance">
-                        Open compliance
-                      </Link>
-                      <Link className="buttonGhost" href="/finance">
-                        Open finance
-                      </Link>
+                      {selectedOperationalLinks.map((link) => (
+                        <Link key={`${link.href}-${link.label}`} className={link.tone} href={link.href}>
+                          {link.label}
+                        </Link>
+                      ))}
                       <Link className="buttonGhost" href="/platform/settings">
                         Open settings
                       </Link>
@@ -544,6 +785,8 @@ export default function CloseControlPage() {
           <EmptyState
             title={error ?? "Close control unavailable"}
             description="We could not load the active close room for the selected company."
+            primaryAction={{ label: "Open finance", href: "/finance" }}
+            secondaryAction={{ label: "Open compliance", href: "/compliance" }}
           />
         )}
       </ModuleGate>

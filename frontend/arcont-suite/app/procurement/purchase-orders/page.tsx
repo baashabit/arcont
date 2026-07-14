@@ -36,6 +36,100 @@ function statusTone(status: ProcurementPurchaseOrderContract["status"]) {
   }
 }
 
+function purchaseOrderStatusLabel(status: ProcurementPurchaseOrderContract["status"]) {
+  switch (status) {
+    case "issued":
+      return { es: "Emitida", en: "Issued" };
+    case "confirmed":
+      return { es: "Confirmada", en: "Confirmed" };
+    case "in_transit":
+      return { es: "En tránsito", en: "In transit" };
+    case "partial":
+      return { es: "Recepción parcial", en: "Partial receipt" };
+    case "blocked":
+      return { es: "Bloqueada", en: "Blocked" };
+    default:
+      return { es: "Recibida", en: "Received" };
+  }
+}
+
+function invoiceMatchLabel(status: ProcurementPurchaseOrderContract["invoiceMatchStatus"]) {
+  switch (status) {
+    case "matched":
+      return { es: "Factura conciliada", en: "Invoice matched" };
+    case "risk":
+      return { es: "Riesgo fiscal", en: "Fiscal risk" };
+    default:
+      return { es: "Validación pendiente", en: "Pending validation" };
+  }
+}
+
+function purchaseOrderActionLabel(
+  purchaseOrder: ProcurementPurchaseOrderContract,
+  nextStatus: ProcurementPurchaseOrderContract["status"]
+) {
+  if (purchaseOrder.status === "blocked" && nextStatus === "confirmed") {
+    return { es: "Reactivar orden", en: "Resume order" };
+  }
+
+  switch (nextStatus) {
+    case "confirmed":
+      return { es: "Confirmar orden", en: "Confirm order" };
+    case "in_transit":
+      return { es: "Enviar a tránsito", en: "Move to transit" };
+    case "partial":
+      return { es: "Registrar recepción parcial", en: "Mark partial receipt" };
+    case "received":
+      return { es: "Marcar recibida", en: "Mark received" };
+    case "blocked":
+      return { es: "Bloquear orden", en: "Block order" };
+    default:
+      return { es: "Actualizar orden", en: "Update order" };
+  }
+}
+
+function buildPurchaseOrderContinuitySpanish(order: ProcurementPurchaseOrderContract | null, linkedReceiptCount: number) {
+  if (!order) {
+    return {
+      label: "Selecciona una orden",
+      description: "Elige una orden para continuar del compromiso comercial a la recepción."
+    };
+  }
+
+  if (order.status === "blocked") {
+    return {
+      label: "Desbloqueo requerido",
+      description: "Asigna responsable, resuelve el bloqueo y confirma de nuevo el compromiso del proveedor antes de afectar la obra."
+    };
+  }
+
+  if (order.invoiceMatchStatus === "risk") {
+    return {
+      label: "Validación fiscal",
+      description: "La orden puede avanzar, pero necesita corregir la evidencia fiscal antes de liberar pagos o cierre."
+    };
+  }
+
+  if (linkedReceiptCount > 0) {
+    return {
+      label: "Recepción en curso",
+      description: "La orden ya tiene entrada ligada; termina evidencia, variaciones y movimientos sin duplicar la captura."
+    };
+  }
+
+  if (order.status === "confirmed" || order.status === "in_transit" || order.status === "partial") {
+    return {
+      label: "Preparar recepción",
+      description: "Mantén la fecha comprometida y prepara al almacén antes de que el proveedor llegue a obra."
+    };
+  }
+
+  return {
+    label: "Compromiso por confirmar",
+    description: "Confirma aceptación, fecha y logística para convertir la requisición en una entrega ejecutable."
+  };
+}
+
 function invoiceTone(status: ProcurementPurchaseOrderContract["invoiceMatchStatus"]) {
   switch (status) {
     case "matched":
@@ -188,8 +282,312 @@ function buildPurchaseOrderStory(order: ProcurementPurchaseOrderContract | null,
   };
 }
 
+function createPurchaseOrderExample(requisitionId?: string) {
+  return {
+    requisitionId: requisitionId || "",
+    supplierName: "Concretos del Sureste",
+    buyer: "Procurement coordinator",
+    totalAmount: "248000",
+    committedEta: "2026-08-02",
+    logisticsMode: "Direct to jobsite",
+    nextAction: "Confirmar surtido, salida de unidad y ventana de recepcion antes de movilizar cuadrilla."
+  };
+}
+
+function buildPurchaseOrderWorkflow(
+  order: ProcurementPurchaseOrderContract | null,
+  linkedReceiptCount: number,
+  hasFieldOrigin: boolean
+) {
+  if (!order) {
+    return null;
+  }
+
+  return {
+    continuity:
+      order.status === "blocked"
+        ? `${order.code} is blocked and should be cleared before procurement pressure becomes a field execution issue.`
+        : order.status === "received"
+          ? `${order.code} is already received, so the next operational focus should move to movements, consumption or closeout.`
+          : `${order.code} is still active and should keep moving cleanly from supplier commitment into receiving.`,
+    receivingRead:
+      linkedReceiptCount > 0
+        ? `${order.code} already has ${linkedReceiptCount} linked receipt path(s), so the receiving lane is already in motion.`
+        : `${order.code} still has no linked inbound receipt, so the next move is to prepare receiving continuity.`,
+    nextMove: hasFieldOrigin
+      ? "Keep the field trace alive while confirming supplier commitment and inbound execution."
+      : order.invoiceMatchStatus === "risk"
+        ? "Reduce fiscal risk before this order becomes a clean closeable receipt."
+        : "Move the order into transit or receiving without losing supplier and field context."
+  };
+}
+
+function buildPurchaseOrderWhyNow(
+  order: ProcurementPurchaseOrderContract | null,
+  linkedReceiptCount: number,
+  hasFieldOrigin: boolean
+) {
+  if (!order) {
+    return "Choose an order to understand why procurement should intervene right now.";
+  }
+
+  if (order.status === "blocked") {
+    return `${order.code} is blocked, so procurement still has the last real chance to prevent supplier or logistics friction from hitting the project directly.`;
+  }
+
+  if (order.invoiceMatchStatus === "risk") {
+    return `${order.code} already carries fiscal mismatch risk, so delaying action now can contaminate receiving closeout and payment release later.`;
+  }
+
+  if (order.status === "in_transit" || order.status === "partial") {
+    return `${order.code} is already in active logistics execution, so every missing decision now affects receipt timing, field planning and supplier confidence.`;
+  }
+
+  if (linkedReceiptCount > 0) {
+    return `${order.code} already has receiving activity, so this PO is no longer just sourcing context; it is live operating flow.`;
+  }
+
+  if (hasFieldOrigin) {
+    return `${order.code} comes from traced field pressure, so keeping it vague here would break continuity across requisition, supplier and warehouse teams.`;
+  }
+
+  return `${order.code} is the current commercial commitment point, so procurement should stabilize supplier and logistics ownership before execution accelerates.`;
+}
+
+function buildPurchaseOrderDownstreamEffect(
+  order: ProcurementPurchaseOrderContract | null,
+  linkedReceiptCount: number
+) {
+  if (!order) {
+    return "Select an order to inspect which downstream domains depend on it.";
+  }
+
+  if (linkedReceiptCount > 0) {
+    return `What changes here now affects receiving, inventory movements and accounts-payable because the PO already has inbound execution attached.`;
+  }
+
+  if (order.status === "confirmed" || order.status === "in_transit" || order.status === "partial") {
+    return `The next move here directly conditions receiving slot discipline, supplier-control follow-up and whether AP later gets a clean fiscal packet.`;
+  }
+
+  if (order.invoiceMatchStatus === "risk") {
+    return `If the fiscal mismatch is not corrected here, receiving and AP will inherit a preventable closeout problem.`;
+  }
+
+  return `This PO still determines whether procurement opens a clean downstream lane or hands off confusion into warehouse and finance.`;
+}
+
+function buildPurchaseOrderReportBack(
+  order: ProcurementPurchaseOrderContract | null,
+  linkedReceiptCount: number
+) {
+  if (!order) {
+    return "Choose an order to define when the responsible owner should report back.";
+  }
+
+  if (order.status === "issued") {
+    return "Report back when supplier acceptance, ETA and fiscal packet ownership are all confirmed.";
+  }
+
+  if (order.status === "confirmed") {
+    return "Report back when dispatch is released and receiving already has a committed slot.";
+  }
+
+  if (order.status === "in_transit") {
+    return linkedReceiptCount > 0
+      ? "Report back with receipt evidence, variance status and the remaining balance still on route."
+      : "Report back when the first receipt opens or when the ETA slips materially.";
+  }
+
+  if (order.status === "partial") {
+    return "Report back when the remaining quantity, variance explanation and invoice match are all clear.";
+  }
+
+  if (order.status === "blocked") {
+    return "Report back only with blocker owner, unblock action and the date to resume supplier execution.";
+  }
+
+  return "Report back when the order is fully received and the fiscal packet is clean enough for downstream payment release.";
+}
+
+function buildPurchaseOrderHumanStep(
+  order: ProcurementPurchaseOrderContract | null,
+  linkedReceiptCount: number
+) {
+  if (!order) {
+    return "Select an order to see the next human move.";
+  }
+
+  if (order.status === "issued") {
+    return "Confirm supplier acceptance now and assign a real owner for fiscal packet and ETA closure.";
+  }
+
+  if (order.status === "confirmed") {
+    return "Release dispatch and make sure receiving is expecting this exact order, not just the supplier.";
+  }
+
+  if (order.status === "in_transit") {
+    return linkedReceiptCount > 0
+      ? "Follow the open receipt, close evidence gaps and keep the remaining quantity under logistics control."
+      : "Open the receiving path now before the truck arrives and the warehouse team works blind.";
+  }
+
+  if (order.status === "partial") {
+    return "Resolve the missing balance and variance immediately before the order becomes a lingering commercial exception.";
+  }
+
+  if (order.status === "blocked") {
+    return "Escalate the blocker with supplier or logistics owner and do not let field planning assume this PO is healthy.";
+  }
+
+  return "Close receiving and fiscal evidence cleanly so the order can leave procurement without rework.";
+}
+
+function buildPurchaseOrderRouteSummary(
+  order: ProcurementPurchaseOrderContract | null,
+  linkedReceiptCount: number,
+  hasFieldOrigin: boolean
+) {
+  if (!order) {
+    return "Use purchase orders as the execution bridge between requisition, supplier commitment, receiving and invoice readiness.";
+  }
+
+  if (order.status === "blocked") {
+    return "This order should route first through supplier and commercial unblock before warehouse or field depend on it.";
+  }
+
+  if (linkedReceiptCount > 0) {
+    return "This order should route through linked receipts and then into movements or AP without rebuilding procurement context.";
+  }
+
+  if (order.status === "confirmed" || order.status === "in_transit" || order.status === "partial") {
+    return "This order should route through receiving preparation and logistics execution before finance or field assume continuity.";
+  }
+
+  if (hasFieldOrigin) {
+    return "This order should preserve field traceability while moving into supplier confirmation and inbound execution.";
+  }
+
+  return "This order can continue through supplier execution and receiving with the current procurement context intact.";
+}
+
+function buildPurchaseOrderOperationalLinks(
+  order: ProcurementPurchaseOrderContract | null,
+  linkedReceiptCount: number
+) {
+  if (!order) {
+    return [
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open supplier control", href: "/supplier-control" },
+      { label: "Open accounts payable", href: "/accounts-payable" }
+    ];
+  }
+
+  if (order.status === "blocked") {
+    return [
+      { label: "Open supplier control", href: "/supplier-control" },
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open accounts payable", href: "/accounts-payable" }
+    ];
+  }
+
+  if (linkedReceiptCount > 0) {
+    return [
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open movement", href: "/inventory/movements" },
+      { label: "Open accounts payable", href: "/accounts-payable" }
+    ];
+  }
+
+  return [
+    { label: "Open receiving", href: "/inventory/receiving" },
+    { label: "Open supplier control", href: "/supplier-control" },
+    { label: "Open accounts payable", href: "/accounts-payable" }
+  ];
+}
+
+function buildCreatePurchaseOrderGate(input: {
+  requisitionId: string;
+  supplierName: string;
+  buyer: string;
+  totalAmount: number;
+  committedEta: string;
+  logisticsMode: string;
+  nextAction: string;
+}) {
+  const checks: string[] = [];
+
+  if (!input.requisitionId) {
+    checks.push("A valid requisition still needs to be selected.");
+  }
+
+  if ([input.supplierName, input.buyer, input.logisticsMode].some((value) => value.trim().length < 3)) {
+    checks.push("Supplier, buyer and logistics mode still need more specific capture.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs to be concrete enough for supplier or warehouse follow-through.");
+  }
+
+  if (!Number.isFinite(input.totalAmount) || input.totalAmount <= 0) {
+    checks.push("Total amount must be greater than zero.");
+  }
+
+  if (!input.committedEta) {
+    checks.push("Committed ETA is still missing.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock = !input.requisitionId || !Number.isFinite(input.totalAmount) || input.totalAmount <= 0 || !input.committedEta;
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not open yet" : "Open with control",
+      summary: hardBlock
+        ? "This purchase order would open with a hard procurement continuity blocker."
+        : "The purchase order can open, but logistics or ownership still need tighter discipline.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to open",
+    summary: "The PO intake is coherent enough to open supplier commitment cleanly.",
+    checks: [
+      "The opened PO will become the current focus item immediately.",
+      "Keep requisition, supplier and receiving traceability attached from the first opening."
+    ]
+  };
+}
+
+function buildCreatePurchaseOrderHumanStep(input: {
+  requisitionId: string;
+  logisticsMode: string;
+  nextAction: string;
+  committedEta: string;
+}) {
+  if (!input.requisitionId) {
+    return "Select the requisition first so the supplier commitment stays anchored to a real intake.";
+  }
+
+  if (!input.committedEta) {
+    return "Set the committed ETA before opening the order so receiving can plan the slot.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Clarify the supplier acceptance or receiving step before persisting the PO.";
+  }
+
+  if (input.logisticsMode.trim().length < 3) {
+    return "Define the logistics mode before opening the order so downstream handling stays explicit.";
+  }
+
+  return "Open the purchase order and continue immediately into receiving preparation or supplier follow-through without losing the requisition context.";
+}
+
 export default function ProcurementPurchaseOrdersPage() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<ProcurementPurchaseOrdersOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<PurchaseOrderBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -203,6 +601,7 @@ export default function ProcurementPurchaseOrdersPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<"control" | "queue" | "create">("control");
   const [createForm, setCreateForm] = useState({
     requisitionId: "",
     supplierName: "Proveedor Estrategico",
@@ -212,13 +611,23 @@ export default function ProcurementPurchaseOrdersPage() {
     logisticsMode: "Direct to jobsite",
     nextAction: ""
   });
+  const createPurchaseOrderGate = useMemo(() => buildCreatePurchaseOrderGate({
+    requisitionId: createForm.requisitionId,
+    supplierName: createForm.supplierName,
+    buyer: createForm.buyer,
+    totalAmount: Number(createForm.totalAmount),
+    committedEta: createForm.committedEta,
+    logisticsMode: createForm.logisticsMode,
+    nextAction: createForm.nextAction
+  }), [createForm]);
+  const createPurchaseOrderHumanStep = useMemo(() => buildCreatePurchaseOrderHumanStep({
+    requisitionId: createForm.requisitionId,
+    logisticsMode: createForm.logisticsMode,
+    nextAction: createForm.nextAction,
+    committedEta: createForm.committedEta
+  }), [createForm]);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -266,7 +675,7 @@ export default function ProcurementPurchaseOrdersPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const projectOptions = useMemo(() => {
     if (!overview) {
@@ -355,11 +764,44 @@ export default function ProcurementPurchaseOrdersPage() {
 
     return bridgeContext.requisitions.origins.find((item) => item.requisitionId === requisition.id) ?? null;
   }, [bridgeContext, selectedPurchaseOrder]);
+  const purchaseOrderWorkflow = useMemo(
+    () => buildPurchaseOrderWorkflow(selectedPurchaseOrder, linkedReceipts.length, Boolean(selectedFieldOrigin)),
+    [linkedReceipts.length, selectedFieldOrigin, selectedPurchaseOrder]
+  );
+  const purchaseOrderWhyNow = useMemo(
+    () => buildPurchaseOrderWhyNow(selectedPurchaseOrder, linkedReceipts.length, Boolean(selectedFieldOrigin)),
+    [linkedReceipts.length, selectedFieldOrigin, selectedPurchaseOrder]
+  );
+  const purchaseOrderDownstreamEffect = useMemo(
+    () => buildPurchaseOrderDownstreamEffect(selectedPurchaseOrder, linkedReceipts.length),
+    [linkedReceipts.length, selectedPurchaseOrder]
+  );
+  const purchaseOrderReportBack = useMemo(
+    () => buildPurchaseOrderReportBack(selectedPurchaseOrder, linkedReceipts.length),
+    [linkedReceipts.length, selectedPurchaseOrder]
+  );
+  const purchaseOrderHumanStep = useMemo(
+    () => buildPurchaseOrderHumanStep(selectedPurchaseOrder, linkedReceipts.length),
+    [linkedReceipts.length, selectedPurchaseOrder]
+  );
+  const purchaseOrderRouteSummary = useMemo(
+    () => buildPurchaseOrderRouteSummary(selectedPurchaseOrder, linkedReceipts.length, Boolean(selectedFieldOrigin)),
+    [linkedReceipts.length, selectedFieldOrigin, selectedPurchaseOrder]
+  );
+  const purchaseOrderOperationalLinks = useMemo(
+    () => buildPurchaseOrderOperationalLinks(selectedPurchaseOrder, linkedReceipts.length),
+    [linkedReceipts.length, selectedPurchaseOrder]
+  );
   const eligibleRequisitions = useMemo(
     () =>
       bridgeContext?.requisitions.requisitions.filter((item) => item.status === "approved" || item.status === "sourcing") ?? [],
     [bridgeContext]
   );
+  const purchaseOrderContinuityCopy = useMemo(
+    () => buildPurchaseOrderContinuitySpanish(selectedPurchaseOrder, linkedReceipts.length),
+    [linkedReceipts.length, selectedPurchaseOrder]
+  );
+  const t = (es: string, en: string) => localizeText({ es, en });
 
   useEffect(() => {
     if (!overview) {
@@ -395,13 +837,13 @@ export default function ProcurementPurchaseOrdersPage() {
   }, [createForm.requisitionId, eligibleRequisitions]);
 
   async function handleAction(status: ProcurementPurchaseOrderContract["status"], suggestedNextAction: string) {
-    if (!selectedPurchaseOrder || !session.accessToken) {
+    if (!selectedPurchaseOrder) {
       return;
     }
 
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
-      setActionError("Next action must be more specific before updating the purchase order.");
+      setActionError(t("La siguiente acción debe ser más específica antes de actualizar la orden.", "Next action must be more specific before updating the purchase order."));
       return;
     }
 
@@ -417,7 +859,7 @@ export default function ProcurementPurchaseOrdersPage() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Purchase order update failed.");
+      setActionError(response.error?.message ?? t("No fue posible actualizar la orden de compra.", "Purchase order update failed."));
       setIsSaving(false);
       return;
     }
@@ -441,12 +883,12 @@ export default function ProcurementPurchaseOrdersPage() {
     });
 
     setNextActionDraft(updatedPurchaseOrder.nextAction);
-    setActionMessage(`Purchase order moved to ${updatedPurchaseOrder.status}.`);
+    setActionMessage(t(`La orden cambió a ${localizeText(purchaseOrderStatusLabel(updatedPurchaseOrder.status)).toLowerCase()}.`, `Purchase order moved to ${updatedPurchaseOrder.status}.`));
     setIsSaving(false);
   }
 
   async function handleCreatePurchaseOrder() {
-    if (!overview || !session.accessToken) {
+    if (!overview) {
       return;
     }
 
@@ -457,25 +899,25 @@ export default function ProcurementPurchaseOrdersPage() {
     const totalAmount = Number(createForm.totalAmount);
 
     if (!createForm.requisitionId || supplierName.length < 3 || buyer.length < 3 || logisticsMode.length < 3) {
-      setActionError("Requisition, supplier, buyer and logistics mode must be defined before opening a purchase order.");
+      setActionError(t("Define requisición, proveedor, comprador y logística antes de abrir una orden.", "Requisition, supplier, buyer and logistics mode must be defined before opening a purchase order."));
       setCreateMessage(null);
       return;
     }
 
     if (nextAction.length < 8) {
-      setActionError("Next action must be specific before opening the purchase order.");
+      setActionError(t("La primera acción debe ser específica antes de abrir la orden.", "Next action must be specific before opening the purchase order."));
       setCreateMessage(null);
       return;
     }
 
     if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
-      setActionError("Total amount must be greater than zero before opening a purchase order.");
+      setActionError(t("El importe total debe ser mayor a cero antes de abrir una orden.", "Total amount must be greater than zero before opening a purchase order."));
       setCreateMessage(null);
       return;
     }
 
     if (!createForm.committedEta) {
-      setActionError("Committed ETA is required before opening a purchase order.");
+      setActionError(t("La fecha comprometida es obligatoria antes de abrir una orden.", "Committed ETA is required before opening a purchase order."));
       setCreateMessage(null);
       return;
     }
@@ -499,7 +941,7 @@ export default function ProcurementPurchaseOrdersPage() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Purchase order creation failed.");
+      setActionError(response.error?.message ?? t("No fue posible crear la orden de compra.", "Purchase order creation failed."));
       setIsSaving(false);
       return;
     }
@@ -521,7 +963,8 @@ export default function ProcurementPurchaseOrdersPage() {
 
     setSelectedPurchaseOrderId(createdPurchaseOrder.id);
     setNextActionDraft(createdPurchaseOrder.nextAction);
-    setCreateMessage(`${createdPurchaseOrder.code} opened from requisition ${createdPurchaseOrder.requisitionCode}.`);
+    setWorkspaceView("control");
+    setCreateMessage(t(`${createdPurchaseOrder.code} se abrió desde la requisición ${createdPurchaseOrder.requisitionCode}.`, `${createdPurchaseOrder.code} opened from requisition ${createdPurchaseOrder.requisitionCode}.`));
     setCreateForm((current) => ({
       ...current,
       supplierName,
@@ -536,18 +979,209 @@ export default function ProcurementPurchaseOrdersPage() {
 
   return (
     <AppShell
-      title="Procurement purchase orders"
-      eyebrow="Execution domain"
-      description="Supplier commitment, transit, receipt readiness and invoice matching in one operational board."
+      title={{ es: "Órdenes de compra", en: "Purchase orders" }}
+      eyebrow={{ es: "Abastecimiento", en: "Procurement" }}
+      description={{
+        es: "Controla el compromiso del proveedor, la logística y la recepción desde una sola orden operable.",
+        en: "Control supplier commitment, logistics and receiving from one operable order."
+      }}
     >
-      <ModuleGate moduleKeys={["procurement.purchasing"]} requiredPermissions={["procurement:*"]} title="Purchase orders">
+      <ModuleGate moduleKeys={["procurement.purchasing"]} requiredPermissions={["procurement:*"]} title={t("Órdenes de compra", "Purchase orders")}>
         {overview ? (
           <>
+            <section className="purchaseOrderWorkbench">
+              <div className="purchaseOrderWorkbenchLead">
+                <span className="eyebrow">
+                  {t("Compromiso de compra", "Purchase commitment")}
+                  <span className="mono">{t("corte de recepción", "receiving cut")}</span>
+                </span>
+                <h2>{selectedPurchaseOrder?.code ?? t("Selecciona una orden", "Select a purchase order")}</h2>
+                <p>{t("Convierte una requisición aprobada en un compromiso controlado y acompáñalo hasta recepción, movimiento y factura sin volver a capturar datos.", "Turn an approved requisition into a controlled commitment and carry it to receiving, movement and invoice without re-entering data.")}</p>
+                <label className="purchaseOrderContextControl">
+                  <span>{t("Orden activa", "Active purchase order")}</span>
+                  <select className="selectField" value={selectedPurchaseOrder?.id ?? ""} onChange={(event) => setSelectedPurchaseOrderId(event.target.value || null)}>
+                    {overview.purchaseOrders.map((order) => (
+                      <option key={order.id} value={order.id}>
+                        {order.code} · {order.projectName} · {order.supplierName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="purchaseOrderWorkbenchSnapshot">
+                <div className="row gap wrap">
+                  {selectedPurchaseOrder ? <Badge tone={statusTone(selectedPurchaseOrder.status)}>{localizeText(purchaseOrderStatusLabel(selectedPurchaseOrder.status))}</Badge> : null}
+                  {selectedPurchaseOrder ? <Badge tone={invoiceTone(selectedPurchaseOrder.invoiceMatchStatus)}>{localizeText(invoiceMatchLabel(selectedPurchaseOrder.invoiceMatchStatus))}</Badge> : null}
+                </div>
+                <strong>{selectedPurchaseOrder?.nextAction ?? t("Sin siguiente acción", "No next action")}</strong>
+                <p>{selectedPurchaseOrder ? `${selectedPurchaseOrder.projectName} · ${selectedPurchaseOrder.supplierName}` : t("Selecciona una orden para comenzar", "Select an order to begin")}</p>
+                <div className="purchaseOrderWorkbenchMetrics">
+                  <div><strong>{selectedPurchaseOrder?.receivedPercent ?? 0}%</strong><span>{t("recibido", "received")}</span></div>
+                  <div><strong>{linkedReceipts.length}</strong><span>{t("entradas", "receipts")}</span></div>
+                  <div><strong>{selectedPurchaseOrder ? `MXN ${(selectedPurchaseOrder.totalAmount / 1000).toFixed(0)}k` : "MXN 0"}</strong><span>{t("importe", "amount")}</span></div>
+                </div>
+              </div>
+            </section>
+
+            <div className="purchaseOrderWorkspaceTabs" role="tablist" aria-label={t("Vistas de órdenes de compra", "Purchase order views")}>
+              {([
+                ["control", t("Control", "Control")],
+                ["queue", t("Órdenes", "Orders")],
+                ["create", t("Alta", "Create")]
+              ] as const).map(([view, label]) => (
+                <button
+                  key={view}
+                  type="button"
+                  role="tab"
+                  aria-selected={workspaceView === view}
+                  className={`purchaseOrderWorkspaceTab ${workspaceView === view ? "purchaseOrderWorkspaceTabActive" : ""}`}
+                  onClick={() => setWorkspaceView(view)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {workspaceView === "control" ? (
+              <>
+                <section className="grid cols3">
+                  <KpiCard label={t("Importe comprometido", "Committed amount")} value={selectedPurchaseOrder ? `MXN ${selectedPurchaseOrder.totalAmount.toLocaleString()}` : "MXN 0"} footnote={t("Valor comercial que ya depende de esta orden.", "Commercial value already depending on this order.")} />
+                  <KpiCard label={t("Fecha comprometida", "Committed ETA")} value={selectedPurchaseOrder?.committedEta ?? "-"} footnote={t("Fecha que debe conocer recepción y obra.", "Date receiving and site must know.")} />
+                  <KpiCard label={t("Progreso de recepción", "Receipt progress")} value={`${selectedPurchaseOrder?.receivedPercent ?? 0}%`} footnote={t("No cierres la orden hasta completar recepción y evidencia.", "Do not close the order until receipt and evidence are complete.")} />
+                </section>
+
+                <section className="grid cols2">
+                  <Card title={t("Siguiente acción", "Next action")} description={t("Actualiza el compromiso concreto que seguirá compras, proveedor o almacén.", "Update the concrete commitment procurement, supplier or warehouse will follow.")}>
+                    {selectedPurchaseOrder ? (
+                      <div className="detailGrid">
+                        <div className="detailRow"><div className="detailLabel">{t("Proveedor", "Supplier")}</div><div>{selectedPurchaseOrder.supplierName}</div></div>
+                        <div className="detailRow"><div className="detailLabel">{t("Requisición", "Requisition")}</div><div>{selectedPurchaseOrder.requisitionCode}</div></div>
+                        <div className="detailRow"><div className="detailLabel">{t("Logística", "Logistics")}</div><div>{selectedPurchaseOrder.logisticsMode}</div></div>
+                        <label className="detailRow"><div className="detailLabel">{t("Acción comprometida", "Committed action")}</div><textarea id="purchase-order-next-action" className="textarea" value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} placeholder={t("Ej. Confirmar salida y ventana de descarga hoy", "E.g. Confirm dispatch and unloading window today")} /></label>
+                      </div>
+                    ) : <EmptyState title={t("Sin orden seleccionada", "No purchase order selected")} description={t("Elige una orden desde la bandeja para actualizarla.", "Select an order from the queue to update it.")} />}
+                    {selectedPurchaseOrder ? <div className="row gap wrap" style={{ marginTop: 20 }}><button type="button" className="button" disabled={isSaving || nextActionDraft.trim().length < 8} onClick={() => void handleAction(selectedPurchaseOrder.status, selectedPurchaseOrder.nextAction)}>{isSaving ? t("Guardando...", "Saving...") : t("Guardar acción", "Save action")}</button><Link className="buttonGhost" href={`/supplier-control?supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}>{t("Abrir proveedor", "Open supplier")}</Link></div> : null}
+                  </Card>
+
+                  <Card title={t("Decisión operativa", "Operational decision")} description={t(purchaseOrderContinuityCopy.description, selectedPurchaseOrder ? "Keep status changes connected to supplier commitment, receiving and fiscal readiness." : "Select an order to decide its next operational step.")} aside={<Badge tone={selectedPurchaseOrder?.invoiceMatchStatus === "risk" ? "danger" : selectedPurchaseOrder?.status === "blocked" ? "danger" : "success"}>{t(purchaseOrderContinuityCopy.label, selectedPurchaseOrder?.status === "blocked" ? "Unblock required" : "Ready to continue")}</Badge>}>
+                    <p className="sectionText">{t("Cada cambio debe conservar la fecha, la logística y la trazabilidad de la requisición que originó esta compra.", "Every change must keep the date, logistics and requisition traceability that originated this purchase.")}</p>
+                    <div className="row gap wrap" style={{ marginTop: 18 }}>
+                      {selectedPurchaseOrder ? actionOptions.map((option) => (
+                        <button key={option.label} type="button" className={option.status === "blocked" ? "buttonGhost" : "button"} disabled={isSaving || (option.status === "received" && selectedPurchaseOrder.receivedPercent < 95) || (option.status === "received" && selectedPurchaseOrder.invoiceMatchStatus === "risk")} onClick={() => void handleAction(option.status, option.nextAction)}>
+                          {isSaving ? t("Guardando...", "Saving...") : localizeText(purchaseOrderActionLabel(selectedPurchaseOrder, option.status))}
+                        </button>
+                      )) : null}
+                    </div>
+                    {selectedPurchaseOrder?.receivedPercent && selectedPurchaseOrder.receivedPercent < 95 ? <p className="tableCellMuted" style={{ marginTop: 16 }}>{t("La recepción debe alcanzar al menos 95% antes de cerrar esta orden.", "Receipt must reach at least 95% before closing this order.")}</p> : null}
+                    {selectedPurchaseOrder?.invoiceMatchStatus === "risk" ? <p className="tableCellMuted" style={{ marginTop: 8 }}>{t("Corrige el riesgo fiscal antes de marcar la orden como recibida.", "Resolve fiscal risk before marking the order received.")}</p> : null}
+                    {selectedPurchaseOrder && actionOptions.length === 0 ? <div className="row gap wrap" style={{ marginTop: 18 }}><Link className="button" href={`/inventory/receiving?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}&supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}>{t("Ver recepción", "View receiving")}</Link><Link className="buttonGhost" href={`/inventory/movements?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}`}>{t("Ver movimientos", "View movements")}</Link></div> : null}
+                    {actionMessage ? <p className="formSuccess">{actionMessage}</p> : null}
+                    {actionError ? <p className="formError">{actionError}</p> : null}
+                  </Card>
+                </section>
+
+                <section className="grid cols2">
+                  <Card title={t("Continuar el flujo", "Continue the flow")} description={t("La orden mantiene la misma referencia al pasar a recepción, almacén y cuentas por pagar.", "The order keeps the same reference as it moves to receiving, warehouse and accounts payable.")}>
+                    {selectedPurchaseOrder ? <div className="row gap wrap"><Link className="button" href={`/inventory/receiving?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}&supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}>{t("Preparar recepción", "Prepare receiving")}</Link><Link className="buttonGhost" href={`/inventory/movements?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}`}>{t("Movimientos", "Movements")}</Link><Link className="buttonGhost" href="/accounts-payable">{t("Cuentas por pagar", "Accounts payable")}</Link></div> : null}
+                  </Card>
+                  <Card title={t("Señales de ejecución", "Execution signals")} description={t("Lectura rápida de recepción, proveedor y riesgos asociados a la orden activa.", "Fast read of receipt, supplier and risk signals associated with the active order.")}>
+                    <div className="detailGrid"><div className="detailRow"><div className="detailLabel">{t("Entradas ligadas", "Linked receipts")}</div><div>{linkedReceipts.length}</div></div><div className="detailRow"><div className="detailLabel">{t("Riesgos activos", "Active risks")}</div><div>{selectedRisks.length > 0 ? `${selectedRisks.length} ${t("requieren atención", "need attention")}` : t("Sin riesgos explícitos", "No explicit risks")}</div></div><div className="detailRow"><div className="detailLabel">{t("Origen de obra", "Site origin")}</div><div>{selectedFieldOrigin ? selectedFieldOrigin.fieldRequestId : t("Captura directa de compras", "Direct procurement capture")}</div></div></div>
+                  </Card>
+                </section>
+              </>
+            ) : null}
+
+            {workspaceView === "queue" ? (
+              <section className="grid cols2">
+                <Card title={t("Bandeja de órdenes", "Purchase order queue")} description={t("Filtra, elige una orden y regresa a Control para ejecutar el siguiente movimiento.", "Filter, select an order and return to Control to execute the next move.")} aside={<Badge tone={filteredSummary.blockedOrders > 0 ? "danger" : "success"}>{filteredSummary.blockedOrders} {t("bloqueadas", "blocked")}</Badge>}>
+                  <FilterBar summary={`${filteredPurchaseOrders.length} ${t("órdenes visibles", "visible orders")}`}>
+                    <select className="field" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}><option value="all">{t("Todas las obras", "All projects")}</option>{projectOptions.map((projectName) => <option key={projectName} value={projectName}>{projectName}</option>)}</select>
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}><option value="all">{t("Todos los estados", "All statuses")}</option>{(["issued", "confirmed", "in_transit", "partial", "blocked", "received"] as ProcurementPurchaseOrderContract["status"][]).map((status) => <option key={status} value={status}>{localizeText(purchaseOrderStatusLabel(status))}</option>)}</select>
+                    <input className="field" type="search" value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder={t("Buscar orden, obra, proveedor o categoría", "Search order, project, supplier or category")} />
+                  </FilterBar>
+                  {filteredPurchaseOrders.length > 0 ? <div className="list">{filteredPurchaseOrders.map((order) => <button key={order.id} type="button" className={`listItem ${selectedPurchaseOrder?.id === order.id ? "listItemSelected" : ""}`} onClick={() => { setSelectedPurchaseOrderId(order.id); setWorkspaceView("control"); }}><div><strong>{order.code} · {order.projectName}</strong><p>{order.supplierName} · {order.receivedPercent}% {t("recibido", "received")} · MXN {order.totalAmount.toLocaleString()}</p></div><Badge tone={statusTone(order.status)}>{localizeText(purchaseOrderStatusLabel(order.status))}</Badge></button>)}</div> : <EmptyState title={t("Sin órdenes para estos filtros", "No orders for these filters")} description={t("Limpia los filtros o abre una orden desde una requisición elegible.", "Clear filters or open an order from an eligible requisition.")} />}
+                </Card>
+                <Card title={selectedPurchaseOrder?.code ?? t("Selecciona una orden", "Select a purchase order")} description={selectedPurchaseOrder ? `${selectedPurchaseOrder.projectName} · ${selectedPurchaseOrder.supplierName}` : t("Elige una orden desde la bandeja.", "Choose an order from the queue.")}>
+                  {selectedPurchaseOrder ? <div className="detailGrid"><div className="detailRow"><div className="detailLabel">{t("Estado", "Status")}</div><div><Badge tone={statusTone(selectedPurchaseOrder.status)}>{localizeText(purchaseOrderStatusLabel(selectedPurchaseOrder.status))}</Badge></div></div><div className="detailRow"><div className="detailLabel">{t("Fecha comprometida", "Committed ETA")}</div><div>{selectedPurchaseOrder.committedEta}</div></div><div className="detailRow"><div className="detailLabel">{t("Recepción", "Receipt")}</div><div>{selectedPurchaseOrder.receivedPercent}%</div></div><div className="detailRow"><div className="detailLabel">{t("Siguiente acción", "Next action")}</div><div>{selectedPurchaseOrder.nextAction}</div></div></div> : null}
+                  {selectedPurchaseOrder ? <div className="row gap wrap" style={{ marginTop: 20 }}><button type="button" className="button" onClick={() => setWorkspaceView("control")}>{t("Abrir control", "Open control")}</button></div> : null}
+                </Card>
+              </section>
+            ) : null}
+
+            {workspaceView === "create" ? (
+              <section className="grid cols2">
+                <Card title={t("Alta de orden de compra", "Create purchase order")} description={t("Abre un compromiso de proveedor solo desde una requisición aprobada o en cotización.", "Open a supplier commitment only from an approved or sourcing requisition.")}>
+                  <div className="row gap wrap" style={{ marginBottom: 18 }}><button type="button" className="buttonGhost" onClick={() => setCreateForm(createPurchaseOrderExample(eligibleRequisitions[0]?.id))}>{t("Cargar ejemplo", "Load example")}</button><button type="button" className="buttonGhost" onClick={() => setCreateForm((current) => ({ ...current, requisitionId: eligibleRequisitions[0]?.id ?? "", supplierName: "Proveedor estratégico", buyer: "Comprador responsable", totalAmount: "150000", committedEta: "2026-07-20", logisticsMode: "Entrega directa a obra", nextAction: "" }))}>{t("Limpiar esenciales", "Clear essentials")}</button></div>
+                  <div className="captureCompactGrid">
+                    <label className="captureField captureFieldWide"><span>{t("Requisición de origen", "Source requisition")}</span><select className="selectField" value={createForm.requisitionId} onChange={(event) => setCreateForm((current) => ({ ...current, requisitionId: event.target.value }))}><option value="">{t("Selecciona una requisición", "Select a requisition")}</option>{eligibleRequisitions.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.projectName} · {item.category}</option>)}</select></label>
+                    <label className="captureField"><span>{t("Proveedor", "Supplier")}</span><input className="field" value={createForm.supplierName} onChange={(event) => setCreateForm((current) => ({ ...current, supplierName: event.target.value }))} /></label>
+                    <label className="captureField"><span>{t("Comprador", "Buyer")}</span><input className="field" value={createForm.buyer} onChange={(event) => setCreateForm((current) => ({ ...current, buyer: event.target.value }))} /></label>
+                    <label className="captureField"><span>{t("Importe total (MXN)", "Total amount (MXN)")}</span><input className="field" type="number" min="1" value={createForm.totalAmount} onChange={(event) => setCreateForm((current) => ({ ...current, totalAmount: event.target.value }))} /></label>
+                    <label className="captureField"><span>{t("Fecha comprometida", "Committed ETA")}</span><input className="field" type="date" value={createForm.committedEta} onChange={(event) => setCreateForm((current) => ({ ...current, committedEta: event.target.value }))} /></label>
+                    <label className="captureField"><span>{t("Logística", "Logistics")}</span><input className="field" value={createForm.logisticsMode} onChange={(event) => setCreateForm((current) => ({ ...current, logisticsMode: event.target.value }))} placeholder={t("Ej. Entrega directa a obra", "E.g. Direct to jobsite")} /></label>
+                    <label className="captureField captureFieldWide"><span>{t("Primera acción", "First action")}</span><input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} placeholder={t("Ej. Confirmar surtido y ventana de recepción", "E.g. Confirm supply and receiving window")} /></label>
+                  </div>
+                  {actionError ? <p className="formError">{actionError}</p> : null}
+                  <div className="row gap wrap" style={{ marginTop: 20 }}><button type="button" className="button" disabled={isSaving} onClick={() => void handleCreatePurchaseOrder()}>{isSaving ? t("Creando...", "Creating...") : t("Abrir orden de compra", "Open purchase order")}</button>{createMessage ? <Badge tone="success">{createMessage}</Badge> : null}</div>
+                </Card>
+                <div className="fieldWorkspaceSideStack">
+                  <Card title={t("Validación previa", "Pre-creation validation")} description={t("Confirma que la requisición, el compromiso y la recepción prevista son coherentes antes de persistir.", "Confirm requisition, commitment and planned receiving are coherent before persisting.")} aside={<Badge tone={createPurchaseOrderGate.tone}>{t(createPurchaseOrderGate.tone === "success" ? "Lista para abrir" : createPurchaseOrderGate.tone === "warning" ? "Abrir con control" : "Completa datos", createPurchaseOrderGate.label)}</Badge>}>
+                    <p className="sectionText">{t(createPurchaseOrderGate.tone === "success" ? "La orden tiene contexto suficiente para iniciar el compromiso comercial y preparar recepción." : "Revisa los datos esenciales antes de introducir este compromiso a la cadena de abastecimiento.", createPurchaseOrderGate.summary)}</p>
+                    <div className="detailGrid" style={{ marginTop: 16 }}><div className="detailRow"><div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div><div>{t(createForm.requisitionId && createForm.committedEta && createForm.nextAction.trim().length >= 8 ? "Abre la orden y prepara la recepción sin perder la referencia de la requisición." : "Completa la requisición, la fecha y la primera acción antes de abrir la orden.", createPurchaseOrderHumanStep)}</div></div></div>
+                  </Card>
+                  <Card title={t("Después del alta", "After creation")} description={t("La orden se selecciona automáticamente para confirmar, enviar a tránsito o preparar recepción.", "The order is automatically selected to confirm, move to transit or prepare receiving.")}>
+                    <div className="row gap wrap"><Link className="buttonGhost" href="/procurement/requisitions">{t("Requisiciones", "Requisitions")}</Link><Link className="buttonGhost" href="/supplier-control">{t("Proveedores", "Suppliers")}</Link><Link className="buttonGhost" href="/inventory/receiving">{t("Recepción", "Receiving")}</Link></div>
+                  </Card>
+                </div>
+              </section>
+            ) : null}
+
+            <details className="purchaseOrderAdvanced">
+              <summary>{t("Abrir tablero detallado y controles avanzados", "Open detailed board and advanced controls")}</summary>
+              <div className="purchaseOrderAdvancedContent">
             <section className="grid cols4">
               <KpiCard label="Open orders" value={String(filteredSummary.openOrders)} footnote="Orders still not fully received." />
               <KpiCard label="In transit" value={String(filteredSummary.inTransitOrders)} footnote="Orders actively moving through logistics or partial receipt." />
               <KpiCard label="Blocked orders" value={String(filteredSummary.blockedOrders)} footnote="Orders stopped by commercial, fiscal or execution issues." />
               <KpiCard label="Receipt progress" value={`${filteredSummary.averageReceivedPercent}%`} footnote="Average receipt completion across visible orders." />
+            </section>
+
+            {isDemoMode ? (
+              <Card
+                title="Operable demo mode"
+                description="Purchase orders can be exercised locally before live auth and ERP-style integrations are enabled."
+                aside={<Badge tone="warning">browser-persisted</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">What works</div>
+                    <div>Create purchase orders from requisitions, move them across issued, transit, blocked and received states, and inspect links to supplier control and receiving.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Recommended test</div>
+                    <div>Open a PO from a requisition, push it to transit, then block or receive it to validate fiscal and logistics pressure in one board.</div>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
+            <section className="grid cols1">
+              <Card
+                title="Purchase order continuity"
+                description="This route should already connect requisition award, supplier commitment, receiving and downstream payment readiness."
+              >
+                <p className="sectionText">
+                  Open the purchase order, stabilize supplier commitment, then continue into `receiving`,
+                  `supplier-control` or `accounts-payable` depending on whether the next friction is logistics, supplier execution or fiscal release.
+                </p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/procurement/requisitions">Open requisitions</Link>
+                  <Link className="buttonGhost" href="/inventory/receiving">Open receiving</Link>
+                  <Link className="buttonGhost" href="/supplier-control">Open supplier control</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Open accounts payable</Link>
+                </div>
+              </Card>
             </section>
 
             <section className="grid cols3">
@@ -564,6 +1198,24 @@ export default function ProcurementPurchaseOrdersPage() {
               <Card title="Execution pressure" description="Fast read of how this order is affecting real project flow.">
                 <p className="sectionText">
                   {selectedStory?.executionPressure ?? "Choose an order to inspect execution pressure."}
+                </p>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Order continuity" description="Whether the selected order can keep moving without major friction.">
+                <p className="sectionText">
+                  {purchaseOrderWorkflow?.continuity ?? "Choose an order to inspect continuity."}
+                </p>
+              </Card>
+              <Card title="Receiving readiness" description="How ready the selected order is to continue into inbound execution.">
+                <p className="sectionText">
+                  {purchaseOrderWorkflow?.receivingRead ?? "Choose an order to inspect receiving readiness."}
+                </p>
+              </Card>
+              <Card title="Next recommended move" description="Fast operator guidance for the selected purchase order.">
+                <p className="sectionText">
+                  {purchaseOrderWorkflow?.nextMove ?? "Choose an order to inspect the next move."}
                 </p>
               </Card>
             </section>
@@ -600,8 +1252,8 @@ export default function ProcurementPurchaseOrdersPage() {
                     onChange={(event) => setSearchFilter(event.target.value)}
                     placeholder="Search order, project, supplier or category"
                   />
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? "demo operable" : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "purchase orders ready"}</Badge>
                 </FilterBar>
@@ -656,6 +1308,29 @@ export default function ProcurementPurchaseOrdersPage() {
                       <Badge tone="info">{selectedPurchaseOrder.requisitionCode}</Badge>
                     </div>
 
+                    <div className="detailGrid">
+                      <div className="detailRow">
+                        <div className="detailLabel">Why now</div>
+                        <div>{purchaseOrderWhyNow}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Downstream effect</div>
+                        <div>{purchaseOrderDownstreamEffect}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Route summary</div>
+                        <div>{purchaseOrderRouteSummary}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Next human step</div>
+                        <div>{purchaseOrderHumanStep}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Report back</div>
+                        <div>{purchaseOrderReportBack}</div>
+                      </div>
+                    </div>
+
                     <div className="stack">
                       <label className="label" htmlFor="purchase-order-next-action">
                         Next action
@@ -670,6 +1345,11 @@ export default function ProcurementPurchaseOrdersPage() {
                     </div>
 
                     <div className="row gap wrap">
+                      {purchaseOrderOperationalLinks.map((link, index) => (
+                        <Link key={`${link.href}-${link.label}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                          {link.label}
+                        </Link>
+                      ))}
                       {actionOptions.map((action) => (
                         <button
                           key={action.label}
@@ -803,8 +1483,39 @@ export default function ProcurementPurchaseOrdersPage() {
             <section className="grid cols2">
               <Card
                 title="Open purchase order"
-                description="Convert an approved procurement requisition into an active supplier commitment with ETA and logistics ownership."
+                description={
+                  isDemoMode
+                    ? "Convert an approved procurement requisition into a locally persisted supplier commitment with ETA and logistics ownership."
+                    : "Convert an approved procurement requisition into an active supplier commitment with ETA and logistics ownership."
+                }
               >
+                <div className="row gap wrap" style={{ marginBottom: 16 }}>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() => setCreateForm(createPurchaseOrderExample(eligibleRequisitions[0]?.id))}
+                  >
+                    Load demo example
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm({
+                        requisitionId: eligibleRequisitions[0]?.id ?? "",
+                        supplierName: "Proveedor Estrategico",
+                        buyer: "Procurement lead",
+                        totalAmount: "150000",
+                        committedEta: "2026-07-20",
+                        logisticsMode: "Direct to jobsite",
+                        nextAction: ""
+                      })
+                    }
+                  >
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/procurement/requisitions">Open requisitions</Link>
+                </div>
                 <div className="detailGrid">
                   <label className="detailRow">
                     <div className="detailLabel">Requisition</div>
@@ -874,11 +1585,32 @@ export default function ProcurementPurchaseOrdersPage() {
                     />
                   </label>
                 </div>
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">Creation gate</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createPurchaseOrderGate.tone}>{createPurchaseOrderGate.label}</Badge>
+                        <span>{createPurchaseOrderGate.summary}</span>
+                      </div>
+                      {createPurchaseOrderGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">{check}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Next human step</div>
+                    <div>{createPurchaseOrderHumanStep}</div>
+                  </div>
+                </div>
 
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" onClick={() => void handleCreatePurchaseOrder()} disabled={isSaving}>
                     Open purchase order
                   </button>
+                  <Link className="buttonGhost" href="/inventory/receiving">Open receiving</Link>
+                  <Link className="buttonGhost" href="/supplier-control">Open supplier control</Link>
+                  {actionError ? <Badge tone="danger">{actionError}</Badge> : null}
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
                 </div>
               </Card>
@@ -903,6 +1635,8 @@ export default function ProcurementPurchaseOrdersPage() {
                 </div>
               </Card>
             </section>
+              </div>
+            </details>
           </>
         ) : (
           <EmptyState

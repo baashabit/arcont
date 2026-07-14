@@ -152,8 +152,30 @@ function buildEstimationBridge(line: EstimationCollectionLineContract | null, br
   };
 }
 
+function buildCollectionWorkflow(line: EstimationCollectionLineContract | null) {
+  if (!line) {
+    return null;
+  }
+
+  return {
+    executionRead:
+      line.progressGap > 0
+        ? `${line.projectName} still has a ${line.progressGap}% gap between field progress and billing evidence, so collection cannot be treated as clean yet.`
+        : `${line.projectName} has aligned field evidence and can focus on billing and collection conversion.`,
+    collectionRead:
+      line.pendingCollection > 0
+        ? `MXN ${line.pendingCollection.toLocaleString()} remains exposed in collection and the oldest tranche is already ${line.oldestPendingDays} days old.`
+        : `${line.projectName} currently shows no significant collection exposure.`,
+    closeoutRead:
+      line.closeReadiness < 80
+        ? `Closeout readiness is only ${line.closeReadiness}%, so this line still depends on document and compliance discipline.`
+        : `Closeout readiness is ${line.closeReadiness}% and the line is structurally closer to controlled cash conversion.`
+  };
+}
+
 export default function EstimationsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<EstimationCollectionOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<EstimationBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -168,11 +190,6 @@ export default function EstimationsPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -222,7 +239,7 @@ export default function EstimationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredLines = useMemo(() => {
     if (!overview) {
@@ -256,6 +273,7 @@ export default function EstimationsPage() {
   );
 
   const selectedStory = useMemo(() => buildEstimationBridge(selectedLine, bridgeContext), [bridgeContext, selectedLine]);
+  const collectionWorkflow = useMemo(() => buildCollectionWorkflow(selectedLine), [selectedLine]);
   const collectionsChainPressure = useMemo(
     () =>
       (overview?.summary.overdueCollections ?? 0) +
@@ -294,7 +312,7 @@ export default function EstimationsPage() {
     collectionHealth: EstimationCollectionLineContract["collectionHealth"],
     suggestedNextAction: string
   ) {
-    if (!selectedLine || !session.accessToken) {
+    if (!selectedLine) {
       return;
     }
 
@@ -395,6 +413,23 @@ export default function EstimationsPage() {
 
             <section className="grid cols2">
               <Card
+                title="Collections walkthrough"
+                description="Operate the executed-work to cash-conversion lane directly from estimations, even in demo mode."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    The line is now testable by humans: review billing lag, update collection posture and watch how it propagates into AP and treasury pressure.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">estimations</Badge>
+                    <Badge tone="info">collections</Badge>
+                    <Badge tone="info">treasury impact</Badge>
+                  </div>
+                </div>
+              </Card>
+
+              <Card
                 title="Collections to treasury lane"
                 description="Estimations now read downstream cash execution, AP aging and treasury blockage as one practical lane."
                 aside={
@@ -413,6 +448,7 @@ export default function EstimationsPage() {
                   <Link className="button" href="/accounts-payable">Open accounts payable</Link>
                   <Link className="buttonGhost" href="/treasury/payment-runs">Open treasury</Link>
                   <Link className="buttonGhost" href="/cash-flow">Open cash flow</Link>
+                  <Link className="buttonGhost" href="/crm">Open CRM</Link>
                 </div>
               </Card>
 
@@ -451,9 +487,7 @@ export default function EstimationsPage() {
                       placeholder="Project, owner or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
-                  </Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "estimations ready"}</Badge>
                   <Badge tone={filteredSummary.criticalCollections > 0 ? "danger" : filteredSummary.overdueCollections > 0 ? "warning" : "success"}>
                     {filteredSummary.criticalCollections > 0
@@ -628,6 +662,12 @@ export default function EstimationsPage() {
                           <Link className="buttonGhost" href="/accounts-payable">
                             Open accounts payable
                           </Link>
+                          <Link className="buttonGhost" href="/document-control">
+                            Open document control
+                          </Link>
+                          <Link className="buttonGhost" href="/close-control">
+                            Open close control
+                          </Link>
                         </div>
                         {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
                         {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
@@ -641,6 +681,24 @@ export default function EstimationsPage() {
                     primaryAction={{ label: "Stay on estimations", href: "/estimations" }}
                   />
                 )}
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Execution to billing" description="Whether field execution is really ready to become collectible cash.">
+                <p className="sectionText">
+                  {collectionWorkflow?.executionRead ?? "Choose an estimation line to inspect execution-to-billing continuity."}
+                </p>
+              </Card>
+              <Card title="Collection posture" description="Immediate read of collection exposure on the selected line.">
+                <p className="sectionText">
+                  {collectionWorkflow?.collectionRead ?? "Choose an estimation line to inspect collection posture."}
+                </p>
+              </Card>
+              <Card title="Closeout dependency" description="Why collections should still stay connected to closeout and compliance.">
+                <p className="sectionText">
+                  {collectionWorkflow?.closeoutRead ?? "Choose an estimation line to inspect closeout dependency."}
+                </p>
               </Card>
             </section>
 
@@ -704,12 +762,12 @@ export default function EstimationsPage() {
             title="Estimations overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open cash flow", href: "/cash-flow" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading estimations overview" : "Estimations overview not loaded yet"}
-            description="This route expects a live backend estimations response for the active tenant."
+            description="Open an estimation line to test the executed-work and collection lane in demo mode or with the live tenant backend."
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

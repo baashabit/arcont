@@ -76,6 +76,66 @@ function actionOptions(line: SubcontractLineContract) {
   }
 }
 
+function buildSubcontractWhyNow(line: SubcontractLineContract | null) {
+  if (!line) {
+    return "Select a subcontract line to understand what must be contained before field execution drifts.";
+  }
+
+  if (line.subcontractHealth === "critical") {
+    return `Pending destajo of MXN ${line.pendingDestajo.toLocaleString()} plus ${line.progressGap}% progress gap already put ${line.contractorName} under active execution pressure.`;
+  }
+
+  if (line.latestDailyLogStatus === "flagged" || line.qualityReleaseReadiness < 85) {
+    return `${line.frontName} is still exposed because the latest field or quality posture is not stable enough to leave this subcontract unattended.`;
+  }
+
+  if (line.complianceExpirations > 0 || line.incidentCount > 0) {
+    return `${line.contractorName} still has compliance or incident debt that can stop crew continuity if nobody intervenes now.`;
+  }
+
+  return `${line.contractorName} is currently controlled, but attendance, destajo and release readiness still need explicit follow-through to keep the front stable.`;
+}
+
+function buildSubcontractDownstreamEffect(line: SubcontractLineContract | null) {
+  if (!line) {
+    return "Select a subcontract line to inspect what other modules will absorb the impact.";
+  }
+
+  if (line.pendingDestajo > line.contractAmount * 0.1) {
+    return "If destajo remains unresolved, finance, procurement and project control will inherit preventable noise in payment timing and production confidence.";
+  }
+
+  if (line.latestDailyLogStatus === "flagged" || line.qualityReleaseReadiness < 85) {
+    return "If field and quality posture do not recover, daily logs, release control and closeout readiness will degrade behind this subcontract.";
+  }
+
+  if (line.attendanceRate < 85) {
+    return "If attendance stays soft, the project schedule and workforce planning lanes will absorb the slippage first.";
+  }
+
+  return "If this line is kept under control, projects, HR and quality can keep operating without downstream rework from the subcontractor lane.";
+}
+
+function buildSubcontractReportBack(line: SubcontractLineContract | null) {
+  if (!line) {
+    return "Select a subcontract line to define the next operational checkpoint.";
+  }
+
+  if (line.subcontractHealth === "critical") {
+    return "Report back in the next supervisor cycle once destajo containment, attendance recovery and the field blocker owner are confirmed.";
+  }
+
+  if (line.latestDailyLogStatus === "flagged" || line.qualityReleaseReadiness < 85) {
+    return "Report back after the next field log and quality verification so the release posture can be re-evaluated with evidence.";
+  }
+
+  if (line.complianceExpirations > 0 || line.incidentCount > 0) {
+    return "Report back as soon as compliance expirations or incident actions are formally cleared in the operating lane.";
+  }
+
+  return "Report back at the next planned subcontract review to confirm this front stayed controlled without new destajo or quality drift.";
+}
+
 function recomputeSummary(lines: SubcontractLineContract[]) {
   return {
     activeSubcontracts: lines.length,
@@ -182,6 +242,10 @@ export default function SubcontractsPage() {
     () => overview?.risks.filter((item) => item.lineId === selectedLine?.id) ?? [],
     [overview, selectedLine]
   );
+
+  const selectedWhyNow = useMemo(() => buildSubcontractWhyNow(selectedLine), [selectedLine]);
+  const selectedDownstreamEffect = useMemo(() => buildSubcontractDownstreamEffect(selectedLine), [selectedLine]);
+  const selectedReportBack = useMemo(() => buildSubcontractReportBack(selectedLine), [selectedLine]);
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
 
@@ -441,6 +505,18 @@ export default function SubcontractsPage() {
                     <div className="detailRow">
                       <div className="detailLabel">Retention</div>
                       <div>MXN {selectedLine.retentionAmount.toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>

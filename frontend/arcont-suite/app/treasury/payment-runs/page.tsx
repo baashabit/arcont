@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -27,6 +28,15 @@ const emptyCreateForm = {
   nextAction: ""
 };
 
+function createPaymentRunExample() {
+  return {
+    bankAccountLabel: "BBVA Dispersions Norte ****8821",
+    scheduledDate: "2026-07-29",
+    owner: "Mesa de tesoreria",
+    nextAction: "Liberar lote con proveedores completos y confirmar evidencia bancaria antes de las 15:00"
+  };
+}
+
 function tone(status: TreasuryPaymentRunContract["status"]) {
   switch (status) {
     case "executed":
@@ -51,8 +61,266 @@ function unavailableTone(reasonCode: TreasuryPaymentRunsOverviewContract["unavai
   }
 }
 
+function buildCreatePaymentRunGate(input: {
+  bankAccountLabel: string;
+  scheduledDate: string;
+  owner: string;
+  nextAction: string;
+  selectedInvoiceCount: number;
+  selectedInvoiceAmount: number;
+  availableEligibleInvoices: number;
+}) {
+  const checks: string[] = [];
+
+  if (input.bankAccountLabel.trim().length < 8) {
+    checks.push("Bank account label still needs more descriptive treasury capture.");
+  }
+
+  if (!input.scheduledDate) {
+    checks.push("Scheduled date is still missing.");
+  }
+
+  if (input.owner.trim().length < 3) {
+    checks.push("Treasury owner still needs more specific capture.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs enough detail for release follow-through.");
+  }
+
+  if (input.selectedInvoiceCount === 0) {
+    checks.push("At least one eligible invoice must be selected before creating a payment run.");
+  }
+
+  if (input.availableEligibleInvoices === 0) {
+    checks.push("There are no eligible invoices available to assemble into a run right now.");
+  }
+
+  if (input.selectedInvoiceAmount <= 0 && input.selectedInvoiceCount > 0) {
+    checks.push("Selected invoices still do not form a valid treasury amount.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock = !input.scheduledDate || input.selectedInvoiceCount === 0 || input.availableEligibleInvoices === 0;
+
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not create yet" : "Create with control",
+      summary: hardBlock
+        ? "This treasury batch would open with a hard readiness blocker."
+        : "The batch can be created, but treasury discipline still needs tightening before it becomes truly releasable.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to create",
+    summary: "The payment run has enough structure to enter treasury review cleanly.",
+    checks: [
+      "The created run will become the current focus batch immediately.",
+      "Keep AP, supplier and bank execution traceability attached from the first treasury assembly."
+    ]
+  };
+}
+
+function buildCreatePaymentRunHumanStep(input: {
+  selectedInvoiceCount: number;
+  scheduledDate: string;
+  nextAction: string;
+}) {
+  if (input.selectedInvoiceCount === 0) {
+    return "Select the payable invoices first so treasury is not creating an empty batch.";
+  }
+
+  if (!input.scheduledDate) {
+    return "Set the execution date before creating the batch so cash timing stays explicit.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Clarify the treasury release plan before persisting the batch.";
+  }
+
+  return "Create the run and immediately review whether it should stay draft or move toward ready without rebuilding the AP context.";
+}
+
+function buildSelectedRunGate(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return {
+      tone: "info" as const,
+      label: "No run selected",
+      summary: "Choose a treasury run to verify whether it is really ready, blocked or still draft.",
+      checks: ["Select a run from the active treasury board."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (run.status === "blocked") {
+    checks.push("Run is already blocked at treasury level.");
+  }
+
+  if (run.criticalInvoices > 0) {
+    checks.push(`${run.criticalInvoices} critical invoice(s) still threaten clean execution.`);
+  }
+
+  if (run.totalInvoices <= 0) {
+    checks.push("Run still has no invoices attached.");
+  }
+
+  if (run.status === "draft") {
+    checks.push("Run is still draft and has not reached ready posture.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock = run.status === "blocked" || run.totalInvoices <= 0 || run.criticalInvoices > 0;
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not execute yet" : "Operate with control",
+      summary: hardBlock
+        ? "This treasury batch still carries blockers before bank execution should be trusted."
+        : "The batch can continue, but treasury should tighten the release lane first.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: run.status === "executed" ? "Already executed" : "Ready for treasury continuity",
+    summary:
+      run.status === "executed"
+        ? "The batch is already executed and should stay only as financial traceability."
+        : "Invoice count, risk and posture are aligned for treasury continuity.",
+    checks: [
+      "Continue into bank execution or AP follow-through without rebuilding the same run context.",
+      "Keep the same owner and next action attached until the batch is fully closed."
+    ]
+  };
+}
+
+function buildSelectedRunHumanStep(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return "Choose a treasury run to identify the next human move.";
+  }
+
+  if (run.status === "blocked") {
+    return "Clear the blocking invoice or treasury dependency first, then return only when the batch can move again.";
+  }
+
+  if (run.criticalInvoices > 0) {
+    return "Contain the critical invoices first and confirm whether they should stay, move or leave the batch.";
+  }
+
+  if (run.status === "draft") {
+    return "Validate the batch composition now and decide whether it is ready or still needs AP cleanup.";
+  }
+
+  if (run.status === "ready") {
+    return "Confirm bank execution conditions and keep AP informed so the run does not decay before payment.";
+  }
+
+  return "Close the traceability loop and verify the executed batch no longer carries unresolved AP residue.";
+}
+
+function buildSelectedRunWhyNow(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return "Choose a treasury run to understand why it deserves attention right now.";
+  }
+
+  if (run.status === "blocked") {
+    return "This batch is already blocked, so delay here can freeze payment continuity across multiple suppliers at once.";
+  }
+
+  if (run.criticalInvoices > 0) {
+    return "Critical invoices are already inside the batch, so treasury should act before the run normalizes bad release quality.";
+  }
+
+  if (run.status === "draft") {
+    return "The run is still draft, so treasury should decide now whether it can become real execution or needs more cleanup.";
+  }
+
+  if (run.status === "ready") {
+    return "The run is close enough to bank execution that treasury delay can turn a good batch into stale release posture.";
+  }
+
+  return "This run is already executed, but treasury should still preserve clean traceability and downstream confirmation.";
+}
+
+function buildSelectedRunDownstreamEffect(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return "Choose a treasury run to inspect what it can block downstream.";
+  }
+
+  if (run.status === "blocked" || run.criticalInvoices > 0) {
+    return "The downstream effect is supplier distrust, AP congestion and distorted finance timing across the payment chain.";
+  }
+
+  if (run.status === "draft") {
+    return "An unstable draft run can propagate confusion back into AP, supplier release and short-term cash sequencing.";
+  }
+
+  if (run.status === "ready") {
+    return "If this ready batch stalls, treasury confidence and supplier release timing can degrade together.";
+  }
+
+  return "The downstream effect is mostly reconciliation discipline: keep AP, suppliers and finance aligned after execution.";
+}
+
+function buildSelectedRunReportBack(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return "Choose a treasury run to define the next report-back window.";
+  }
+
+  if (run.status === "blocked" || run.criticalInvoices > 0) {
+    return "Report back before the next treasury cutoff with blocker containment and invoice-release status.";
+  }
+
+  if (run.status === "draft") {
+    return "Report back in the same operating cycle once the batch is either ready or explicitly resequenced.";
+  }
+
+  if (run.status === "ready") {
+    return "Report back as soon as bank execution timing is confirmed and still valid.";
+  }
+
+  return "Report back on the next treasury refresh confirming execution stayed reconciled and clean.";
+}
+
+function buildSelectedRunLinks(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return [
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open cash flow", href: "/cash-flow" }
+    ];
+  }
+
+  if (run.status === "blocked" || run.criticalInvoices > 0) {
+    return [
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open finance", href: "/finance" }
+    ];
+  }
+
+  if (run.status === "draft") {
+    return [
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open cash flow", href: "/cash-flow" }
+    ];
+  }
+
+  return [
+    { label: "Open finance", href: "/finance" },
+    { label: "Open cash flow", href: "/cash-flow" },
+    { label: "Open accounts payable", href: "/accounts-payable" }
+  ];
+}
+
 export default function TreasuryPaymentRunsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<TreasuryPaymentRunsOverviewContract | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | TreasuryPaymentRunContract["status"]>("all");
@@ -67,21 +335,12 @@ export default function TreasuryPaymentRunsPage() {
   const [moveTargets, setMoveTargets] = useState<Record<string, string>>({});
 
   async function reloadOverview() {
-    if (!session.accessToken) {
-      return;
-    }
-
     const runs = await fetchTreasuryPaymentRunsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken });
     setOverview(runs);
     setSelectedId((current) => current ?? runs?.focusRun?.id ?? runs?.runs[0]?.id ?? null);
   }
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -103,7 +362,7 @@ export default function TreasuryPaymentRunsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredRuns = useMemo(() => {
     if (!overview) {
@@ -134,6 +393,12 @@ export default function TreasuryPaymentRunsPage() {
     () => overview?.risks.filter((risk) => risk.paymentRunId === selectedRun?.id) ?? [],
     [overview, selectedRun]
   );
+  const selectedRunGate = useMemo(() => buildSelectedRunGate(selectedRun), [selectedRun]);
+  const selectedRunHumanStep = useMemo(() => buildSelectedRunHumanStep(selectedRun), [selectedRun]);
+  const selectedRunWhyNow = useMemo(() => buildSelectedRunWhyNow(selectedRun), [selectedRun]);
+  const selectedRunDownstreamEffect = useMemo(() => buildSelectedRunDownstreamEffect(selectedRun), [selectedRun]);
+  const selectedRunReportBack = useMemo(() => buildSelectedRunReportBack(selectedRun), [selectedRun]);
+  const selectedRunLinks = useMemo(() => buildSelectedRunLinks(selectedRun), [selectedRun]);
   const eligibleInvoices = useMemo(
     () => overview?.eligibleInvoices ?? [],
     [overview]
@@ -142,26 +407,36 @@ export default function TreasuryPaymentRunsPage() {
     () => overview?.unavailableInvoices ?? [],
     [overview]
   );
+  const selectedCreateInvoices = useMemo(
+    () => eligibleInvoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id)),
+    [eligibleInvoices, selectedInvoiceIds]
+  );
+  const createPaymentRunGate = useMemo(
+    () =>
+      buildCreatePaymentRunGate({
+        bankAccountLabel: form.bankAccountLabel,
+        scheduledDate: form.scheduledDate,
+        owner: form.owner,
+        nextAction: form.nextAction,
+        selectedInvoiceCount: selectedCreateInvoices.length,
+        selectedInvoiceAmount: selectedCreateInvoices.reduce((sum, invoice) => sum + invoice.pendingAmount, 0),
+        availableEligibleInvoices: eligibleInvoices.length
+      }),
+    [eligibleInvoices.length, form.bankAccountLabel, form.nextAction, form.owner, form.scheduledDate, selectedCreateInvoices]
+  );
+  const createPaymentRunHumanStep = useMemo(
+    () =>
+      buildCreatePaymentRunHumanStep({
+        selectedInvoiceCount: selectedCreateInvoices.length,
+        scheduledDate: form.scheduledDate,
+        nextAction: form.nextAction
+      }),
+    [form.nextAction, form.scheduledDate, selectedCreateInvoices.length]
+  );
   const availableTargetRuns = useMemo(
     () => overview?.runs.filter((run) => run.id !== selectedRun?.id && run.status !== "executed") ?? [],
     [overview, selectedRun?.id]
   );
-
-  useEffect(() => {
-    if (!overview) {
-      return;
-    }
-
-    if (filteredRuns.length === 0) {
-      setSelectedId(null);
-      return;
-    }
-
-    const isSelectedVisible = filteredRuns.some((run) => run.id === selectedId);
-    if (!isSelectedVisible) {
-      setSelectedId(filteredRuns[0]?.id ?? null);
-    }
-  }, [filteredRuns, overview, selectedId]);
 
   useEffect(() => {
     if (!overview) {
@@ -198,7 +473,7 @@ export default function TreasuryPaymentRunsPage() {
   }
 
   async function handleUpdate(status: TreasuryPaymentRunContract["status"]) {
-    if (!selectedRun || !session.accessToken) {
+    if (!selectedRun) {
       return;
     }
 
@@ -239,10 +514,6 @@ export default function TreasuryPaymentRunsPage() {
   }
 
   async function handleCreate() {
-    if (!session.accessToken) {
-      return;
-    }
-
     if (form.bankAccountLabel.trim().length < 8) {
       setError("Bank account label must be descriptive enough for treasury operations.");
       return;
@@ -302,7 +573,7 @@ export default function TreasuryPaymentRunsPage() {
   }
 
   async function handleRemoveInvoice(invoiceId: string) {
-    if (!selectedRun || !session.accessToken) {
+    if (!selectedRun) {
       return;
     }
 
@@ -326,7 +597,7 @@ export default function TreasuryPaymentRunsPage() {
   }
 
   async function handleAddInvoiceToRun() {
-    if (!selectedRun || !session.accessToken) {
+    if (!selectedRun) {
       return;
     }
 
@@ -356,7 +627,7 @@ export default function TreasuryPaymentRunsPage() {
   }
 
   async function handleMoveInvoice(invoiceId: string) {
-    if (!selectedRun || !session.accessToken) {
+    if (!selectedRun) {
       return;
     }
 
@@ -401,6 +672,42 @@ export default function TreasuryPaymentRunsPage() {
             </section>
 
             <section className="grid cols3">
+              <Card
+                title="Treasury walkthrough"
+                description="Assemble payment batches from validated invoices, rebalance them, then release execution."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    This screen now supports human testing of the full treasury loop: create run, add or remove invoices, move them between runs and mark execution posture.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">accounts payable</Badge>
+                    <Badge tone="info">treasury</Badge>
+                    <Badge tone="info">release flow</Badge>
+                  </div>
+                </div>
+              </Card>
+
+              <Card
+                title="Payment release workflow"
+                description="Use treasury as the execution bridge between accounts payable, supplier readiness and real bank release."
+                aside={<Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>{filteredSummary.blockedRuns > 0 ? "blocked" : filteredSummary.readyRuns > 0 ? "ready to release" : "stable"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Upstream check</div><div>Validate supplier fiscal packet and invoice evidence before the batch is even assembled.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Treasury action</div><div>Group invoices by release lane, move them between runs and avoid executing false-ready batches.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Downstream continuity</div><div>Confirm finance and cash-flow impact immediately after the batch is marked ready or executed.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/accounts-payable">Open accounts payable</Link>
+                  <Link className="buttonGhost" href="/supplier-master">Open supplier master</Link>
+                  <Link className="buttonGhost" href="/cash-flow">Open cash flow</Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
               <Card title="Payment run board" description="Treasury batches and current release posture.">
                 <FilterBar summary={`${filteredRuns.length} runs match the current operating filters`}>
                   <label className="fieldLabel">
@@ -423,15 +730,8 @@ export default function TreasuryPaymentRunsPage() {
                       placeholder="Run, bank account, owner or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>{session.authenticated ? "live backend" : source}</Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "treasury ready"}</Badge>
-                  <Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>
-                    {filteredSummary.blockedRuns > 0
-                      ? `${filteredSummary.blockedRuns} blocked`
-                      : filteredSummary.readyRuns > 0
-                        ? `${filteredSummary.readyRuns} ready`
-                        : "visible subset controlled"}
-                  </Badge>
                   <Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>
                     {filteredSummary.blockedRuns > 0
                       ? `${filteredSummary.blockedRuns} blocked`
@@ -468,6 +768,22 @@ export default function TreasuryPaymentRunsPage() {
                     <div className="detailRow"><div className="detailLabel">Owner</div><div>{selectedRun.owner}</div></div>
                     <div className="detailRow"><div className="detailLabel">Invoices</div><div>{selectedRun.totalInvoices}</div></div>
                     <div className="detailRow"><div className="detailLabel">Critical invoices</div><div>{selectedRun.criticalInvoices}</div></div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Treasury gate</div>
+                      <div className="tableCellStack">
+                        <div className="row gap wrap" style={{ alignItems: "center" }}>
+                          <Badge tone={selectedRunGate.tone}>{selectedRunGate.label}</Badge>
+                          <span>{selectedRunGate.summary}</span>
+                        </div>
+                        {selectedRunGate.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">{check}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="detailRow"><div className="detailLabel">Next human step</div><div>{selectedRunHumanStep}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Why now</div><div>{selectedRunWhyNow}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Downstream effect</div><div>{selectedRunDownstreamEffect}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Report back</div><div>{selectedRunReportBack}</div></div>
                     <label className="stack">
                       <span className="detailLabel">Next action</span>
                       <textarea className="field" rows={4} value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} />
@@ -476,6 +792,11 @@ export default function TreasuryPaymentRunsPage() {
                       <button className="button" type="button" onClick={() => void handleUpdate("ready")}>Mark Ready</button>
                       <button className="buttonGhost" type="button" onClick={() => void handleUpdate("blocked")}>Block Run</button>
                       <button className="button" type="button" onClick={() => void handleUpdate("executed")}>Execute Run</button>
+                    </div>
+                    <div className="row gap wrap">
+                      {selectedRunLinks.map((link, index) => (
+                        <Link key={`${link.href}-${link.label}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>{link.label}</Link>
+                      ))}
                     </div>
                     {selectedRun.status !== "executed" ? (
                       <div className="detailRow">
@@ -596,8 +917,30 @@ export default function TreasuryPaymentRunsPage() {
                     />
                   )}
                 </div>
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">Creation gate</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createPaymentRunGate.tone}>{createPaymentRunGate.label}</Badge>
+                        <span>{createPaymentRunGate.summary}</span>
+                      </div>
+                      {createPaymentRunGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">{check}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Next human step</div>
+                    <div>{createPaymentRunHumanStep}</div>
+                  </div>
+                </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button className="button" type="button" onClick={() => void handleCreate()}>Create Run</button>
+                  <button className="buttonGhost" type="button" onClick={() => setForm(createPaymentRunExample())}>Load demo example</button>
+                  <button className="buttonGhost" type="button" onClick={() => { setForm(emptyCreateForm); setSelectedInvoiceIds([]); }}>Reset form</button>
+                  <Link className="buttonGhost" href="/accounts-payable">Review AP</Link>
+                  <Link className="buttonGhost" href="/supplier-master">Review suppliers</Link>
                 </div>
               </Card>
 
@@ -624,7 +967,12 @@ export default function TreasuryPaymentRunsPage() {
             </section>
           </>
         ) : (
-          <EmptyState title="Treasury payment runs unavailable" description={error ?? "We could not load treasury payment runs for this company."} />
+          <EmptyState
+            title="Treasury payment runs unavailable"
+            description={error ?? "We could not load treasury payment runs for this company."}
+            primaryAction={{ label: "Go to accounts payable", href: "/accounts-payable" }}
+            secondaryAction={{ label: "Open finance", href: "/finance" }}
+          />
         )}
       </ModuleGate>
     </AppShell>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
@@ -36,6 +37,25 @@ const emptyCreateForm = {
   nextAction: ""
 };
 
+function createAccountsPayableExample() {
+  return {
+    supplierProfileId: "",
+    supplierName: "Concretos del Sureste",
+    invoiceNumber: "FAC-4821",
+    invoiceUuid: "A1B2C3D4-E5F6-7890-ABCD-1234567890EF",
+    projectName: "Torre Demo",
+    purchaseOrderCode: "PO-24031",
+    receiptCode: "RCV-102",
+    paymentMethod: "Transferencia",
+    dueDate: "2026-07-25",
+    subtotal: "100000",
+    tax: "16000",
+    total: "116000",
+    packetCompletion: "80",
+    nextAction: "Validar CFDI, expediente proveedor y programar corrida de pago."
+  };
+}
+
 function tone(status: AccountsPayableInvoiceContract["satStatus"] | AccountsPayableInvoiceContract["status"]) {
   switch (status) {
     case "controlled":
@@ -52,8 +72,365 @@ function tone(status: AccountsPayableInvoiceContract["satStatus"] | AccountsPaya
   }
 }
 
+
+function buildPaymentReleaseGate(input: {
+  invoice: AccountsPayableInvoiceContract | null;
+  supplierReady: boolean;
+  supplierProfileLabel: string | null;
+  paymentDateDraft: string;
+}) {
+  const { invoice, supplierReady, supplierProfileLabel, paymentDateDraft } = input;
+
+  if (!invoice) {
+    return {
+      tone: "info" as const,
+      label: "No invoice selected",
+      summary: "Choose an invoice to verify whether it is really ready for scheduling or payment.",
+      checks: ["Select an invoice from the active payables board."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (!supplierReady) {
+    checks.push(`Supplier fiscal profile is still not payment-ready${supplierProfileLabel ? ` (${supplierProfileLabel})` : ""}.`);
+  }
+
+  if (invoice.satStatus === "critical") {
+    checks.push("SAT posture is still critical.");
+  }
+
+  if (invoice.complementStatus === "risk") {
+    checks.push("Payment complement posture is still at risk.");
+  }
+
+  if (invoice.receiptEvidenceStatus === "missing") {
+    checks.push("Receiving evidence is still missing for this invoice path.");
+  }
+
+  if (invoice.packetCompletion < 100) {
+    checks.push(`Fiscal packet is only ${invoice.packetCompletion}% complete.`);
+  }
+
+  if ((invoice.status === "scheduled" || invoice.status === "paid") && !paymentDateDraft) {
+    checks.push("Payment date is still missing for scheduled or paid flow.");
+  }
+
+  if (invoice.status === "blocked") {
+    checks.push("Invoice is already blocked and should not move into payment release.");
+  }
+
+  if (checks.length > 0) {
+    return {
+      tone:
+        invoice.status === "blocked" || invoice.satStatus === "critical" || invoice.complementStatus === "risk"
+          ? "danger" as const
+          : "warning" as const,
+      label:
+        invoice.status === "blocked" || invoice.satStatus === "critical" || invoice.complementStatus === "risk"
+          ? "Do not pay yet"
+          : "Schedule with control",
+      summary:
+        invoice.status === "blocked" || invoice.satStatus === "critical" || invoice.complementStatus === "risk"
+          ? "The invoice still has hard fiscal or workflow blockers before money should move."
+          : "The invoice can continue, but payment release still needs tighter fiscal closure.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: invoice.status === "paid" ? "Already paid" : "Ready for payment release",
+    summary:
+      invoice.status === "paid"
+        ? "The invoice is already fully released and should stay only as financial traceability."
+        : "Supplier, SAT, evidence and packet posture are aligned for schedule or payment execution.",
+    checks: [
+      "Continue into treasury scheduling without rebuilding the same fiscal context.",
+      "Keep supplier master and payment-run traceability attached to this invoice."
+    ]
+  };
+}
+
+function buildInvoiceWhyNow(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice) {
+    return "Choose an invoice to understand why it deserves attention right now.";
+  }
+
+  if (invoice.status === "blocked" || invoice.satStatus === "critical") {
+    return "This invoice is already carrying a hard blocker, so waiting here can freeze payment continuity and supplier confidence.";
+  }
+
+  if (invoice.complementStatus === "risk") {
+    return "Complement risk means the invoice can still fail the payment path even if receiving and supplier posture look close to ready.";
+  }
+
+  if (invoice.packetCompletion < 100) {
+    return "An incomplete fiscal packet means this invoice still needs active closure before treasury should trust it.";
+  }
+
+  return "This invoice is close enough to release that the next owner should move now instead of leaving it as passive AP inventory.";
+}
+
+function buildInvoiceDownstreamEffect(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice) {
+    return "Choose an invoice to inspect what it can block downstream.";
+  }
+
+  if (invoice.status === "blocked" || invoice.satStatus === "critical") {
+    return "The downstream effect is payment delay, treasury friction and possible supplier execution pressure.";
+  }
+
+  if (invoice.receiptEvidenceStatus === "missing") {
+    return "Missing evidence here can force AP, supplier master and treasury to work around an invoice that is not really ready.";
+  }
+
+  if (invoice.complementStatus === "risk" || invoice.packetCompletion < 100) {
+    return "The downstream effect is fiscal exposure and delayed release into the payment-run lane.";
+  }
+
+  return "The downstream effect is mostly sequencing discipline: keep supplier master, AP and treasury aligned so payment can move cleanly.";
+}
+
+function buildInvoiceReportBack(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice) {
+    return "Choose an invoice to define the next report-back window.";
+  }
+
+  if (invoice.status === "blocked" || invoice.satStatus === "critical") {
+    return "Report back before the next payment-run cutoff with blocker containment and supplier-release status.";
+  }
+
+  if (invoice.complementStatus === "risk" || invoice.packetCompletion < 100) {
+    return "Report back in the same operating cycle once fiscal packet and complement posture are truly release-ready.";
+  }
+
+  if (invoice.status === "scheduled") {
+    return "Report back when treasury confirms the scheduled payment stayed valid and executable.";
+  }
+
+  return "Report back on the next AP refresh confirming the invoice either moved forward cleanly or was contained with explicit ownership.";
+}
+
+function buildInvoiceHumanStep(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice) {
+    return "Choose an invoice to identify the next human move.";
+  }
+
+  if (invoice.status === "blocked" || invoice.satStatus === "critical") {
+    return "Clear the fiscal or workflow blocker first, then return to AP only when the release path is genuinely open again.";
+  }
+
+  if (invoice.receiptEvidenceStatus === "missing") {
+    return "Recover receiving evidence and confirm who owns the missing proof before treasury sees this invoice as real.";
+  }
+
+  if (invoice.complementStatus === "risk" || invoice.packetCompletion < 100) {
+    return "Close the fiscal packet and complement posture in the same operating cycle before scheduling payment.";
+  }
+
+  if (invoice.status === "scheduled") {
+    return "Confirm the scheduled payment is still executable and keep treasury aligned on the exact bank run.";
+  }
+
+  return "Move into treasury or supplier follow-through now while the invoice is still clean enough to release without rework.";
+}
+
+function buildInvoiceRouteSummary(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice) {
+    return "Use AP as the release lane between supplier fiscal control, receiving evidence and treasury execution.";
+  }
+
+  if (invoice.status === "blocked" || invoice.satStatus === "critical") {
+    return "This invoice should route first through supplier fiscal cleanup and AP containment before treasury touches it.";
+  }
+
+  if (invoice.receiptEvidenceStatus === "missing") {
+    return "This invoice should route through receiving evidence recovery before AP treats the packet as real.";
+  }
+
+  if (invoice.complementStatus === "risk" || invoice.packetCompletion < 100) {
+    return "This invoice should route through fiscal packet completion before treasury scheduling or payment execution.";
+  }
+
+  if (invoice.status === "scheduled") {
+    return "This invoice should route through treasury confirmation so the scheduled payment does not drift out of validity.";
+  }
+
+  return "This invoice can continue through treasury execution with supplier and fiscal traceability intact.";
+}
+
+function buildInvoiceOperationalLinks(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice) {
+    return [
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open payment runs", href: "/treasury/payment-runs" },
+      { label: "Open finance", href: "/finance" }
+    ];
+  }
+
+  if (invoice.status === "blocked" || invoice.satStatus === "critical") {
+    return [
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open payment runs", href: "/treasury/payment-runs" }
+    ];
+  }
+
+  if (invoice.receiptEvidenceStatus === "missing") {
+    return [
+      { label: "Open finance", href: "/finance" },
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open payment runs", href: "/treasury/payment-runs" }
+    ];
+  }
+
+  if (invoice.complementStatus === "risk" || invoice.packetCompletion < 100) {
+    return [
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open payment runs", href: "/treasury/payment-runs" }
+    ];
+  }
+
+  return [
+    { label: "Open payment runs", href: "/treasury/payment-runs" },
+    { label: "Open supplier master", href: "/supplier-master" },
+    { label: "Open finance", href: "/finance" }
+  ];
+}
+
+function buildCreateInvoiceGate(input: {
+  supplierName: string;
+  supplierProfileReady: boolean;
+  supplierProfileLabel: string | null;
+  invoiceNumber: string;
+  invoiceUuid: string;
+  projectName: string;
+  purchaseOrderCode: string;
+  receiptCode: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  packetCompletion: number;
+  dueDate: string;
+  nextAction: string;
+}) {
+  const checks: string[] = [];
+
+  if (input.supplierName.trim().length < 3) {
+    checks.push("Supplier name still needs more specific capture.");
+  }
+
+  if (input.invoiceNumber.trim().length < 3) {
+    checks.push("Invoice number still needs more specific capture.");
+  }
+
+  if (!invoiceUuidPattern.test(input.invoiceUuid.trim().toUpperCase())) {
+    checks.push("UUID still does not match valid CFDI format.");
+  }
+
+  if (input.projectName.trim().length < 3) {
+    checks.push("Project name still needs more specific capture.");
+  }
+
+  if (!input.dueDate) {
+    checks.push("Due date is still missing.");
+  }
+
+  if (![input.subtotal, input.tax, input.total].every((value) => Number.isFinite(value) && value >= 0)) {
+    checks.push("Subtotal, tax and total must be valid non-negative amounts.");
+  } else if (Math.abs(input.total - (input.subtotal + input.tax)) > 0.01) {
+    checks.push("Total still does not reconcile against subtotal plus tax.");
+  }
+
+  if (!Number.isFinite(input.packetCompletion) || input.packetCompletion < 0 || input.packetCompletion > 100) {
+    checks.push("Packet completion must stay between 0 and 100.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs enough detail for AP follow-through.");
+  }
+
+  if (input.packetCompletion < 100) {
+    checks.push(`Fiscal packet is only ${input.packetCompletion}% complete at capture time.`);
+  }
+
+  if (!input.receiptCode.trim()) {
+    checks.push("Receipt code is still missing, so AP is entering with weaker receiving traceability.");
+  }
+
+  if (!input.purchaseOrderCode.trim()) {
+    checks.push("PO code is still missing, so procurement traceability is thinner than ideal.");
+  }
+
+  if (!input.supplierProfileReady) {
+    checks.push(
+      `Supplier fiscal profile is still not payment-ready${input.supplierProfileLabel ? ` (${input.supplierProfileLabel})` : ""}.`
+    );
+  }
+
+  if (checks.length > 0) {
+    const hardBlock =
+      !invoiceUuidPattern.test(input.invoiceUuid.trim().toUpperCase()) ||
+      !input.dueDate ||
+      ![input.subtotal, input.tax, input.total].every((value) => Number.isFinite(value) && value >= 0) ||
+      Math.abs(input.total - (input.subtotal + input.tax)) > 0.01;
+
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not capture yet" : "Capture with control",
+      summary: hardBlock
+        ? "This invoice would enter AP with a hard fiscal or accounting blocker."
+        : "The invoice can be captured, but fiscal packet or traceability still need tighter discipline.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to capture",
+    summary: "The invoice has enough fiscal and operational structure to enter AP cleanly.",
+    checks: [
+      "The created invoice will become the current focus item immediately.",
+      "Keep supplier, PO, receipt and treasury traceability attached from the first AP capture."
+    ]
+  };
+}
+
+function buildCreateInvoiceHumanStep(input: {
+  supplierProfileReady: boolean;
+  packetCompletion: number;
+  receiptCode: string;
+  purchaseOrderCode: string;
+  nextAction: string;
+}) {
+  if (!input.supplierProfileReady) {
+    return "Complete and control the supplier fiscal profile before expecting this invoice to move cleanly into scheduling.";
+  }
+
+  if (!input.receiptCode.trim()) {
+    return "Attach the receiving trace first so AP does not inherit an invoice disconnected from real inbound evidence.";
+  }
+
+  if (!input.purchaseOrderCode.trim()) {
+    return "Link the procurement reference before capture so commercial ownership stays explicit.";
+  }
+
+  if (input.packetCompletion < 100) {
+    return "Capture the invoice only if someone owns the missing fiscal packet work in the same operating cycle.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Clarify the AP follow-through before persisting the invoice.";
+  }
+
+  return "Capture the invoice and move immediately into fiscal review or treasury preparation without rebuilding the same context.";
+}
+
 export default function AccountsPayablePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<AccountsPayableOverviewContract | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | AccountsPayableInvoiceContract["status"]>("all");
@@ -70,11 +447,6 @@ export default function AccountsPayablePage() {
   const [createForm, setCreateForm] = useState(emptyCreateForm);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -117,7 +489,7 @@ export default function AccountsPayablePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredInvoices = useMemo(() => {
     if (!overview) {
@@ -201,6 +573,65 @@ export default function AccountsPayablePage() {
         : false,
     [selectedInvoiceSupplierProfile]
   );
+  const paymentReleaseGate = useMemo(
+    () =>
+      buildPaymentReleaseGate({
+        invoice: selectedInvoice,
+        supplierReady: selectedInvoiceSupplierReadyForPayment,
+        supplierProfileLabel: selectedInvoiceSupplierProfile
+          ? `${selectedInvoiceSupplierProfile.complianceStatus} / ${selectedInvoiceSupplierProfile.satStatus}`
+          : null,
+        paymentDateDraft
+      }),
+    [paymentDateDraft, selectedInvoice, selectedInvoiceSupplierProfile, selectedInvoiceSupplierReadyForPayment]
+  );
+  const selectedInvoiceWhyNow = useMemo(() => buildInvoiceWhyNow(selectedInvoice), [selectedInvoice]);
+  const selectedInvoiceDownstreamEffect = useMemo(() => buildInvoiceDownstreamEffect(selectedInvoice), [selectedInvoice]);
+  const selectedInvoiceReportBack = useMemo(() => buildInvoiceReportBack(selectedInvoice), [selectedInvoice]);
+  const selectedInvoiceHumanStep = useMemo(() => buildInvoiceHumanStep(selectedInvoice), [selectedInvoice]);
+  const selectedInvoiceRouteSummary = useMemo(() => buildInvoiceRouteSummary(selectedInvoice), [selectedInvoice]);
+  const selectedInvoiceOperationalLinks = useMemo(() => buildInvoiceOperationalLinks(selectedInvoice), [selectedInvoice]);
+  const createSelectedSupplierProfile = useMemo(
+    () => availableSupplierProfiles.find((item) => item.id === createForm.supplierProfileId) ?? null,
+    [availableSupplierProfiles, createForm.supplierProfileId]
+  );
+  const createInvoiceGate = useMemo(
+    () =>
+      buildCreateInvoiceGate({
+        supplierName: createForm.supplierName,
+        supplierProfileReady: createSelectedSupplierProfile
+          ? createSelectedSupplierProfile.complianceStatus === "complete" && createSelectedSupplierProfile.satStatus === "controlled"
+          : false,
+        supplierProfileLabel: createSelectedSupplierProfile
+          ? `${createSelectedSupplierProfile.complianceStatus} / ${createSelectedSupplierProfile.satStatus}`
+          : null,
+        invoiceNumber: createForm.invoiceNumber,
+        invoiceUuid: createForm.invoiceUuid,
+        projectName: createForm.projectName,
+        purchaseOrderCode: createForm.purchaseOrderCode,
+        receiptCode: createForm.receiptCode,
+        subtotal: Number(createForm.subtotal),
+        tax: Number(createForm.tax),
+        total: Number(createForm.total),
+        packetCompletion: Number(createForm.packetCompletion),
+        dueDate: createForm.dueDate,
+        nextAction: createForm.nextAction
+      }),
+    [createForm, createSelectedSupplierProfile]
+  );
+  const createInvoiceHumanStep = useMemo(
+    () =>
+      buildCreateInvoiceHumanStep({
+        supplierProfileReady: createSelectedSupplierProfile
+          ? createSelectedSupplierProfile.complianceStatus === "complete" && createSelectedSupplierProfile.satStatus === "controlled"
+          : false,
+        packetCompletion: Number(createForm.packetCompletion),
+        receiptCode: createForm.receiptCode,
+        purchaseOrderCode: createForm.purchaseOrderCode,
+        nextAction: createForm.nextAction
+      }),
+    [createForm.nextAction, createForm.packetCompletion, createForm.purchaseOrderCode, createForm.receiptCode, createSelectedSupplierProfile]
+  );
 
   useEffect(() => {
     if (!createForm.supplierProfileId) {
@@ -241,7 +672,7 @@ export default function AccountsPayablePage() {
     satStatus: AccountsPayableInvoiceContract["satStatus"],
     complementStatus: AccountsPayableInvoiceContract["complementStatus"]
   ) {
-    if (!selectedInvoice || !session.accessToken) {
+    if (!selectedInvoice) {
       return;
     }
 
@@ -302,7 +733,7 @@ export default function AccountsPayablePage() {
   }
 
   async function handleCreate() {
-    if (!session.accessToken || !overview) {
+    if (!overview) {
       return;
     }
 
@@ -436,6 +867,45 @@ export default function AccountsPayablePage() {
             </section>
 
             <section className="grid cols3">
+              <Card
+                title="Payment readiness walkthrough"
+                description="Create invoices, validate fiscal packet posture and move them toward treasury without backend dependency."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    The operator flow is already testable: capture invoice, connect supplier fiscal profile, schedule payment, then release treasury.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">supplier master</Badge>
+                    <Badge tone="info">accounts payable</Badge>
+                    <Badge tone="info">treasury next</Badge>
+                  </div>
+                  <div className="actionRow">
+                    <Link className="buttonSecondary" href="/supplier-master">
+                      Open supplier master
+                    </Link>
+                    <Link className="buttonGhost" href="/treasury/payment-runs">
+                      Open payment runs
+                    </Link>
+                  </div>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols1">
+              <Card
+                title="Payment release workflow"
+                description="This route should already connect supplier fiscal readiness, invoice capture and treasury release in one usable chain."
+              >
+                <p className="sectionText">
+                  Capture the invoice, verify the linked supplier profile, move it through matching and scheduling, and continue into
+                  `supplier-master` or `payment-runs` depending on whether the blocker is fiscal packet or treasury execution.
+                </p>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
               <Card title="Payables board" description="Facturas, CFDI and payment scheduling in one queue.">
                 <FilterBar summary={`${filteredInvoices.length} invoices in the active tenant`}>
                   <select
@@ -466,7 +936,7 @@ export default function AccountsPayablePage() {
                     onChange={(event) => setSearchFilter(event.target.value)}
                     placeholder="Search invoice, supplier, number or project"
                   />
-                  <Badge tone={session.authenticated ? "success" : "warning"}>{session.authenticated ? "live backend" : source}</Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "payables ready"}</Badge>
                 </FilterBar>
                 <DataTable
@@ -527,6 +997,12 @@ export default function AccountsPayablePage() {
                     <div className="detailRow"><div className="detailLabel">Evidence</div><div>{selectedInvoice.receiptEvidenceStatus}</div></div>
                     <div className="detailRow"><div className="detailLabel">Packet</div><div>{selectedInvoice.packetCompletion}%</div></div>
                     <div className="detailRow"><div className="detailLabel">Payment readiness</div><div>{selectedInvoiceSupplierReadyForPayment ? "Supplier profile ready for payment flow" : "Supplier profile still not payment-ready"}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Payment release gate</div><div className="tableCellStack"><Badge tone={paymentReleaseGate.tone}>{paymentReleaseGate.label}</Badge><span className="tableCellMuted">{paymentReleaseGate.summary}</span>{paymentReleaseGate.checks.map((check) => <span key={check} className="tableCellMuted">{check}</span>)}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Next human step</div><div>{selectedInvoiceHumanStep}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Why now</div><div>{selectedInvoiceWhyNow}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Downstream effect</div><div>{selectedInvoiceDownstreamEffect}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Route summary</div><div>{selectedInvoiceRouteSummary}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Report back</div><div>{selectedInvoiceReportBack}</div></div>
                     <label className="detailRow"><div className="detailLabel">Payment date</div><input className="field" type="date" value={paymentDateDraft} onChange={(event) => setPaymentDateDraft(event.target.value)} /></label>
                     <label className="stack">
                       <span className="detailLabel">Next action</span>
@@ -537,6 +1013,11 @@ export default function AccountsPayablePage() {
                       <button type="button" className="button" disabled={isSaving || !selectedInvoiceSupplierReadyForPayment} onClick={() => void handleUpdate("scheduled", "watch", "complete")}>Schedule Payment</button>
                       <button type="button" className="buttonGhost" disabled={isSaving} onClick={() => void handleUpdate("blocked", "critical", "risk")}>Block Invoice</button>
                       <button type="button" className="button" disabled={isSaving || !selectedInvoiceSupplierReadyForPayment} onClick={() => void handleUpdate("paid", "controlled", "complete")}>Mark Paid</button>
+                    </div>
+                    <div className="row gap wrap">
+                      {selectedInvoiceOperationalLinks.map((link) => (
+                        <Link key={`${link.href}-${link.label}`} className="buttonGhost" href={link.href}>{link.label}</Link>
+                      ))}
                     </div>
                     {!selectedInvoiceSupplierReadyForPayment ? <Badge tone="warning">Complete and control the supplier fiscal profile before scheduling or paying.</Badge> : null}
                     {message ? <Badge tone="success">{message}</Badge> : null}
@@ -573,6 +1054,39 @@ export default function AccountsPayablePage() {
 
             <section className="grid cols2">
               <Card title="Register invoice" description="Capture a payable invoice directly in the tenant backend.">
+                <div className="row gap wrap" style={{ marginBottom: 16 }}>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm((current) => ({
+                        ...createAccountsPayableExample(),
+                        supplierProfileId: current.supplierProfileId,
+                        supplierName:
+                          availableSupplierProfiles.find((item) => item.id === current.supplierProfileId)?.supplierName ||
+                          createAccountsPayableExample().supplierName
+                      }))
+                    }
+                  >
+                    Load demo example
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm((current) => ({
+                        ...emptyCreateForm,
+                        supplierProfileId: current.supplierProfileId || emptyCreateForm.supplierProfileId,
+                        supplierName:
+                          availableSupplierProfiles.find((item) => item.id === (current.supplierProfileId || emptyCreateForm.supplierProfileId))?.supplierName || ""
+                      }))
+                    }
+                  >
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/supplier-master">Open supplier master</Link>
+                  <Link className="buttonGhost" href="/treasury/payment-runs">Open payment runs</Link>
+                </div>
                 <div className="detailGrid">
                   <label className="detailRow"><div className="detailLabel">Supplier profile</div><select className="selectField" value={createForm.supplierProfileId} onChange={(event) => setCreateForm((current) => ({ ...current, supplierProfileId: event.target.value }))}><option value="">No linked profile</option>{availableSupplierProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.supplierName} · {profile.complianceStatus} · {profile.satStatus}</option>)}</select></label>
                   <label className="detailRow"><div className="detailLabel">Supplier</div><input className="field" value={createForm.supplierName} onChange={(event) => setCreateForm((current) => ({ ...current, supplierName: event.target.value }))} /></label>
@@ -586,6 +1100,24 @@ export default function AccountsPayablePage() {
                   <label className="detailRow"><div className="detailLabel">Total</div><input className="field" type="number" value={createForm.total} onChange={(event) => setCreateForm((current) => ({ ...current, total: event.target.value }))} /></label>
                   <label className="detailRow"><div className="detailLabel">Packet completion</div><input className="field" type="number" value={createForm.packetCompletion} onChange={(event) => setCreateForm((current) => ({ ...current, packetCompletion: event.target.value }))} /></label>
                   <label className="detailRow"><div className="detailLabel">Next action</div><input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} /></label>
+                </div>
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">Creation gate</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createInvoiceGate.tone}>{createInvoiceGate.label}</Badge>
+                        <span>{createInvoiceGate.summary}</span>
+                      </div>
+                      {createInvoiceGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">{check}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Next human step</div>
+                    <div>{createInvoiceHumanStep}</div>
+                  </div>
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" onClick={() => void handleCreate()}>Add Invoice</button>

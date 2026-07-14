@@ -122,6 +122,199 @@ function buildSupplierBridge(line: SupplierControlLineContract | null, bridge: S
   };
 }
 
+function buildSupplierContinuationGate(line: SupplierControlLineContract | null) {
+  if (!line) {
+    return {
+      tone: "info" as const,
+      label: "No supplier selected",
+      summary: "Choose a supplier to verify whether commercial continuity is really under control.",
+      checks: ["Select a supplier lane to review concentration, approvals and compliance posture."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (line.deliveryHealth === "critical") {
+    checks.push("Delivery health is already critical, so new volume should not be released normally.");
+  }
+
+  if (line.concentrationPercent >= 35) {
+    checks.push(`Concentration is ${line.concentrationPercent}%, so dependency is already too high.`);
+  }
+
+  if (line.bidCoverage < 2) {
+    checks.push(`Bid coverage is only ${line.bidCoverage.toFixed(1)}, so competition is still too thin.`);
+  }
+
+  if (line.approvalPressureHours >= 24) {
+    checks.push(`Approval pressure has aged to ${line.approvalPressureHours.toFixed(1)} hours.`);
+  }
+
+  if (line.complianceAlerts > 0) {
+    checks.push(`${line.complianceAlerts} compliance alert(s) still need closure.`);
+  }
+
+  if (checks.length > 0) {
+    return {
+      tone:
+        line.deliveryHealth === "critical" || line.concentrationPercent >= 35 || line.complianceAlerts > 0
+          ? "danger" as const
+          : "warning" as const,
+      label:
+        line.deliveryHealth === "critical" || line.concentrationPercent >= 35 || line.complianceAlerts > 0
+          ? "Do not expand volume"
+          : "Expand with control",
+      summary:
+        line.deliveryHealth === "critical" || line.concentrationPercent >= 35 || line.complianceAlerts > 0
+          ? "The supplier still has hard commercial blockers before more volume should be committed."
+          : "The supplier can continue operating, but the lane still needs active supervision before more commitments.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Commercial lane aligned",
+    summary: "Competition, approvals and compliance are currently stable enough for normal continuation.",
+    checks: [
+      "Confirm the next PO or receiving milestone is already owned.",
+      "Keep the next action aligned with procurement and receiving follow-through."
+    ]
+  };
+}
+
+function buildSupplierWhyNow(line: SupplierControlLineContract | null) {
+  if (!line) {
+    return "Select a supplier lane to understand which commercial pressure should be contained now.";
+  }
+
+  if (line.deliveryHealth === "critical") {
+    return `${line.supplierName} already carries critical delivery posture with ${line.concentrationPercent}% concentration and ${line.approvalPressureHours.toFixed(1)} approval hours under stress.`;
+  }
+
+  if (line.complianceAlerts > 0) {
+    return `${line.supplierName} still has ${line.complianceAlerts} compliance alert(s), so more volume would amplify avoidable operating risk.`;
+  }
+
+  if (line.bidCoverage < 2 || line.concentrationPercent >= 28) {
+    return `${line.supplierName} still needs tighter competition and concentration control before procurement treats this lane as comfortably stable.`;
+  }
+
+  return `${line.supplierName} is currently controlled, but the lane still needs explicit follow-through to keep competition, approvals and continuity aligned.`;
+}
+
+function buildSupplierDownstreamEffect(line: SupplierControlLineContract | null) {
+  if (!line) {
+    return "Select a supplier lane to inspect what downstream teams will inherit the pressure.";
+  }
+
+  if (line.deliveryHealth === "critical") {
+    return "If this supplier remains critical, requisitions, purchase orders, receiving and accounts payable will all inherit avoidable friction.";
+  }
+
+  if (line.complianceAlerts > 0) {
+    return "If compliance alerts remain open, receiving-critical volume and fiscal release timing will degrade next.";
+  }
+
+  if (line.bidCoverage < 2) {
+    return "If competition stays thin, procurement loses negotiating room and projects absorb concentration risk as soon as volume grows.";
+  }
+
+  return "If this lane stays controlled, procurement, receiving and payment release can continue without unnecessary supplier noise.";
+}
+
+function buildSupplierReportBack(line: SupplierControlLineContract | null) {
+  if (!line) {
+    return "Select a supplier lane to define the next procurement checkpoint.";
+  }
+
+  if (line.deliveryHealth === "critical") {
+    return "Report back in the next procurement cut once containment owner, alternative source and approval unblock are confirmed.";
+  }
+
+  if (line.complianceAlerts > 0) {
+    return "Report back as soon as the compliance alert is formally closed and the supplier lane can re-enter normal release.";
+  }
+
+  if (line.bidCoverage < 2 || line.concentrationPercent >= 28) {
+    return "Report back after the next sourcing or negotiation checkpoint with updated coverage and concentration posture.";
+  }
+
+  return "Report back in the next supplier review confirming the lane stayed controlled and ready for normal continuation.";
+}
+
+function buildSupplierHumanStep(line: SupplierControlLineContract | null) {
+  if (!line) {
+    return "Select a supplier lane to identify the next human move.";
+  }
+
+  if (line.deliveryHealth === "critical") {
+    return "Contain the supplier blocker first, confirm the alternative source and keep procurement leadership on the same cycle.";
+  }
+
+  if (line.complianceAlerts > 0) {
+    return "Close the compliance alert now before more volume or approvals continue through this lane.";
+  }
+
+  if (line.bidCoverage < 2 || line.concentrationPercent >= 28) {
+    return "Open the next sourcing or negotiation step now so competition and concentration improve before the lane hardens.";
+  }
+
+  return "Keep the next package, approval and receiving milestone aligned while the supplier lane is still controlled.";
+}
+
+function buildSupplierRouteSummary(line: SupplierControlLineContract | null) {
+  if (!line) {
+    return "Use supplier control as the commercial bridge between supplier master, purchasing, receiving and payables.";
+  }
+
+  if (line.deliveryHealth === "critical") {
+    return "This lane should route first through procurement containment and supplier escalation before more packages continue downstream.";
+  }
+
+  if (line.complianceAlerts > 0) {
+    return "This lane should route through supplier master and compliance cleanup before receiving or payables trust it.";
+  }
+
+  if (line.bidCoverage < 2 || line.concentrationPercent >= 28) {
+    return "This lane should route through sourcing and package competition before volume concentration widens further.";
+  }
+
+  return "This lane can continue through purchase orders, receiving and payables without rebuilding the same supplier context.";
+}
+
+function buildSupplierOperationalLinks(line: SupplierControlLineContract | null) {
+  if (!line) {
+    return [
+      { label: "Open purchase orders", href: "/procurement/purchase-orders" },
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open receiving", href: "/inventory/receiving" }
+    ];
+  }
+
+  if (line.deliveryHealth === "critical") {
+    return [
+      { label: "Open purchase orders", href: "/procurement/purchase-orders" },
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open accounts payable", href: "/accounts-payable" }
+    ];
+  }
+
+  if (line.complianceAlerts > 0) {
+    return [
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open receiving", href: "/inventory/receiving" }
+    ];
+  }
+
+  return [
+    { label: "Open purchase orders", href: "/procurement/purchase-orders" },
+    { label: "Open receiving", href: "/inventory/receiving" },
+    { label: "Open accounts payable", href: "/accounts-payable" }
+  ];
+}
+
 function validateSupplierCreateForm(input: {
   awardedPackages: number;
   activePackages: number;
@@ -165,8 +358,153 @@ function validateSupplierCreateForm(input: {
 
   return null;
 }
+
+function createSupplierControlExample() {
+  return {
+    supplierName: "Concretos del Sureste",
+    owner: "Procurement lead",
+    awardedPackages: "3",
+    activePackages: "2",
+    contractedAmount: "2850000",
+    concentrationPercent: "31",
+    bidCoverage: "2.1",
+    deliveryHealth: "watch" as SupplierControlLineContract["deliveryHealth"],
+    approvalPressureHours: "12",
+    complianceAlerts: "1",
+    nextAction: "Asegurar proveedor alterno y cerrar expediente comercial antes de liberar mas volumen."
+  };
+}
+
+function buildCreateSupplierGate(input: {
+  supplierName: string;
+  owner: string;
+  awardedPackages: number;
+  activePackages: number;
+  contractedAmount: number;
+  concentrationPercent: number;
+  bidCoverage: number;
+  deliveryHealth: SupplierControlLineContract["deliveryHealth"];
+  approvalPressureHours: number;
+  complianceAlerts: number;
+  nextAction: string;
+}) {
+  const checks: string[] = [];
+
+  if ([input.supplierName, input.owner].some((value) => value.trim().length < 3)) {
+    checks.push("Supplier name and owner still need more specific capture.");
+  }
+
+  if (!Number.isFinite(input.awardedPackages) || input.awardedPackages < 0) {
+    checks.push("Awarded packages must be zero or greater.");
+  }
+
+  if (!Number.isFinite(input.activePackages) || input.activePackages < 0) {
+    checks.push("Active packages must be zero or greater.");
+  }
+
+  if (input.awardedPackages < input.activePackages) {
+    checks.push("Awarded packages cannot be lower than active packages.");
+  }
+
+  if (!Number.isFinite(input.contractedAmount) || input.contractedAmount <= 0) {
+    checks.push("Contracted amount must be greater than zero.");
+  }
+
+  if (!Number.isFinite(input.concentrationPercent) || input.concentrationPercent < 0 || input.concentrationPercent > 100) {
+    checks.push("Concentration must stay between 0% and 100%.");
+  }
+
+  if (!Number.isFinite(input.bidCoverage) || input.bidCoverage < 0 || input.bidCoverage > 10) {
+    checks.push("Bid coverage must stay between 0 and 10.");
+  }
+
+  if (input.bidCoverage < 2) {
+    checks.push("Bid coverage is still too thin for a clean supplier lane.");
+  }
+
+  if (!Number.isFinite(input.approvalPressureHours) || input.approvalPressureHours < 0) {
+    checks.push("Approval pressure must be zero or greater.");
+  }
+
+  if (input.approvalPressureHours >= 24) {
+    checks.push("Approval pressure is already too old for a clean new supplier lane.");
+  }
+
+  if (!Number.isFinite(input.complianceAlerts) || input.complianceAlerts < 0) {
+    checks.push("Compliance alerts must be zero or greater.");
+  }
+
+  if (input.complianceAlerts > 0) {
+    checks.push("Compliance alerts still need closure before this lane should be treated as fully clean.");
+  }
+
+  if (input.deliveryHealth === "critical") {
+    checks.push("Critical health at creation means the supplier should only open with explicit containment.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs enough detail for procurement follow-through.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock =
+      !Number.isFinite(input.contractedAmount) ||
+      input.contractedAmount <= 0 ||
+      input.awardedPackages < input.activePackages ||
+      input.concentrationPercent > 100 ||
+      input.bidCoverage < 1 ||
+      input.complianceAlerts > 0 ||
+      input.deliveryHealth === "critical";
+
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not create yet" : "Create with control",
+      summary: hardBlock
+        ? "This supplier lane would open with a hard commercial blocker."
+        : "The supplier can be created, but procurement discipline still needs tightening.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to create",
+    summary: "The supplier lane has enough structure to enter procurement execution cleanly.",
+    checks: [
+      "The created supplier will become the current focus lane immediately.",
+      "Keep competition, approvals and next action attached from the first capture."
+    ]
+  };
+}
+
+function buildCreateSupplierHumanStep(input: {
+  bidCoverage: number;
+  complianceAlerts: number;
+  approvalPressureHours: number;
+  nextAction: string;
+}) {
+  if (input.complianceAlerts > 0) {
+    return "Close the commercial or fiscal alert first so the supplier does not open already compromised.";
+  }
+
+  if (input.bidCoverage < 2) {
+    return "Strengthen competitive coverage before creating the supplier lane.";
+  }
+
+  if (input.approvalPressureHours >= 24) {
+    return "Clear approval aging before opening the supplier so the first PO does not start under pressure.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Clarify the immediate procurement action before persisting the supplier lane.";
+  }
+
+  return "Create the supplier lane and continue directly into requisition, purchase-order or receiving follow-through.";
+}
+
 export default function SupplierControlPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<SupplierControlOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<SupplierBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -192,13 +530,20 @@ export default function SupplierControlPage() {
     complianceAlerts: "0",
     nextAction: ""
   });
+  const createFormNumbers = useMemo(
+    () => ({
+      awardedPackages: Number(createForm.awardedPackages),
+      activePackages: Number(createForm.activePackages),
+      contractedAmount: Number(createForm.contractedAmount),
+      concentrationPercent: Number(createForm.concentrationPercent),
+      bidCoverage: Number(createForm.bidCoverage),
+      approvalPressureHours: Number(createForm.approvalPressureHours),
+      complianceAlerts: Number(createForm.complianceAlerts)
+    }),
+    [createForm.activePackages, createForm.approvalPressureHours, createForm.awardedPackages, createForm.bidCoverage, createForm.complianceAlerts, createForm.concentrationPercent, createForm.contractedAmount]
+  );
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -240,7 +585,7 @@ export default function SupplierControlPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredLines = useMemo(() => {
     if (!overview) {
@@ -273,6 +618,40 @@ export default function SupplierControlPage() {
   );
 
   const selectedStory = useMemo(() => buildSupplierBridge(selectedLine, bridgeContext), [bridgeContext, selectedLine]);
+  const continuationGate = useMemo(() => buildSupplierContinuationGate(selectedLine), [selectedLine]);
+  const selectedHumanStep = useMemo(() => buildSupplierHumanStep(selectedLine), [selectedLine]);
+  const selectedWhyNow = useMemo(() => buildSupplierWhyNow(selectedLine), [selectedLine]);
+  const selectedDownstreamEffect = useMemo(() => buildSupplierDownstreamEffect(selectedLine), [selectedLine]);
+  const selectedReportBack = useMemo(() => buildSupplierReportBack(selectedLine), [selectedLine]);
+  const selectedRouteSummary = useMemo(() => buildSupplierRouteSummary(selectedLine), [selectedLine]);
+  const selectedOperationalLinks = useMemo(() => buildSupplierOperationalLinks(selectedLine), [selectedLine]);
+  const createSupplierGate = useMemo(
+    () =>
+      buildCreateSupplierGate({
+        supplierName: createForm.supplierName,
+        owner: createForm.owner,
+        awardedPackages: createFormNumbers.awardedPackages,
+        activePackages: createFormNumbers.activePackages,
+        contractedAmount: createFormNumbers.contractedAmount,
+        concentrationPercent: createFormNumbers.concentrationPercent,
+        bidCoverage: createFormNumbers.bidCoverage,
+        deliveryHealth: createForm.deliveryHealth,
+        approvalPressureHours: createFormNumbers.approvalPressureHours,
+        complianceAlerts: createFormNumbers.complianceAlerts,
+        nextAction: createForm.nextAction
+      }),
+    [createForm, createFormNumbers]
+  );
+  const createSupplierHumanStep = useMemo(
+    () =>
+      buildCreateSupplierHumanStep({
+        bidCoverage: createFormNumbers.bidCoverage,
+        complianceAlerts: createFormNumbers.complianceAlerts,
+        approvalPressureHours: createFormNumbers.approvalPressureHours,
+        nextAction: createForm.nextAction
+      }),
+    [createForm.nextAction, createFormNumbers]
+  );
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
 
@@ -302,7 +681,7 @@ export default function SupplierControlPage() {
     deliveryHealth: SupplierControlLineContract["deliveryHealth"],
     suggestedNextAction: string
   ) {
-    if (!selectedLine || !session.accessToken) {
+    if (!selectedLine) {
       return;
     }
 
@@ -356,7 +735,7 @@ export default function SupplierControlPage() {
   }
 
   async function handleCreateSupplier() {
-    if (!overview || !session.accessToken) {
+    if (!overview) {
       return;
     }
 
@@ -489,6 +868,37 @@ export default function SupplierControlPage() {
               />
             </section>
 
+            {isDemoMode ? (
+              <Card
+                title="Operable demo mode"
+                description="Supplier concentration and delivery posture can be tested locally before procurement auth and live data are fully enabled."
+                aside={<Badge tone="warning">browser-persisted</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">What works</div>
+                    <div>Create supplier lanes, move them between controlled, watch and critical, and inspect their effect on purchasing and receiving.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Recommended test</div>
+                    <div>Register a concentrated supplier, escalate it to critical, then contain it to validate the board before live procurement is connected.</div>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
+            <section className="grid cols1">
+              <Card
+                title="Supplier continuity workflow"
+                description="This route should already let the operator move from supplier concentration to fiscal readiness and then to payment release."
+              >
+                <p className="sectionText">
+                  Work the supplier lane, inspect purchase-order and receiving exposure, then continue into `supplier-master`,
+                  `accounts-payable` or `purchase-orders` depending on whether the blocker is commercial, documentary or payment-related.
+                </p>
+              </Card>
+            </section>
+
             <section className="grid cols3">
               <Card title="Execution impact" description="How this supplier is already shaping real delivery posture.">
                 <p className="sectionText">
@@ -529,8 +939,8 @@ export default function SupplierControlPage() {
                       placeholder="Supplier, owner or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? "demo operable" : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "supplier control ready"}</Badge>
                   <Badge tone={filteredSummary.criticalSuppliers > 0 ? "danger" : filteredSummary.concentratedSuppliers > 0 ? "warning" : "success"}>
@@ -613,6 +1023,38 @@ export default function SupplierControlPage() {
                       <div className="detailLabel">Compliance alerts</div>
                       <div>{selectedLine.complianceAlerts}</div>
                     </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Continuation gate</div>
+                      <div className="tableCellStack">
+                        <Badge tone={continuationGate.tone}>{continuationGate.label}</Badge>
+                        <span className="tableCellMuted">{continuationGate.summary}</span>
+                        {continuationGate.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">
+                            {check}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
                     <label className="stack" htmlFor="supplier-control-next-action">
                       <span className="detailLabel">Next action</span>
@@ -640,12 +1082,11 @@ export default function SupplierControlPage() {
                       ))}
                     </div>
                     <div className="row gap wrap">
-                      <Link className="button secondary" href="/procurement/purchase-orders">
-                        Open purchase orders
-                      </Link>
-                      <Link className="buttonGhost" href="/inventory/receiving">
-                        Open receiving
-                      </Link>
+                      {selectedOperationalLinks.map((link, index) => (
+                        <Link key={`${link.href}-${link.label}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                          {link.label}
+                        </Link>
+                      ))}
                     </div>
 
                     {actionError ? <EmptyState title="Update blocked" description={actionError} /> : null}
@@ -663,8 +1104,40 @@ export default function SupplierControlPage() {
             <section className="grid cols2">
               <Card
                 title="Register supplier lane"
-                description="Create a new supplier-control record directly in the tenant backend."
+                description={
+                  isDemoMode
+                    ? "Create a supplier-control record in local demo persistence so the board can be tested end to end."
+                    : "Create a new supplier-control record directly in the tenant backend."
+                }
               >
+                <div className="row gap wrap" style={{ marginBottom: 16 }}>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createSupplierControlExample())}>
+                    Load demo example
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm({
+                        supplierName: "",
+                        owner: "Procurement lead",
+                        awardedPackages: "1",
+                        activePackages: "1",
+                        contractedAmount: "1250000",
+                        concentrationPercent: "18",
+                        bidCoverage: "2.5",
+                        deliveryHealth: "controlled",
+                        approvalPressureHours: "8",
+                        complianceAlerts: "0",
+                        nextAction: ""
+                      })
+                    }
+                  >
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/supplier-master">Open supplier master</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Open accounts payable</Link>
+                </div>
                 <div className="detailGrid">
                   <label className="detailRow">
                     <div className="detailLabel">Supplier</div>
@@ -796,10 +1269,44 @@ export default function SupplierControlPage() {
                   </label>
                 </div>
 
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">Creation gate</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createSupplierGate.tone}>{createSupplierGate.label}</Badge>
+                        <span>{createSupplierGate.summary}</span>
+                      </div>
+                      {createSupplierGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">
+                          {check}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Next human step</div>
+                    <div>{createSupplierHumanStep}</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Immediate downstream</div>
+                    <div>
+                      {createForm.deliveryHealth === "critical"
+                        ? "Do not release live requisitions or purchase orders until the supplier lane is contained."
+                        : createFormNumbers.complianceAlerts > 0
+                          ? "Keep the supplier out of receiving-critical volume until compliance is cleared."
+                          : "The supplier can continue into requisitions, purchase orders and receiving with normal supervision."}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" onClick={() => void handleCreateSupplier()}>
                     Add supplier lane
                   </button>
+                  <Link className="buttonGhost" href="/procurement/requisitions">Open requisitions</Link>
+                  <Link className="buttonGhost" href="/procurement/purchase-orders">Open purchase orders</Link>
+                  <Link className="buttonGhost" href="/inventory/receiving">Open receiving</Link>
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
                 </div>
               </Card>
@@ -820,6 +1327,10 @@ export default function SupplierControlPage() {
                   <div className="detailRow">
                     <div className="detailLabel">Backend path</div>
                     <div>This intake already uses `POST /supplier-control/lines` and remains consistent with future procurement integrations.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Operational handoff</div>
+                    <div>The first useful action after creation should be obvious enough to continue straight into requisitions, purchase orders or receiving.</div>
                   </div>
                 </div>
               </Card>

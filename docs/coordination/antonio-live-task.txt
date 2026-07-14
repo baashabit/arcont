@@ -1,37 +1,37 @@
 Antonio activo en PC2
 
 Objetivo:
-Seguir con el siguiente vertical util `integrations + copilot` sin tocar backend, auth ni docs/coordination/handoff.md.
+Trabajar `post-sale/selected-case-routing` sobre `post-sale` para que el caso seleccionado ya explique por que importa, cual es su impacto y que modulo debe tomar el siguiente paso operativo.
 
 Primero ejecutar:
 export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 24
 
-Baseline:
-- `subcontracts + compliance` ya quedaron cerrados y sincronizados.
-- procurement, quality, document-control, crm y finance ya estan conectados al contexto del sistema.
-- ahora hay que empujar conectividad, telemetria y la capa visible del copiloto de IA.
+Archivo permitido:
+- `frontend/arcont-suite/app/post-sale/page.tsx`
 
 Entregable exacto:
 1. Revisar:
-- `frontend/arcont-suite/app/integrations/page.tsx`
-- `frontend/arcont-suite/app/copilot/page.tsx`
+- `frontend/arcont-suite/app/post-sale/page.tsx`
 
-2. En `integrations/page.tsx`:
-- agregar links visibles hacia `field`, `document-control`, `quality`, `projects` y/o `copilot` desde el stream seleccionado
-- endurecer guardas visibles para `healthy/watch/critical` si hay huecos obvios
-- mantener mensajes claros
+- reforzar la tarjeta `Selected signal`
+- aterrizar mejor el siguiente paso humano o modulo relacionado
+- mantener la experiencia existente
+- no rehacer toda la pagina
 
-3. En `copilot/page.tsx`:
-- agregar navegacion visible hacia los dominios que alimentan el contexto (`crm`, `procurement`, `quality`, `document-control`, `integrations`)
-- hacer mas accionable la salida para que no solo sea narrativa sino tambien operativa
-- no tocar backend/api
+Prioridad puntual en este ciclo:
+- que entrega/postventa entiendan que pasa despues del caso
+- que la pantalla conecte mejor con compliance, quality, document-control o projects
+- subir utilidad real de prueba
 
-4. Ejecutar `npm run build:web`.
-5. Dejar todo en `main`.
-6. Reportar archivos tocados.
+3. Ejecutar:
+- `npm run build:web`
+
+4. Trabajar siempre en `main`.
+5. Reportar archivos tocados.
 
 No hacer:
+- no tocar `frontend/arcont-suite/app/close-control/page.tsx`
 - no tocar backend/api
 - no tocar auth/login
-- no tocar docs/coordination/handoff.md
-- no rehacer pantallas enteras
+- no tocar docs/coordination/luis-live-task.txt
+- no rehacer pantallas enteras sin necesidad

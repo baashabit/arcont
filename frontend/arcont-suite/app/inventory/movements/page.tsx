@@ -152,6 +152,23 @@ type MovementBridgeContext = {
   receiving: NonNullable<Awaited<ReturnType<typeof fetchInventoryReceivingOverview>>>;
 } | null;
 
+function createMovementExample(upstreamReceiptCode?: string, purchaseReference?: string) {
+  return {
+    movementType: "transfer" as InventoryMovementContract["movementType"],
+    skuName: "Acero corrugado 3/8",
+    sourceName: "Almacen central",
+    destinationName: "Frente cimentacion",
+    requestedBy: "Residente de obra",
+    upstreamReceiptCode: upstreamReceiptCode || "",
+    purchaseReference: purchaseReference || "",
+    requestedUnits: "120",
+    movedUnits: "0",
+    pendingEvidence: "2",
+    impactLevel: "watch" as InventoryMovementContract["impactLevel"],
+    nextAction: "Despachar material, confirmar salida y validar entrega con evidencia de recepcion en frente"
+  };
+}
+
 function buildMovementStory(movement: InventoryMovementContract | null, bridge: MovementBridgeContext) {
   if (!movement) {
     return null;
@@ -175,8 +192,316 @@ function buildMovementStory(movement: InventoryMovementContract | null, bridge: 
   };
 }
 
+function buildMovementWorkflow(
+  movement: InventoryMovementContract | null,
+  hasUpstreamReceipt: boolean
+) {
+  if (!movement) {
+    return null;
+  }
+
+  return {
+    continuity:
+      movement.status === "blocked"
+        ? `${movement.code} is blocked and should be cleared before the destination front loses material continuity.`
+        : movement.status === "received"
+          ? `${movement.code} is already received, so the next focus should move to field consumption, return control or closeout traceability.`
+          : `${movement.code} is still in active handoff and should keep moving cleanly from stock to destination.`,
+    traceability: hasUpstreamReceipt
+      ? `${movement.code} is still tied to an upstream receipt, so inbound-to-field traceability remains intact.`
+      : `${movement.code} has no upstream receipt anchor, so the operator should confirm the handoff story is still defensible.`,
+    nextMove:
+      movement.impactLevel === "critical"
+        ? "Protect the destination front first, then close evidence and quantity gaps before treating this movement as resolved."
+        : movement.pendingEvidence > 0
+          ? "Complete evidence and receiving confirmation before closing the route."
+          : "Close the movement or continue directly into field execution with clean traceability."
+  };
+}
+
+function buildMovementWhyNow(
+  movement: InventoryMovementContract | null,
+  hasUpstreamReceipt: boolean
+) {
+  if (!movement) {
+    return "Choose a movement to understand why operations should care about it right now.";
+  }
+
+  if (movement.status === "blocked") {
+    return `${movement.code} is blocked, so this is the last point to prevent stock ambiguity from turning into field delay or warehouse rework.`;
+  }
+
+  if (movement.impactLevel === "critical") {
+    return `${movement.code} already has critical execution impact, so every unresolved handoff issue now directly affects ${movement.destinationName}.`;
+  }
+
+  if (movement.pendingEvidence > 0 || movement.varianceUnits !== 0) {
+    return `${movement.code} still has evidence or quantity gaps, so closing it badly now would create fake certainty in stock-to-field traceability.`;
+  }
+
+  if (!hasUpstreamReceipt) {
+    return `${movement.code} no longer has a strong upstream anchor, so this is where the operator must defend the movement story before it goes cold.`;
+  }
+
+  return `${movement.code} is the active release point between warehouse and destination, so the team should stabilize it before it disappears into field consumption.`;
+}
+
+function buildMovementDownstreamEffect(movement: InventoryMovementContract | null) {
+  if (!movement) {
+    return "Select a movement to inspect which downstream domains depend on it.";
+  }
+
+  if (movement.status === "received" && movement.pendingEvidence === 0 && movement.varianceUnits === 0) {
+    return "What happens here now affects field execution, equipment support and closeout traceability because the movement is already clean enough to release downstream.";
+  }
+
+  if (movement.invoiceMatchStatus === "risk" || movement.purchaseOrderStatus === "blocked") {
+    return "A weak movement closeout here feeds commercial and fiscal noise back into procurement, AP and field teams at the same time.";
+  }
+
+  if (movement.pendingEvidence > 0 || movement.varianceUnits !== 0) {
+    return "If this handoff stays dirty, field and warehouse will keep operating around material that was never cleanly transferred.";
+  }
+
+  return "This movement still controls whether destination teams receive material with real traceability or with operational ambiguity.";
+}
+
+function buildMovementReportBack(movement: InventoryMovementContract | null) {
+  if (!movement) {
+    return "Choose a movement to define when the owner should report back.";
+  }
+
+  if (movement.status === "blocked") {
+    return "Report back only with blocker owner, containment action and the date to resume dispatch or receipt.";
+  }
+
+  if (movement.pendingEvidence > 0) {
+    return "Report back in the same operating cycle once destination evidence is complete and attached to the handoff.";
+  }
+
+  if (movement.varianceUnits !== 0) {
+    return "Report back when variance is reconciled and both origin and destination agree on the moved quantity.";
+  }
+
+  if (movement.status === "in_transit") {
+    return "Report back when the destination confirms receipt or when the route slips enough to affect execution planning.";
+  }
+
+  return "Report back when the movement is fully received and no traceability gap remains open.";
+}
+
+function buildMovementHumanStep(movement: InventoryMovementContract | null) {
+  if (!movement) {
+    return "Select a movement to see the next human move.";
+  }
+
+  if (movement.status === "blocked") {
+    return "Escalate the blocker now and do not let the destination team plan around material that is not actually moving.";
+  }
+
+  if (movement.status === "draft") {
+    return "Release the movement only after confirming who hands off at origin and who receives at destination.";
+  }
+
+  if (movement.pendingEvidence > 0) {
+    return "Assign the missing evidence immediately before anyone treats this movement as operationally closed.";
+  }
+
+  if (movement.varianceUnits !== 0) {
+    return "Resolve the quantity discrepancy before the movement is accepted into stock, front or equipment usage.";
+  }
+
+  if (movement.invoiceMatchStatus === "risk") {
+    return "Coordinate with procurement or AP now so a clean physical handoff does not hide a fiscal mismatch.";
+  }
+
+  return "Finish clean handoff and continue directly into field or equipment execution without rebuilding context.";
+}
+
+function buildMovementRouteSummary(
+  movement: InventoryMovementContract | null,
+  hasUpstreamReceipt: boolean
+) {
+  if (!movement) {
+    return "Use movements as the controlled bridge between receiving, warehouse traceability, field release and equipment support.";
+  }
+
+  if (movement.status === "blocked") {
+    return "This movement should route first through containment and handoff recovery before field or equipment keep depending on it.";
+  }
+
+  if (movement.invoiceMatchStatus === "risk" || movement.purchaseOrderStatus === "blocked") {
+    return "This movement should route through receiving and procurement cleanup before the destination assumes clean continuity.";
+  }
+
+  if (movement.pendingEvidence > 0 || movement.varianceUnits !== 0) {
+    return "This movement should route through evidence and quantity reconciliation before it is treated as a real downstream release.";
+  }
+
+  if (!hasUpstreamReceipt) {
+    return "This movement should route through destination confirmation and operator ownership because the upstream anchor is already weak.";
+  }
+
+  return "This movement can continue through field execution or equipment support with the current traceability context intact.";
+}
+
+function buildMovementOperationalLinks(
+  movement: InventoryMovementContract | null,
+  hasUpstreamReceipt: boolean
+) {
+  if (!movement) {
+    return [
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open field", href: "/field" },
+      { label: "Open equipment", href: "/equipment" }
+    ];
+  }
+
+  if (movement.status === "blocked") {
+    return [
+      { label: "Open field", href: "/field" },
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open equipment", href: "/equipment" }
+    ];
+  }
+
+  if (movement.invoiceMatchStatus === "risk" || movement.purchaseOrderStatus === "blocked") {
+    return [
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open supplier control", href: "/supplier-control" },
+      { label: "Open accounts payable", href: "/accounts-payable" }
+    ];
+  }
+
+  if (movement.pendingEvidence > 0 || movement.varianceUnits !== 0) {
+    return [
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open field", href: "/field" },
+      { label: "Open equipment", href: "/equipment" }
+    ];
+  }
+
+  if (!hasUpstreamReceipt) {
+    return [
+      { label: "Open field", href: "/field" },
+      { label: "Open equipment", href: "/equipment" },
+      { label: "Open receiving", href: "/inventory/receiving" }
+    ];
+  }
+
+  return [
+    { label: "Open field", href: "/field" },
+    { label: "Open equipment", href: "/equipment" },
+    { label: "Open receiving", href: "/inventory/receiving" }
+  ];
+}
+
+function buildCreateMovementGate(input: {
+  movementType: InventoryMovementContract["movementType"];
+  skuName: string;
+  sourceName: string;
+  destinationName: string;
+  requestedBy: string;
+  upstreamReceiptCode: string;
+  purchaseReference: string;
+  requestedUnits: number;
+  movedUnits: number;
+  pendingEvidence: number;
+  impactLevel: InventoryMovementContract["impactLevel"];
+  nextAction: string;
+  linkedReceiptPurchaseReference?: string | null;
+}) {
+  const checks: string[] = [];
+
+  if ([input.skuName, input.sourceName, input.destinationName, input.requestedBy].some((value) => value.trim().length < 3)) {
+    checks.push("SKU, source, destination and requester still need more specific capture.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs enough detail for warehouse or field follow-through.");
+  }
+
+  if (!Number.isFinite(input.requestedUnits) || input.requestedUnits <= 0) {
+    checks.push("Requested units must be greater than zero.");
+  }
+
+  if (!Number.isFinite(input.movedUnits) || input.movedUnits < 0) {
+    checks.push("Moved units must be zero or greater.");
+  }
+
+  if (input.movedUnits > input.requestedUnits) {
+    checks.push("Moved units cannot exceed requested units.");
+  }
+
+  if (!Number.isFinite(input.pendingEvidence) || input.pendingEvidence < 0) {
+    checks.push("Pending evidence must be zero or greater.");
+  }
+
+  if (input.upstreamReceiptCode && !input.purchaseReference) {
+    checks.push("Purchase reference is required when linking an upstream receipt.");
+  }
+
+  if (
+    input.upstreamReceiptCode &&
+    input.linkedReceiptPurchaseReference &&
+    input.purchaseReference &&
+    input.purchaseReference !== input.linkedReceiptPurchaseReference
+  ) {
+    checks.push("Purchase reference must stay aligned with the selected upstream receipt.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock =
+      !Number.isFinite(input.requestedUnits) ||
+      input.requestedUnits <= 0 ||
+      input.movedUnits > input.requestedUnits ||
+      Boolean(input.upstreamReceiptCode && input.linkedReceiptPurchaseReference && input.purchaseReference !== input.linkedReceiptPurchaseReference);
+
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not create yet" : "Create with control",
+      summary: hardBlock
+        ? "This movement would enter the warehouse lane with a hard traceability blocker."
+        : "The movement can be created, but evidence or handoff discipline still needs tightening.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to create",
+    summary: "The stock movement has enough structure to persist cleanly.",
+    checks: [
+      "The created movement will become the current focus item immediately.",
+      "Keep source, destination and upstream traceability attached from the first capture."
+    ]
+  };
+}
+
+function buildCreateMovementHumanStep(input: {
+  upstreamReceiptCode: string;
+  purchaseReference: string;
+  nextAction: string;
+  pendingEvidence: number;
+}) {
+  if (input.upstreamReceiptCode && !input.purchaseReference) {
+    return "Restore the purchase reference before creating the movement so the upstream receipt remains defensible.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Clarify the handoff step before persisting the movement.";
+  }
+
+  if (input.pendingEvidence > 0) {
+    return "Create the movement and immediately assign who closes the pending evidence at destination.";
+  }
+
+  return "Create the movement and continue directly into field or equipment follow-through without losing warehouse context.";
+}
+
 function InventoryMovementsPageContent() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const searchParams = useSearchParams();
   const [overview, setOverview] = useState<InventoryMovementsOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<MovementBridgeContext>(null);
@@ -202,15 +527,15 @@ function InventoryMovementsPageContent() {
     impactLevel: "watch" as InventoryMovementContract["impactLevel"],
     nextAction: ""
   });
+  const createFormNumbers = useMemo(() => ({
+    requestedUnits: Number(createForm.requestedUnits),
+    movedUnits: Number(createForm.movedUnits),
+    pendingEvidence: Number(createForm.pendingEvidence)
+  }), [createForm.movedUnits, createForm.pendingEvidence, createForm.requestedUnits]);
   const purchaseReferenceParam = searchParams.get("purchaseReference")?.trim() ?? "";
   const upstreamReceiptCodeParam = searchParams.get("upstreamReceiptCode")?.trim() ?? "";
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -252,12 +577,37 @@ function InventoryMovementsPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const eligibleReceipts = useMemo(
     () => bridgeContext?.receiving.receipts.filter((item) => item.status === "received") ?? [],
     [bridgeContext]
   );
+  const createMovementLinkedReceipt = useMemo(
+    () => eligibleReceipts.find((item) => item.code === createForm.upstreamReceiptCode) ?? null,
+    [createForm.upstreamReceiptCode, eligibleReceipts]
+  );
+  const createMovementGate = useMemo(() => buildCreateMovementGate({
+    movementType: createForm.movementType,
+    skuName: createForm.skuName,
+    sourceName: createForm.sourceName,
+    destinationName: createForm.destinationName,
+    requestedBy: createForm.requestedBy,
+    upstreamReceiptCode: createForm.upstreamReceiptCode,
+    purchaseReference: createForm.purchaseReference,
+    requestedUnits: createFormNumbers.requestedUnits,
+    movedUnits: createFormNumbers.movedUnits,
+    pendingEvidence: createFormNumbers.pendingEvidence,
+    impactLevel: createForm.impactLevel,
+    nextAction: createForm.nextAction,
+    linkedReceiptPurchaseReference: createMovementLinkedReceipt?.purchaseReference ?? null
+  }), [createForm, createFormNumbers, createMovementLinkedReceipt]);
+  const createMovementHumanStep = useMemo(() => buildCreateMovementHumanStep({
+    upstreamReceiptCode: createForm.upstreamReceiptCode,
+    purchaseReference: createForm.purchaseReference,
+    nextAction: createForm.nextAction,
+    pendingEvidence: createFormNumbers.pendingEvidence
+  }), [createForm.nextAction, createForm.purchaseReference, createForm.upstreamReceiptCode, createFormNumbers.pendingEvidence]);
   const filteredMovements = useMemo(() => {
     if (!overview) {
       return [];
@@ -287,6 +637,25 @@ function InventoryMovementsPageContent() {
   const movementActions = useMemo(() => (selectedMovement ? actionOptions(selectedMovement) : []), [selectedMovement]);
 
   const selectedStory = useMemo(() => buildMovementStory(selectedMovement, bridgeContext), [bridgeContext, selectedMovement]);
+  const movementWorkflow = useMemo(
+    () => buildMovementWorkflow(selectedMovement, Boolean(selectedMovement?.upstreamReceiptCode)),
+    [selectedMovement]
+  );
+  const movementWhyNow = useMemo(
+    () => buildMovementWhyNow(selectedMovement, Boolean(selectedMovement?.upstreamReceiptCode)),
+    [selectedMovement]
+  );
+  const movementDownstreamEffect = useMemo(() => buildMovementDownstreamEffect(selectedMovement), [selectedMovement]);
+  const movementReportBack = useMemo(() => buildMovementReportBack(selectedMovement), [selectedMovement]);
+  const movementHumanStep = useMemo(() => buildMovementHumanStep(selectedMovement), [selectedMovement]);
+  const movementRouteSummary = useMemo(
+    () => buildMovementRouteSummary(selectedMovement, Boolean(selectedMovement?.upstreamReceiptCode)),
+    [selectedMovement]
+  );
+  const movementOperationalLinks = useMemo(
+    () => buildMovementOperationalLinks(selectedMovement, Boolean(selectedMovement?.upstreamReceiptCode)),
+    [selectedMovement]
+  );
 
   useEffect(() => {
     if (!overview) {
@@ -337,7 +706,7 @@ function InventoryMovementsPageContent() {
   }, [selectedMovementId, selectedMovement?.id, selectedMovement?.nextAction]);
 
   async function handleAction(status: InventoryMovementContract["status"], suggestedNextAction: string) {
-    if (!selectedMovement || !session.accessToken) {
+    if (!selectedMovement) {
       return;
     }
 
@@ -405,7 +774,7 @@ function InventoryMovementsPageContent() {
   }
 
   async function handleCreateMovement() {
-    if (!overview || !session.accessToken) {
+    if (!overview) {
       return;
     }
 
@@ -453,7 +822,7 @@ function InventoryMovementsPageContent() {
       return;
     }
 
-    if (upstreamReceiptCode && !linkedReceipt) {
+    if (upstreamReceiptCode && !linkedReceipt && !isDemoMode) {
       setActionError("The selected upstream receipt is no longer available for movement creation.");
       setCreateMessage(null);
       return;
@@ -465,7 +834,7 @@ function InventoryMovementsPageContent() {
       return;
     }
 
-    if (upstreamReceiptCode && purchaseReference && linkedReceipt?.purchaseReference !== purchaseReference) {
+    if (upstreamReceiptCode && purchaseReference && linkedReceipt && linkedReceipt.purchaseReference !== purchaseReference) {
       setActionError("Purchase reference must match the selected upstream receipt before creating the movement.");
       setCreateMessage(null);
       return;
@@ -544,7 +913,43 @@ function InventoryMovementsPageContent() {
               <KpiCard label="Commercial risk" value={String(filteredSummary.movementsAtCommercialRisk)} footnote="Movements tied to blocked purchase posture or fiscal packet risk." />
             </section>
 
+            {isDemoMode ? (
+              <Card
+                title="Operable demo mode"
+                description="Material handoffs can be exercised locally so warehouse-to-field traceability is testable before live integrations are ready."
+                aside={<Badge tone="warning">browser-persisted</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">What works</div>
+                    <div>Create transfers or returns, move them through dispatch states, and validate closure constraints from one board.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Recommended test</div>
+                    <div>Generate a transfer from warehouse to front, then simulate evidence gaps or variance before marking the movement as received.</div>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
             <section className="grid cols3">
+              <Card
+                title="Movement workflow"
+                description="Movements should carry inbound context forward into warehouse-to-field execution without losing traceability."
+                aside={<Badge tone={filteredSummary.criticalMovements > 0 ? "danger" : filteredSummary.pendingEvidence > 0 ? "warning" : "success"}>{filteredSummary.criticalMovements > 0 ? "critical lane" : filteredSummary.pendingEvidence > 0 ? "evidence watch" : "stable lane"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Input source</div><div>Use clean receipts as the operational origin before releasing a stock movement.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Execution</div><div>Dispatch, handoff evidence and quantity reconciliation decide whether the route is actually usable.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Destination effect</div><div>Every movement should directly support field, equipment or return control instead of stopping at logistics-only visibility.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/inventory/receiving">Open receiving</Link>
+                  <Link className="buttonGhost" href="/equipment">Open equipment</Link>
+                  <Link className="buttonGhost" href="/field">Open field</Link>
+                </div>
+              </Card>
+
               <Card title="Equipment support" description="Current fleet anchor attached to this movement lane.">
                 <p className="sectionText">
                   {selectedStory?.equipmentSupport ?? "Choose a movement to inspect equipment support."}
@@ -562,6 +967,24 @@ function InventoryMovementsPageContent() {
               </Card>
             </section>
 
+            <section className="grid cols3">
+              <Card title="Movement continuity" description="Whether the selected movement can keep moving without operational friction.">
+                <p className="sectionText">
+                  {movementWorkflow?.continuity ?? "Choose a movement to inspect continuity."}
+                </p>
+              </Card>
+              <Card title="Traceability posture" description="How defensible the stock-to-front trace remains right now.">
+                <p className="sectionText">
+                  {movementWorkflow?.traceability ?? "Choose a movement to inspect traceability posture."}
+                </p>
+              </Card>
+              <Card title="Next recommended move" description="Fast operator guidance for the selected movement.">
+                <p className="sectionText">
+                  {movementWorkflow?.nextMove ?? "Choose a movement to inspect the next move."}
+                </p>
+              </Card>
+            </section>
+
             <section className="grid cols2">
               <Card title="Movement board" description="Operational handoffs across warehouses, yards and jobsite fronts.">
                 <FilterBar summary={`${filteredMovements.length} movements in the active tenant`}>
@@ -572,8 +995,8 @@ function InventoryMovementsPageContent() {
                       Clear context
                     </Link>
                   ) : null}
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? "demo operable" : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "movements ready"}</Badge>
                 </FilterBar>
@@ -649,18 +1072,19 @@ function InventoryMovementsPageContent() {
                     </div>
 
                     <div className="row gap wrap">
-                      <Link className="buttonGhost" href="/field">
-                        Open field
-                      </Link>
-                      <Link
-                        className="buttonGhost"
-                        href={`/inventory/receiving?purchaseReference=${encodeURIComponent(selectedMovement.purchaseReference ?? "")}&supplierName=${encodeURIComponent(selectedMovement.purchaseOrderOwner)}`}
-                      >
-                        Open receiving
-                      </Link>
-                      <Link className="buttonGhost" href="/equipment">
-                        Open equipment
-                      </Link>
+                      {movementOperationalLinks.map((link, index) => (
+                        <Link
+                          key={link.href + link.label}
+                          className={index === 0 ? "button secondary" : "buttonGhost"}
+                          href={
+                            link.href === "/inventory/receiving"
+                              ? `/inventory/receiving?purchaseReference=${encodeURIComponent(selectedMovement.purchaseReference ?? "")}&supplierName=${encodeURIComponent(selectedMovement.purchaseOrderOwner)}`
+                              : link.href
+                          }
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
                     </div>
 
                     <div className="detailGrid">
@@ -675,6 +1099,26 @@ function InventoryMovementsPageContent() {
                       <div className="detailRow">
                         <div className="detailLabel">Purchasing owner</div>
                         <div>{selectedMovement.purchaseOrderOwner}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Why now</div>
+                        <div>{movementWhyNow}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Downstream effect</div>
+                        <div>{movementDownstreamEffect}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Route summary</div>
+                        <div>{movementRouteSummary}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Next human step</div>
+                        <div>{movementHumanStep}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Report back</div>
+                        <div>{movementReportBack}</div>
                       </div>
                     </div>
 
@@ -758,8 +1202,42 @@ function InventoryMovementsPageContent() {
                   <label className="detailRow"><div className="detailLabel">Impact</div><select className="selectField" value={createForm.impactLevel} onChange={(event) => setCreateForm((current) => ({ ...current, impactLevel: event.target.value as InventoryMovementContract["impactLevel"] }))}><option value="controlled">controlled</option><option value="watch">watch</option><option value="critical">critical</option></select></label>
                   <label className="detailRow"><div className="detailLabel">Next action</div><input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} /></label>
                 </div>
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow"><div className="detailLabel">Creation gate</div><div className="tableCellStack"><div className="row gap wrap" style={{ alignItems: "center" }}><Badge tone={createMovementGate.tone}>{createMovementGate.label}</Badge><span>{createMovementGate.summary}</span></div>{createMovementGate.checks.map((check) => (<span key={check} className="tableCellMuted">{check}</span>))}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Next human step</div><div>{createMovementHumanStep}</div></div>
+                </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isSaving} onClick={() => void handleCreateMovement()}>{isSaving ? "Saving..." : "Add movement"}</button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm(
+                        createMovementExample(
+                          upstreamReceiptCodeParam || eligibleReceipts[0]?.code,
+                          purchaseReferenceParam || eligibleReceipts[0]?.purchaseReference
+                        )
+                      )
+                    }
+                  >
+                    Load demo example
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm(
+                        createMovementExample(
+                          upstreamReceiptCodeParam || eligibleReceipts[0]?.code,
+                          purchaseReferenceParam || eligibleReceipts[0]?.purchaseReference
+                        )
+                      )
+                    }
+                  >
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/inventory/receiving">Review receiving</Link>
+                  <Link className="buttonGhost" href="/equipment">Review equipment</Link>
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
                 </div>
               </Card>
@@ -778,6 +1256,8 @@ function InventoryMovementsPageContent() {
           <EmptyState
             title="Movements unavailable"
             description={error ?? "The inventory movements board could not be loaded from the current backend source."}
+            primaryAction={{ label: "Open receiving", href: "/inventory/receiving" }}
+            secondaryAction={{ label: "Open equipment", href: "/equipment" }}
           />
         )}
       </ModuleGate>

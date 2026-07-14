@@ -37,7 +37,7 @@ export type AppData = {
 };
 
 const apiBaseUrl =
-  process.env.ARCONT_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:3001";
+  process.env.ARCONT_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:4000";
 
 const mockCompanies: CompanyContract[] = [
   {

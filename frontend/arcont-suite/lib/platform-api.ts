@@ -239,6 +239,72 @@ import {
   type UpdateSubcontractLineRequestContract,
   type UserContract
 } from "@/lib/contracts";
+import {
+  addDemoTreasuryPaymentRunInvoice,
+  createDemoAccountsPayableInvoice,
+  createDemoDailyLogEntry,
+  createDemoDocumentControlItem,
+  createDemoFieldMaterialRequest,
+  createDemoInventoryMovement,
+  createDemoInventoryReceipt,
+  getDemoProcurementOverview,
+  createDemoQualityInspection,
+  createDemoProcurementPurchaseOrder,
+  createDemoProcurementRequisition,
+  createDemoProjectPortfolioItem,
+  createDemoTreasuryPaymentRun,
+  getDemoBudgetBookOverview,
+  getDemoCashFlowOverview,
+  getDemoCloseControlOverview,
+  getDemoComplianceOverview,
+  getDemoCostControlOverview,
+  getDemoCrmOverview,
+  getDemoEstimationCollectionOverview,
+  getDemoFinanceOverview,
+  createDemoMachineItem,
+  createDemoSupplierControlLine,
+  createDemoSupplierMasterProfile,
+  getDemoAccountsPayableOverview,
+  getDemoDailyLogOverview,
+  getDemoDocumentControlOverview,
+  getDemoEquipmentOverview,
+  getDemoFieldMaterialRequestsOverview,
+  getDemoInventoryMovementsOverview,
+  getDemoInventoryReceivingOverview,
+  getDemoProcurementPurchaseOrdersOverview,
+  getDemoProcurementRequisitionsOverview,
+  getDemoProjectsOverview,
+  getDemoPostSaleOverview,
+  getDemoQualityOverview,
+  getDemoSupplierControlOverview,
+  getDemoSupplierMasterOverview,
+  getDemoTreasuryPaymentRunsOverview,
+  moveDemoTreasuryPaymentRunInvoice,
+  removeDemoTreasuryPaymentRunInvoice,
+  updateDemoDailyLogEntry,
+  updateDemoDocumentControlItem,
+  updateDemoAccountsPayableInvoice,
+  updateDemoBudgetBookLine,
+  updateDemoCashFlowLine,
+  updateDemoCloseControlLine,
+  updateDemoComplianceCase,
+  updateDemoCostControlLine,
+  updateDemoCrmLeadBucket,
+  updateDemoEstimationCollectionLine,
+  updateDemoFinanceLedgerItem,
+  updateDemoInventoryMovement,
+  updateDemoInventoryReceipt,
+  updateDemoProcurementPackage,
+  updateDemoProcurementPurchaseOrder,
+  updateDemoProcurementRequisition,
+  updateDemoQualityInspection,
+  updateDemoMachineItem,
+  updateDemoPostSaleCase,
+  updateDemoProjectPortfolioItem,
+  updateDemoSupplierControlLine,
+  updateDemoSupplierMasterProfile,
+  updateDemoTreasuryPaymentRun
+} from "@/lib/demo-operations-store";
 
 type RequestOptions = {
   apiBaseUrl: string;
@@ -506,9 +572,17 @@ export async function fetchProjectsOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<ProjectPortfolioOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoProjectsOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/projects/overview${query}`, options);
-  return response ? ProjectPortfolioOverviewSchema.parse(response) : null;
+  if (response) {
+    return ProjectPortfolioOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoProjectsOverview(companyId) : null;
 }
 
 export async function updateProjectPortfolioItem(
@@ -518,6 +592,23 @@ export async function updateProjectPortfolioItem(
   options: RequestOptions
 ): Promise<ApiResult<ProjectPortfolioItemContract>> {
   const payload = UpdateProjectPortfolioItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoProjectPortfolioItem(companyId, projectId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "PROJECTS_DEMO_NOT_FOUND",
+            message: "Demo project not found.",
+            details: {
+              projectId,
+              companyId
+            }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/projects/items/${projectId}${query}`, options, {
     method: "PATCH",
@@ -528,6 +619,16 @@ export async function updateProjectPortfolioItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoProjectPortfolioItem(companyId, projectId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -546,6 +647,13 @@ export async function createProjectPortfolioItem(
   options: RequestOptions
 ): Promise<ApiResult<ProjectPortfolioItemContract>> {
   const payload = CreateProjectPortfolioItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoProjectPortfolioItem(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/projects/items${query}`, options, {
     method: "POST",
@@ -556,6 +664,13 @@ export async function createProjectPortfolioItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoProjectPortfolioItem(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -572,9 +687,17 @@ export async function fetchProcurementOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<ProcurementOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoProcurementOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/procurement/overview${query}`, options);
-  return response ? ProcurementOverviewSchema.parse(response) : null;
+  if (response) {
+    return ProcurementOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoProcurementOverview(companyId) : null;
 }
 
 export async function updateProcurementPackage(
@@ -584,6 +707,20 @@ export async function updateProcurementPackage(
   options: RequestOptions
 ): Promise<ApiResult<ProcurementPackageContract>> {
   const payload = UpdateProcurementPackageRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoProcurementPackage(companyId, packageId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "PROCUREMENT_DEMO_NOT_FOUND",
+            message: "Demo procurement package not found.",
+            details: { companyId, packageId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/procurement/packages/${packageId}${query}`, options, {
     method: "PATCH",
@@ -594,6 +731,16 @@ export async function updateProcurementPackage(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoProcurementPackage(companyId, packageId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -610,9 +757,17 @@ export async function fetchProcurementRequisitionsOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<ProcurementRequisitionsOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoProcurementRequisitionsOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/procurement/requisitions/overview${query}`, options);
-  return response ? ProcurementRequisitionsOverviewSchema.parse(response) : null;
+  if (response) {
+    return ProcurementRequisitionsOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoProcurementRequisitionsOverview(companyId) : null;
 }
 
 export async function createProcurementRequisition(
@@ -621,6 +776,13 @@ export async function createProcurementRequisition(
   options: RequestOptions
 ): Promise<ApiResult<ProcurementRequisitionContract>> {
   const payload = CreateProcurementRequisitionRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoProcurementRequisition(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/procurement/requisitions${query}`, options, {
     method: "POST",
@@ -631,6 +793,13 @@ export async function createProcurementRequisition(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoProcurementRequisition(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -650,6 +819,20 @@ export async function updateProcurementRequisition(
   options: RequestOptions
 ): Promise<ApiResult<ProcurementRequisitionContract>> {
   const payload = UpdateProcurementRequisitionRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoProcurementRequisition(companyId, requisitionId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "PROCUREMENT_REQUISITION_DEMO_NOT_FOUND",
+            message: "Demo requisition not found.",
+            details: { requisitionId, companyId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/procurement/requisitions/${requisitionId}${query}`, options, {
     method: "PATCH",
@@ -660,6 +843,16 @@ export async function updateProcurementRequisition(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoProcurementRequisition(companyId, requisitionId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -678,6 +871,13 @@ export async function createFieldMaterialRequest(
   options: RequestOptions
 ): Promise<ApiResult<CreateFieldMaterialRequestResponseContract>> {
   const payload = CreateFieldMaterialRequestRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoFieldMaterialRequest(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/field/material-requests${query}`, options, {
     method: "POST",
@@ -688,6 +888,13 @@ export async function createFieldMaterialRequest(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoFieldMaterialRequest(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -704,18 +911,34 @@ export async function fetchFieldMaterialRequestsOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<FieldMaterialRequestOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoFieldMaterialRequestsOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/field/material-requests/overview${query}`, options);
-  return response ? FieldMaterialRequestOverviewSchema.parse(response) : null;
+  if (response) {
+    return FieldMaterialRequestOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoFieldMaterialRequestsOverview(companyId) : null;
 }
 
 export async function fetchProcurementPurchaseOrdersOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<ProcurementPurchaseOrdersOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoProcurementPurchaseOrdersOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/procurement/purchase-orders/overview${query}`, options);
-  return response ? ProcurementPurchaseOrdersOverviewSchema.parse(response) : null;
+  if (response) {
+    return ProcurementPurchaseOrdersOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoProcurementPurchaseOrdersOverview(companyId) : null;
 }
 
 export async function createProcurementPurchaseOrder(
@@ -724,6 +947,13 @@ export async function createProcurementPurchaseOrder(
   options: RequestOptions
 ): Promise<ApiResult<ProcurementPurchaseOrderContract>> {
   const payload = CreateProcurementPurchaseOrderRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoProcurementPurchaseOrder(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/procurement/purchase-orders${query}`, options, {
     method: "POST",
@@ -734,6 +964,13 @@ export async function createProcurementPurchaseOrder(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoProcurementPurchaseOrder(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -753,6 +990,20 @@ export async function updateProcurementPurchaseOrder(
   options: RequestOptions
 ): Promise<ApiResult<ProcurementPurchaseOrderContract>> {
   const payload = UpdateProcurementPurchaseOrderRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoProcurementPurchaseOrder(companyId, purchaseOrderId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "PROCUREMENT_PURCHASE_ORDER_DEMO_NOT_FOUND",
+            message: "Demo purchase order not found.",
+            details: { purchaseOrderId, companyId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/procurement/purchase-orders/${purchaseOrderId}${query}`, options, {
     method: "PATCH",
@@ -763,6 +1014,16 @@ export async function updateProcurementPurchaseOrder(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoProcurementPurchaseOrder(companyId, purchaseOrderId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -779,9 +1040,17 @@ export async function fetchBudgetBookOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<BudgetBookOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoBudgetBookOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/budget-book/overview${query}`, options);
-  return response ? BudgetBookOverviewSchema.parse(response) : null;
+  if (response) {
+    return BudgetBookOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoBudgetBookOverview(companyId) : null;
 }
 
 export async function updateBudgetBookLine(
@@ -791,6 +1060,20 @@ export async function updateBudgetBookLine(
   options: RequestOptions
 ): Promise<ApiResult<BudgetBookLineContract>> {
   const payload = UpdateBudgetBookLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoBudgetBookLine(companyId, lineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "BUDGET_BOOK_DEMO_NOT_FOUND",
+            message: "Demo budget concept not found.",
+            details: { companyId, lineId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/budget-book/lines/${lineId}${query}`, options, {
     method: "PATCH",
@@ -801,6 +1084,16 @@ export async function updateBudgetBookLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoBudgetBookLine(companyId, lineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -817,9 +1110,17 @@ export async function fetchCashFlowOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<CashFlowOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoCashFlowOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/cash-flow/overview${query}`, options);
-  return response ? CashFlowOverviewSchema.parse(response) : null;
+  if (response) {
+    return CashFlowOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoCashFlowOverview(companyId) : null;
 }
 
 export async function updateCashFlowLine(
@@ -829,6 +1130,20 @@ export async function updateCashFlowLine(
   options: RequestOptions
 ): Promise<ApiResult<CashFlowLineContract>> {
   const payload = UpdateCashFlowLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoCashFlowLine(companyId, lineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "CASH_FLOW_DEMO_NOT_FOUND",
+            message: "Demo cash flow line not found.",
+            details: { companyId, lineId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/cash-flow/lines/${lineId}${query}`, options, {
     method: "PATCH",
@@ -839,6 +1154,16 @@ export async function updateCashFlowLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoCashFlowLine(companyId, lineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -855,9 +1180,17 @@ export async function fetchCloseControlOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<CloseControlOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoCloseControlOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/close-control/overview${query}`, options);
-  return response ? CloseControlOverviewSchema.parse(response) : null;
+  if (response) {
+    return CloseControlOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoCloseControlOverview(companyId) : null;
 }
 
 export async function updateCloseControlLine(
@@ -867,6 +1200,20 @@ export async function updateCloseControlLine(
   options: RequestOptions
 ): Promise<ApiResult<CloseControlLineContract>> {
   const payload = UpdateCloseControlLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoCloseControlLine(companyId, lineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "CLOSE_CONTROL_DEMO_NOT_FOUND",
+            message: "Demo close control line not found.",
+            details: { companyId, lineId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/close-control/lines/${lineId}${query}`, options, {
     method: "PATCH",
@@ -877,6 +1224,16 @@ export async function updateCloseControlLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoCloseControlLine(companyId, lineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -893,9 +1250,17 @@ export async function fetchSupplierControlOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<SupplierControlOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoSupplierControlOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/supplier-control/overview${query}`, options);
-  return response ? SupplierControlOverviewSchema.parse(response) : null;
+  if (response) {
+    return SupplierControlOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoSupplierControlOverview(companyId) : null;
 }
 
 export async function updateSupplierControlLine(
@@ -905,6 +1270,20 @@ export async function updateSupplierControlLine(
   options: RequestOptions
 ): Promise<ApiResult<SupplierControlLineContract>> {
   const payload = UpdateSupplierControlLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoSupplierControlLine(companyId, lineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "SUPPLIER_CONTROL_DEMO_NOT_FOUND",
+            message: "Demo supplier lane not found.",
+            details: { lineId, companyId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/supplier-control/lines/${lineId}${query}`, options, {
     method: "PATCH",
@@ -915,6 +1294,16 @@ export async function updateSupplierControlLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoSupplierControlLine(companyId, lineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -933,6 +1322,13 @@ export async function createSupplierControlLine(
   options: RequestOptions
 ): Promise<ApiResult<SupplierControlLineContract>> {
   const payload = CreateSupplierControlLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoSupplierControlLine(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/supplier-control/lines${query}`, options, {
     method: "POST",
@@ -943,6 +1339,13 @@ export async function createSupplierControlLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoSupplierControlLine(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -959,9 +1362,17 @@ export async function fetchSupplierMasterOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<SupplierMasterOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoSupplierMasterOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/supplier-master/overview${query}`, options);
-  return response ? SupplierMasterOverviewSchema.parse(response) : null;
+  if (response) {
+    return SupplierMasterOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoSupplierMasterOverview(companyId) : null;
 }
 
 export async function createSupplierMasterProfile(
@@ -970,6 +1381,13 @@ export async function createSupplierMasterProfile(
   options: RequestOptions
 ): Promise<ApiResult<SupplierMasterProfileContract>> {
   const payload = CreateSupplierMasterProfileRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoSupplierMasterProfile(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/supplier-master/profiles${query}`, options, {
     method: "POST",
@@ -980,6 +1398,13 @@ export async function createSupplierMasterProfile(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoSupplierMasterProfile(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -999,6 +1424,20 @@ export async function updateSupplierMasterProfile(
   options: RequestOptions
 ): Promise<ApiResult<SupplierMasterProfileContract>> {
   const payload = UpdateSupplierMasterProfileRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoSupplierMasterProfile(companyId, profileId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "SUPPLIER_MASTER_DEMO_NOT_FOUND",
+            message: "Demo supplier profile not found.",
+            details: { profileId, companyId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/supplier-master/profiles/${profileId}${query}`, options, {
     method: "PATCH",
@@ -1009,6 +1448,16 @@ export async function updateSupplierMasterProfile(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoSupplierMasterProfile(companyId, profileId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1025,9 +1474,17 @@ export async function fetchCostControlOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<CostControlOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoCostControlOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/cost-control/overview${query}`, options);
-  return response ? CostControlOverviewSchema.parse(response) : null;
+  if (response) {
+    return CostControlOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoCostControlOverview(companyId) : null;
 }
 
 export async function updateCostControlLine(
@@ -1037,6 +1494,20 @@ export async function updateCostControlLine(
   options: RequestOptions
 ): Promise<ApiResult<CostControlLineContract>> {
   const payload = UpdateCostControlLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoCostControlLine(companyId, lineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "COST_CONTROL_DEMO_NOT_FOUND",
+            message: "Demo cost-control line not found.",
+            details: { companyId, lineId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/cost-control/lines/${lineId}${query}`, options, {
     method: "PATCH",
@@ -1047,6 +1518,16 @@ export async function updateCostControlLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoCostControlLine(companyId, lineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1101,9 +1582,17 @@ export async function fetchInventoryReceivingOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<InventoryReceivingOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoInventoryReceivingOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/inventory/receiving/overview${query}`, options);
-  return response ? InventoryReceivingOverviewSchema.parse(response) : null;
+  if (response) {
+    return InventoryReceivingOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoInventoryReceivingOverview(companyId) : null;
 }
 
 export async function createInventoryReceipt(
@@ -1112,6 +1601,13 @@ export async function createInventoryReceipt(
   options: RequestOptions
 ): Promise<ApiResult<InventoryReceiptContract>> {
   const payload = CreateInventoryReceiptRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoInventoryReceipt(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/inventory/receipts${query}`, options, {
     method: "POST",
@@ -1122,6 +1618,13 @@ export async function createInventoryReceipt(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoInventoryReceipt(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -1141,6 +1644,23 @@ export async function updateInventoryReceipt(
   options: RequestOptions
 ): Promise<ApiResult<InventoryReceiptContract>> {
   const payload = UpdateInventoryReceiptRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoInventoryReceipt(companyId, receiptId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "INVENTORY_RECEIPT_DEMO_NOT_FOUND",
+            message: "Demo inventory receipt not found.",
+            details: {
+              receiptId,
+              companyId
+            }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/inventory/receipts/${receiptId}${query}`, options, {
     method: "PATCH",
@@ -1151,6 +1671,16 @@ export async function updateInventoryReceipt(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoInventoryReceipt(companyId, receiptId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1167,9 +1697,17 @@ export async function fetchInventoryMovementsOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<InventoryMovementsOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoInventoryMovementsOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/inventory/movements/overview${query}`, options);
-  return response ? InventoryMovementsOverviewSchema.parse(response) : null;
+  if (response) {
+    return InventoryMovementsOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoInventoryMovementsOverview(companyId) : null;
 }
 
 export async function createInventoryMovement(
@@ -1178,6 +1716,13 @@ export async function createInventoryMovement(
   options: RequestOptions
 ): Promise<ApiResult<InventoryMovementContract>> {
   const payload = CreateInventoryMovementRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoInventoryMovement(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/inventory/movements${query}`, options, {
     method: "POST",
@@ -1188,6 +1733,13 @@ export async function createInventoryMovement(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoInventoryMovement(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -1207,6 +1759,23 @@ export async function updateInventoryMovement(
   options: RequestOptions
 ): Promise<ApiResult<InventoryMovementContract>> {
   const payload = UpdateInventoryMovementRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoInventoryMovement(companyId, movementId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "INVENTORY_MOVEMENT_DEMO_NOT_FOUND",
+            message: "Demo inventory movement not found.",
+            details: {
+              movementId,
+              companyId
+            }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/inventory/movements/${movementId}${query}`, options, {
     method: "PATCH",
@@ -1217,6 +1786,16 @@ export async function updateInventoryMovement(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoInventoryMovement(companyId, movementId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1233,9 +1812,17 @@ export async function fetchEquipmentOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<EquipmentOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoEquipmentOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/equipment/overview${query}`, options);
-  return response ? EquipmentOverviewSchema.parse(response) : null;
+  if (response) {
+    return EquipmentOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoEquipmentOverview(companyId) : null;
 }
 
 export async function createMachineItem(
@@ -1244,6 +1831,13 @@ export async function createMachineItem(
   options: RequestOptions
 ): Promise<ApiResult<MachineItemContract>> {
   const payload = CreateMachineItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoMachineItem(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/equipment/machines${query}`, options, {
     method: "POST",
@@ -1254,6 +1848,13 @@ export async function createMachineItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoMachineItem(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -1273,6 +1874,23 @@ export async function updateMachineItem(
   options: RequestOptions
 ): Promise<ApiResult<MachineItemContract>> {
   const payload = UpdateMachineItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoMachineItem(companyId, machineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "EQUIPMENT_DEMO_NOT_FOUND",
+            message: "Demo machine not found.",
+            details: {
+              machineId,
+              companyId
+            }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/equipment/machines/${machineId}${query}`, options, {
     method: "PATCH",
@@ -1283,6 +1901,16 @@ export async function updateMachineItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoMachineItem(companyId, machineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1299,9 +1927,17 @@ export async function fetchDailyLogOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<DailyLogOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoDailyLogOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/daily-log/overview${query}`, options);
-  return response ? DailyLogOverviewSchema.parse(response) : null;
+  if (response) {
+    return DailyLogOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoDailyLogOverview(companyId) : null;
 }
 
 export async function createDailyLogEntry(
@@ -1310,6 +1946,13 @@ export async function createDailyLogEntry(
   options: RequestOptions
 ): Promise<ApiResult<DailyLogEntryContract>> {
   const payload = CreateDailyLogEntryRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoDailyLogEntry(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/daily-log/entries${query}`, options, {
     method: "POST",
@@ -1320,6 +1963,13 @@ export async function createDailyLogEntry(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoDailyLogEntry(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -1339,6 +1989,23 @@ export async function updateDailyLogEntry(
   options: RequestOptions
 ): Promise<ApiResult<DailyLogEntryContract>> {
   const payload = UpdateDailyLogEntryRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoDailyLogEntry(companyId, entryId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "DAILY_LOG_DEMO_NOT_FOUND",
+            message: "Demo daily log not found.",
+            details: {
+              entryId,
+              companyId
+            }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/daily-log/entries/${entryId}${query}`, options, {
     method: "PATCH",
@@ -1349,6 +2016,16 @@ export async function updateDailyLogEntry(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoDailyLogEntry(companyId, entryId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1365,9 +2042,17 @@ export async function fetchFinanceOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<FinanceOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoFinanceOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/finance/overview${query}`, options);
-  return response ? FinanceOverviewSchema.parse(response) : null;
+  if (response) {
+    return FinanceOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoFinanceOverview(companyId) : null;
 }
 
 export async function updateFinanceLedgerItem(
@@ -1377,6 +2062,20 @@ export async function updateFinanceLedgerItem(
   options: RequestOptions
 ): Promise<ApiResult<FinanceLedgerItemContract>> {
   const payload = UpdateFinanceLedgerItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoFinanceLedgerItem(companyId, ledgerId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "FINANCE_DEMO_NOT_FOUND",
+            message: "Demo finance signal not found.",
+            details: { companyId, ledgerId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/finance/items/${ledgerId}${query}`, options, {
     method: "PATCH",
@@ -1387,6 +2086,16 @@ export async function updateFinanceLedgerItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoFinanceLedgerItem(companyId, ledgerId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1403,9 +2112,17 @@ export async function fetchAccountsPayableOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<AccountsPayableOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoAccountsPayableOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/accounts-payable/overview${query}`, options);
-  return response ? AccountsPayableOverviewSchema.parse(response) : null;
+  if (response) {
+    return AccountsPayableOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoAccountsPayableOverview(companyId) : null;
 }
 
 export async function createAccountsPayableInvoice(
@@ -1414,6 +2131,13 @@ export async function createAccountsPayableInvoice(
   options: RequestOptions
 ): Promise<ApiResult<AccountsPayableInvoiceContract>> {
   const payload = CreateAccountsPayableInvoiceRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoAccountsPayableInvoice(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/accounts-payable/invoices${query}`, options, {
     method: "POST",
@@ -1424,6 +2148,13 @@ export async function createAccountsPayableInvoice(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoAccountsPayableInvoice(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -1443,6 +2174,20 @@ export async function updateAccountsPayableInvoice(
   options: RequestOptions
 ): Promise<ApiResult<AccountsPayableInvoiceContract>> {
   const payload = UpdateAccountsPayableInvoiceRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoAccountsPayableInvoice(companyId, invoiceId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "ACCOUNTS_PAYABLE_DEMO_NOT_FOUND",
+            message: "Demo accounts payable invoice not found.",
+            details: { companyId, invoiceId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/accounts-payable/invoices/${invoiceId}${query}`, options, {
     method: "PATCH",
@@ -1453,6 +2198,16 @@ export async function updateAccountsPayableInvoice(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoAccountsPayableInvoice(companyId, invoiceId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1469,9 +2224,17 @@ export async function fetchTreasuryPaymentRunsOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<TreasuryPaymentRunsOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoTreasuryPaymentRunsOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/treasury/payment-runs/overview${query}`, options);
-  return response ? TreasuryPaymentRunsOverviewSchema.parse(response) : null;
+  if (response) {
+    return TreasuryPaymentRunsOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoTreasuryPaymentRunsOverview(companyId) : null;
 }
 
 export async function createTreasuryPaymentRun(
@@ -1480,6 +2243,13 @@ export async function createTreasuryPaymentRun(
   options: RequestOptions
 ): Promise<ApiResult<TreasuryPaymentRunContract>> {
   const payload = CreateTreasuryPaymentRunRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoTreasuryPaymentRun(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/treasury/payment-runs${query}`, options, {
     method: "POST",
@@ -1490,6 +2260,13 @@ export async function createTreasuryPaymentRun(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoTreasuryPaymentRun(companyId, payload),
+        error: null
+      };
+    }
+
     return { data: null, error: response.error };
   }
 
@@ -1506,6 +2283,20 @@ export async function updateTreasuryPaymentRun(
   options: RequestOptions
 ): Promise<ApiResult<TreasuryPaymentRunContract>> {
   const payload = UpdateTreasuryPaymentRunRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoTreasuryPaymentRun(companyId, paymentRunId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "TREASURY_PAYMENT_RUN_DEMO_NOT_FOUND",
+            message: "Demo payment run not found.",
+            details: { companyId, paymentRunId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/treasury/payment-runs/${paymentRunId}${query}`, options, {
     method: "PATCH",
@@ -1516,6 +2307,13 @@ export async function updateTreasuryPaymentRun(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoTreasuryPaymentRun(companyId, paymentRunId, payload);
+      if (fallback) {
+        return { data: fallback, error: null };
+      }
+    }
+
     return { data: null, error: response.error };
   }
 
@@ -1533,6 +2331,20 @@ export async function removeTreasuryPaymentRunInvoice(
   options: RequestOptions
 ): Promise<ApiResult<TreasuryPaymentRunContract>> {
   const payload = { nextAction };
+  if (companyId && !options.accessToken) {
+    const updated = removeDemoTreasuryPaymentRunInvoice(companyId, paymentRunId, invoiceId, nextAction);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "TREASURY_PAYMENT_RUN_INVOICE_DEMO_NOT_FOUND",
+            message: "Demo payment run invoice was not found.",
+            details: { companyId, paymentRunId, invoiceId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/treasury/payment-runs/${paymentRunId}/invoices/${invoiceId}${query}`, options, {
     method: "DELETE",
@@ -1543,6 +2355,13 @@ export async function removeTreasuryPaymentRunInvoice(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = removeDemoTreasuryPaymentRunInvoice(companyId, paymentRunId, invoiceId, nextAction);
+      if (fallback) {
+        return { data: fallback, error: null };
+      }
+    }
+
     return { data: null, error: response.error };
   }
 
@@ -1560,6 +2379,20 @@ export async function addTreasuryPaymentRunInvoice(
   options: RequestOptions
 ): Promise<ApiResult<TreasuryPaymentRunContract>> {
   const payload = { invoiceId, nextAction };
+  if (companyId && !options.accessToken) {
+    const updated = addDemoTreasuryPaymentRunInvoice(companyId, paymentRunId, invoiceId, nextAction);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "TREASURY_PAYMENT_RUN_ADD_INVOICE_DEMO_FAILED",
+            message: "Demo add invoice into payment run failed.",
+            details: { companyId, paymentRunId, invoiceId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/treasury/payment-runs/${paymentRunId}/invoices${query}`, options, {
     method: "POST",
@@ -1570,6 +2403,13 @@ export async function addTreasuryPaymentRunInvoice(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = addDemoTreasuryPaymentRunInvoice(companyId, paymentRunId, invoiceId, nextAction);
+      if (fallback) {
+        return { data: fallback, error: null };
+      }
+    }
+
     return { data: null, error: response.error };
   }
 
@@ -1588,6 +2428,20 @@ export async function moveTreasuryPaymentRunInvoice(
   options: RequestOptions
 ): Promise<ApiResult<TreasuryPaymentRunContract>> {
   const payload = { targetPaymentRunId, nextAction };
+  if (companyId && !options.accessToken) {
+    const updated = moveDemoTreasuryPaymentRunInvoice(companyId, sourcePaymentRunId, invoiceId, targetPaymentRunId, nextAction);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "TREASURY_PAYMENT_RUN_MOVE_INVOICE_DEMO_FAILED",
+            message: "Demo move invoice between payment runs failed.",
+            details: { companyId, sourcePaymentRunId, invoiceId, targetPaymentRunId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(
     `/treasury/payment-runs/${sourcePaymentRunId}/invoices/${invoiceId}/move${query}`,
@@ -1602,6 +2456,13 @@ export async function moveTreasuryPaymentRunInvoice(
   );
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = moveDemoTreasuryPaymentRunInvoice(companyId, sourcePaymentRunId, invoiceId, targetPaymentRunId, nextAction);
+      if (fallback) {
+        return { data: fallback, error: null };
+      }
+    }
+
     return { data: null, error: response.error };
   }
 
@@ -1615,9 +2476,17 @@ export async function fetchEstimationCollectionOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<EstimationCollectionOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoEstimationCollectionOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/estimations/overview${query}`, options);
-  return response ? EstimationCollectionOverviewSchema.parse(response) : null;
+  if (response) {
+    return EstimationCollectionOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoEstimationCollectionOverview(companyId) : null;
 }
 
 export async function updateEstimationCollectionLine(
@@ -1627,6 +2496,20 @@ export async function updateEstimationCollectionLine(
   options: RequestOptions
 ): Promise<ApiResult<EstimationCollectionLineContract>> {
   const payload = UpdateEstimationCollectionLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoEstimationCollectionLine(companyId, lineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "ESTIMATION_DEMO_NOT_FOUND",
+            message: "Demo estimation line not found.",
+            details: { companyId, lineId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/estimations/lines/${lineId}${query}`, options, {
     method: "PATCH",
@@ -1637,6 +2520,16 @@ export async function updateEstimationCollectionLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoEstimationCollectionLine(companyId, lineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1653,9 +2546,17 @@ export async function fetchCrmOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<CrmOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoCrmOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/crm/overview${query}`, options);
-  return response ? CrmOverviewSchema.parse(response) : null;
+  if (response) {
+    return CrmOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoCrmOverview(companyId) : null;
 }
 
 export async function updateCrmLeadBucket(
@@ -1665,6 +2566,20 @@ export async function updateCrmLeadBucket(
   options: RequestOptions
 ): Promise<ApiResult<CrmLeadBucketContract>> {
   const payload = UpdateCrmLeadBucketRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoCrmLeadBucket(companyId, leadBucketId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "CRM_DEMO_NOT_FOUND",
+            message: "Demo CRM bucket not found.",
+            details: { companyId, leadBucketId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/crm/lead-buckets/${leadBucketId}${query}`, options, {
     method: "PATCH",
@@ -1675,6 +2590,16 @@ export async function updateCrmLeadBucket(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoCrmLeadBucket(companyId, leadBucketId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1691,9 +2616,17 @@ export async function fetchComplianceOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<ComplianceOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoComplianceOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/compliance/overview${query}`, options);
-  return response ? ComplianceOverviewSchema.parse(response) : null;
+  if (response) {
+    return ComplianceOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoComplianceOverview(companyId) : null;
 }
 
 export async function updateComplianceCase(
@@ -1703,6 +2636,20 @@ export async function updateComplianceCase(
   options: RequestOptions
 ): Promise<ApiResult<ComplianceCaseContract>> {
   const payload = UpdateComplianceCaseRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoComplianceCase(companyId, caseId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "COMPLIANCE_DEMO_NOT_FOUND",
+            message: "Demo compliance case not found.",
+            details: { companyId, caseId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/compliance/cases/${caseId}${query}`, options, {
     method: "PATCH",
@@ -1713,6 +2660,16 @@ export async function updateComplianceCase(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoComplianceCase(companyId, caseId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1729,9 +2686,17 @@ export async function fetchPostSaleOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<PostSaleOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoPostSaleOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/post-sale/overview${query}`, options);
-  return response ? PostSaleOverviewSchema.parse(response) : null;
+  if (response) {
+    return PostSaleOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoPostSaleOverview(companyId) : null;
 }
 
 export async function updatePostSaleCase(
@@ -1741,6 +2706,20 @@ export async function updatePostSaleCase(
   options: RequestOptions
 ): Promise<ApiResult<PostSaleCaseContract>> {
   const payload = UpdatePostSaleCaseRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoPostSaleCase(companyId, caseId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "POST_SALE_DEMO_NOT_FOUND",
+            message: "Demo post-sale case not found.",
+            details: { companyId, caseId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/post-sale/cases/${caseId}${query}`, options, {
     method: "PATCH",
@@ -1751,6 +2730,16 @@ export async function updatePostSaleCase(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoPostSaleCase(companyId, caseId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1805,9 +2794,17 @@ export async function fetchDocumentControlOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<DocumentControlOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoDocumentControlOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/document-control/overview${query}`, options);
-  return response ? DocumentControlOverviewSchema.parse(response) : null;
+  if (response) {
+    return DocumentControlOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoDocumentControlOverview(companyId) : null;
 }
 
 export async function createDocumentControlItem(
@@ -1816,6 +2813,13 @@ export async function createDocumentControlItem(
   options: RequestOptions
 ): Promise<ApiResult<DocumentControlItemContract>> {
   const payload = CreateDocumentControlItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoDocumentControlItem(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/document-control/items${query}`, options, {
     method: "POST",
@@ -1826,6 +2830,13 @@ export async function createDocumentControlItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoDocumentControlItem(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error
@@ -1845,6 +2856,23 @@ export async function updateDocumentControlItem(
   options: RequestOptions
 ): Promise<ApiResult<DocumentControlItemContract>> {
   const payload = UpdateDocumentControlItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoDocumentControlItem(companyId, itemId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "DOCUMENT_CONTROL_DEMO_NOT_FOUND",
+            message: "Demo document item not found.",
+            details: {
+              itemId,
+              companyId
+            }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/document-control/items/${itemId}${query}`, options, {
     method: "PATCH",
@@ -1855,6 +2883,16 @@ export async function updateDocumentControlItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoDocumentControlItem(companyId, itemId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1871,9 +2909,17 @@ export async function fetchQualityOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<QualityOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoQualityOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/quality/overview${query}`, options);
-  return response ? QualityOverviewSchema.parse(response) : null;
+  if (response) {
+    return QualityOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoQualityOverview(companyId) : null;
 }
 
 export async function updateQualityInspection(
@@ -1883,6 +2929,20 @@ export async function updateQualityInspection(
   options: RequestOptions
 ): Promise<ApiResult<QualityInspectionContract>> {
   const payload = UpdateQualityInspectionRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoQualityInspection(companyId, inspectionId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "QUALITY_DEMO_NOT_FOUND",
+            message: "Demo quality inspection not found.",
+            details: { companyId, inspectionId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/quality/inspections/${inspectionId}${query}`, options, {
     method: "PATCH",
@@ -1893,6 +2953,16 @@ export async function updateQualityInspection(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoQualityInspection(companyId, inspectionId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -1911,6 +2981,13 @@ export async function createQualityInspection(
   options: RequestOptions
 ): Promise<ApiResult<QualityInspectionContract>> {
   const payload = CreateQualityInspectionRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoQualityInspection(companyId, payload),
+      error: null
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/quality/inspections${query}`, options, {
     method: "POST",
@@ -1921,6 +2998,13 @@ export async function createQualityInspection(
   });
 
   if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoQualityInspection(companyId, payload),
+        error: null
+      };
+    }
+
     return {
       data: null,
       error: response.error

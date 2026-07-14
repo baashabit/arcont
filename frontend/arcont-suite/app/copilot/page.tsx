@@ -29,16 +29,12 @@ type CopilotContext = {
 
 export default function CopilotPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [context, setContext] = useState<CopilotContext | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setContext(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -79,7 +75,7 @@ export default function CopilotPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const suggestions = useMemo(() => {
     if (!context) {
@@ -182,6 +178,34 @@ export default function CopilotPage() {
       }
     ];
   }, [context]);
+  const nextRecommendedActions = useMemo(() => {
+    if (!context) {
+      return [];
+    }
+
+    return [
+      {
+        title: "Commercial follow-up",
+        detail: `Review ${context.crm.summary.reservations} reservations against compliance friction and collection continuity before forecasting more revenue.`,
+        href: "/crm"
+      },
+      {
+        title: "Supply unblock",
+        detail: `Resolve ${context.procurement.summary.openRequisitions} open requisitions and protect the procurement-to-field chain.`,
+        href: "/procurement"
+      },
+      {
+        title: "Document and quality closeout",
+        detail: `Reduce ${context.documentControl.summary.openRfis} RFIs while containing ${context.quality.summary.openFindings} live quality findings.`,
+        href: "/document-control"
+      },
+      {
+        title: "Connected operations watch",
+        detail: `Inspect ${context.integrations.summary.criticalAlerts} critical connected alerts before telemetry degrades the operating picture.`,
+        href: "/integrations"
+      }
+    ];
+  }, [context]);
 
   const aiMetrics = useMemo(() => {
     if (!context) {
@@ -218,8 +242,8 @@ export default function CopilotPage() {
       eyebrow="Context-aware AI"
       description="A contextual assistant view grounded in live commercial, operational, quality and compliance signals."
       actions={
-        <Badge tone={session.authenticated ? "success" : "warning"}>
-          {isLoading ? "refreshing" : session.authenticated ? "live context" : source}
+        <Badge tone={isDemoMode ? "warning" : "success"}>
+          {isLoading ? "refreshing" : isDemoMode ? `demo context · ${source}` : "live context"}
         </Badge>
       }
     >
@@ -251,6 +275,38 @@ export default function CopilotPage() {
                 value="6 domains"
                 footnote="Sales, procurement, compliance, quality, document control and connected operations already in context."
               />
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Copilot workflow"
+                description="This route should help humans decide what to do next, not just narrate the current state."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo operable" : "live context"}</Badge>}
+              >
+                <p className="sectionText">
+                  Read the synthesized context, choose the next recommended move and jump directly into the module where the operator can actually act.
+                </p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/crm">Open CRM</Link>
+                  <Link className="buttonGhost" href="/procurement">Open procurement</Link>
+                  <Link className="buttonGhost" href="/quality">Open quality</Link>
+                  <Link className="buttonGhost" href="/integrations">Open integrations</Link>
+                </div>
+              </Card>
+
+              <Card title="Next recommended actions" description="Directly actionable follow-ups grounded in the current cross-domain context.">
+                <div className="list compactList">
+                  {nextRecommendedActions.map((item) => (
+                    <div className="listItem" key={item.title}>
+                      <div>
+                        <strong>{item.title}</strong>
+                        <p>{item.detail}</p>
+                      </div>
+                      <Link className="buttonGhost" href={item.href}>Open</Link>
+                    </div>
+                  ))}
+                </div>
+              </Card>
             </section>
 
             <section className="grid cols2">
@@ -337,12 +393,12 @@ export default function CopilotPage() {
             title="AI copilot unavailable"
             description={error}
             primaryAction={{ label: "Open dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open integrations", href: "/integrations" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading AI copilot context" : "AI copilot not loaded yet"}
-            description="This route assembles live operating context before presenting suggestions and contextual answers."
+            description="This route assembles operating context before presenting suggestions, next moves and direct module handoff."
             primaryAction={{ label: "Open dashboard", href: "/dashboard" }}
           />
         )}

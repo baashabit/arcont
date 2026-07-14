@@ -138,8 +138,153 @@ function buildComplianceBridge(complianceCase: ComplianceCaseContract | null, br
   };
 }
 
+function buildComplianceWorkflow(complianceCase: ComplianceCaseContract | null) {
+  if (!complianceCase) {
+    return "Use compliance as the closeout governance lane linking folders, customer continuity and controlled documents.";
+  }
+
+  if (complianceCase.status === "blocked") {
+    return "A blocked compliance folder should route immediately into document control, post-sale or close control before closure assumptions are trusted.";
+  }
+
+  if (complianceCase.status === "at_risk") {
+    return "An at-risk folder should recover documentation, SLA posture and customer dependencies before it turns into a blocked closeout.";
+  }
+
+  return "An active folder should keep closure evidence, legal control and customer continuity aligned in one lane.";
+}
+
+function buildComplianceWhyNow(complianceCase: ComplianceCaseContract | null) {
+  if (!complianceCase) {
+    return "Select a compliance folder to understand why governance should care right now.";
+  }
+
+  if (complianceCase.status === "blocked" || complianceCase.slaHoursRemaining < 0) {
+    return `${complianceCase.subject} is already under blocked or breached posture, so waiting here can immediately distort handover or customer continuity.`;
+  }
+
+  if (complianceCase.openFindings > 0) {
+    return `${complianceCase.subject} still carries ${complianceCase.openFindings} open finding(s), so closure assumptions are still premature.`;
+  }
+
+  if (complianceCase.documentCompletion < 95) {
+    return `${complianceCase.subject} still lacks enough documentary completion for clean closure, so acting now prevents stale closeout debt.`;
+  }
+
+  return `${complianceCase.subject} is near closure, so the useful action now is to confirm the final dependency instead of letting the folder drift in the queue.`;
+}
+
+function buildComplianceDownstreamEffect(complianceCase: ComplianceCaseContract | null) {
+  if (!complianceCase) {
+    return "Select a folder to inspect which downstream lane absorbs the impact.";
+  }
+
+  if (complianceCase.status === "blocked") {
+    return "If this folder stays blocked, document control, post-sale and close-control will all inherit the stall next.";
+  }
+
+  if (complianceCase.openFindings > 0 || complianceCase.documentCompletion < 95) {
+    return "If findings or documentary completion remain weak, closeout, legal release and customer handover will keep looping around the same debt.";
+  }
+
+  if (complianceCase.slaHoursRemaining < 0) {
+    return "If SLA remains breached, customer continuity and governance metrics will deteriorate together.";
+  }
+
+  return "If this folder closes cleanly, close-control, post-sale and controlled-document follow-through can move without rebuilding the same governance story.";
+}
+
+function buildComplianceHumanStep(complianceCase: ComplianceCaseContract | null) {
+  if (!complianceCase) {
+    return "Select a folder to identify the next human handoff.";
+  }
+
+  if (complianceCase.status === "blocked") {
+    return "Tell the dependency owner exactly what is blocking closure and when the folder returns to active handling.";
+  }
+
+  if (complianceCase.openFindings > 0) {
+    return "Tell the responsible owner which finding still blocks closure and when governance expects the corrected package back.";
+  }
+
+  if (complianceCase.documentCompletion < 95) {
+    return "Tell document control or project closeout which evidence is still missing before anyone assumes clean closure.";
+  }
+
+  return "Tell the closeout owner and downstream team that the folder is ready for the next formal release or handover step.";
+}
+
+function buildComplianceReportBack(complianceCase: ComplianceCaseContract | null) {
+  if (!complianceCase) {
+    return "Select a folder to define when the responsible owner should report back.";
+  }
+
+  if (complianceCase.status === "blocked" || complianceCase.slaHoursRemaining < 0) {
+    return "Report back before the next closure cutoff with blocker status, owner and go/no-go for folder recovery.";
+  }
+
+  if (complianceCase.openFindings > 0) {
+    return "Report back in the same operating cycle once findings and evidence are explicit enough for governance to trust the next move.";
+  }
+
+  if (complianceCase.documentCompletion < 95) {
+    return "Report back once the missing document package is already strong enough for a credible closure decision.";
+  }
+
+  return "Report back at the next closeout checkpoint confirming the folder truly moved out of risk and into clean closure posture.";
+}
+
+function buildComplianceRouteSummary(complianceCase: ComplianceCaseContract | null) {
+  if (!complianceCase) {
+    return "Use compliance as the governance lane between document closure, customer continuity and formal handover readiness.";
+  }
+
+  if (complianceCase.status === "blocked" || complianceCase.slaHoursRemaining < 0) {
+    return "This folder should route first through blocker containment and owner recovery before handover or closeout keep depending on it.";
+  }
+
+  if (complianceCase.openFindings > 0 || complianceCase.documentCompletion < 95) {
+    return "This folder should route through findings closure and documentary completion before downstream teams assume clean governance posture.";
+  }
+
+  return "This folder can continue through post-sale and closeout with the current compliance context intact.";
+}
+
+function buildComplianceOperationalLinks(complianceCase: ComplianceCaseContract | null) {
+  if (!complianceCase) {
+    return [
+      { label: "Open document control", href: "/document-control" },
+      { label: "Open post-sale", href: "/post-sale" },
+      { label: "Open close control", href: "/close-control" }
+    ];
+  }
+
+  if (complianceCase.status === "blocked" || complianceCase.slaHoursRemaining < 0) {
+    return [
+      { label: "Open document control", href: "/document-control" },
+      { label: "Open post-sale", href: "/post-sale" },
+      { label: "Open projects", href: "/projects" }
+    ];
+  }
+
+  if (complianceCase.openFindings > 0 || complianceCase.documentCompletion < 95) {
+    return [
+      { label: "Open document control", href: "/document-control" },
+      { label: "Open close control", href: "/close-control" },
+      { label: "Open post-sale", href: "/post-sale" }
+    ];
+  }
+
+  return [
+    { label: "Open post-sale", href: "/post-sale" },
+    { label: "Open close control", href: "/close-control" },
+    { label: "Open document control", href: "/document-control" }
+  ];
+}
+
 export default function CompliancePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<ComplianceOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<ComplianceBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -154,11 +299,6 @@ export default function CompliancePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -200,7 +340,7 @@ export default function CompliancePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredCases = useMemo(() => {
     if (!overview) {
@@ -250,6 +390,12 @@ export default function CompliancePage() {
   );
 
   const selectedStory = useMemo(() => buildComplianceBridge(selectedCase, bridgeContext), [bridgeContext, selectedCase]);
+  const selectedWhyNow = useMemo(() => buildComplianceWhyNow(selectedCase), [selectedCase]);
+  const selectedDownstreamEffect = useMemo(() => buildComplianceDownstreamEffect(selectedCase), [selectedCase]);
+  const selectedHumanStep = useMemo(() => buildComplianceHumanStep(selectedCase), [selectedCase]);
+  const selectedReportBack = useMemo(() => buildComplianceReportBack(selectedCase), [selectedCase]);
+  const selectedRouteSummary = useMemo(() => buildComplianceRouteSummary(selectedCase), [selectedCase]);
+  const selectedOperationalLinks = useMemo(() => buildComplianceOperationalLinks(selectedCase), [selectedCase]);
 
   const actionOptions = useMemo(() => (selectedCase ? complianceActionOptions(selectedCase) : []), [selectedCase]);
 
@@ -276,7 +422,7 @@ export default function CompliancePage() {
   }, [selectedCaseId, selectedCase?.id, selectedCase?.nextAction]);
 
   async function handleCaseAction(status: ComplianceCaseContract["status"], suggestedNextAction: string) {
-    if (!selectedCase || !session.accessToken) {
+    if (!selectedCase) {
       return;
     }
 
@@ -375,7 +521,56 @@ export default function CompliancePage() {
               />
             </section>
 
+            <section className="grid cols1">
+              <Card
+                title="Closeout workflow"
+                description="This route should already connect legal folders, controlled documents and customer continuity into one closeout motion."
+              >
+                <p className="sectionText">
+                  Work the folder, change its status, inspect the linked document and customer dependency, then continue into
+                  `document-control`, `post-sale`, `close-control` or `projects` depending on what is blocking clean closure.
+                </p>
+              </Card>
+            </section>
+
             <section className="grid cols2">
+              <Card
+                title="Compliance continuity"
+                description="Compliance should bridge closeout governance, customer continuity and controlled documents instead of acting as a detached queue."
+                aside={<Badge tone={filteredSummary.atRiskCases > 0 ? "danger" : filteredSummary.openFindings > 0 ? "warning" : "success"}>{filteredSummary.atRiskCases > 0 ? "risk queue" : filteredSummary.openFindings > 0 ? "open findings" : "stable queue"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildComplianceWorkflow(selectedCase)}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Governance use</div><div>Use this module to decide whether the next move belongs to documents, post-sale, close control or project closeout.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Expected jump</div><div>After reading the folder posture, jump into the dependency that is really preventing clean closure.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/post-sale">Open post-sale</Link>
+                  <Link className="buttonGhost" href="/document-control">Open document control</Link>
+                  <Link className="buttonGhost" href="/close-control">Open close control</Link>
+                  <Link className="buttonGhost" href="/projects">Open projects</Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Compliance walkthrough"
+                description="Work legal, handover and warranty folders as an operable queue, even before the final backend exists."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    This screen is now ready for human trials: filter folders, change status, inspect linked post-sale and document-control pressure.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">compliance</Badge>
+                    <Badge tone="info">post-sale</Badge>
+                    <Badge tone="info">document control</Badge>
+                  </div>
+                </div>
+              </Card>
+
               <Card title="Compliance board" description="Live legal, post-sale and handover queues tied to the active tenant.">
                 <FilterBar summary={`${filteredCases.length} compliance queues in the active tenant`}>
                   <select
@@ -406,9 +601,7 @@ export default function CompliancePage() {
                     onChange={(event) => setSearchFilter(event.target.value)}
                     placeholder="Search subject, queue, contract or code"
                   />
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
-                  </Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "compliance ready"}</Badge>
                 </FilterBar>
                 <DataTable
@@ -484,6 +677,26 @@ export default function CompliancePage() {
                       <div>{selectedCase.documentCompletion}%</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report back</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Next action</div>
                       <div>
                         <input
@@ -497,18 +710,11 @@ export default function CompliancePage() {
                     <div className="detailRow">
                       <div className="detailLabel">Operational links</div>
                       <div className="row gap wrap">
-                        <Link className="buttonGhost" href="/post-sale">
-                          Open post-sale
-                        </Link>
-                        <Link className="buttonGhost" href="/document-control">
-                          Open document control
-                        </Link>
-                        <Link className="buttonGhost" href="/close-control">
-                          Open close control
-                        </Link>
-                        <Link className="buttonGhost" href="/projects">
-                          Open projects
-                        </Link>
+                        {selectedOperationalLinks.map((link, index) => (
+                          <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
                       </div>
                     </div>
                     <div className="detailRow">
@@ -625,12 +831,12 @@ export default function CompliancePage() {
             title="Compliance overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open post-sale", href: "/post-sale" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading compliance overview" : "Compliance overview not loaded yet"}
-            description="This route now expects a live backend compliance response for the active tenant."
+            description="Open a compliance folder to test the legal, handover and warranty lane in demo mode or against the live tenant backend."
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

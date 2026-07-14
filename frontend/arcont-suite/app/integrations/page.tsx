@@ -60,6 +60,7 @@ function buildStreamImpact(stream: IntegrationStreamContract | null, riskCount: 
 
 export default function IntegrationsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<IntegrationOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,11 +73,6 @@ export default function IntegrationsPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -107,7 +103,7 @@ export default function IntegrationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredStreams = useMemo(() => {
     if (!overview) {
@@ -157,6 +153,32 @@ export default function IntegrationsPage() {
     () => buildStreamImpact(selectedStream, selectedRisks.length),
     [selectedRisks.length, selectedStream]
   );
+  const workflowSignal = useMemo(() => {
+    if (!selectedStream) {
+      return null;
+    }
+
+    return {
+      continuity:
+        selectedStream.health === "critical"
+          ? `${selectedStream.streamName} is directly compromising field continuity and should be stabilized before more execution evidence is trusted.`
+          : selectedStream.health === "watch"
+            ? `${selectedStream.streamName} is still usable, but humans should keep working while the telemetry path is corrected.`
+            : `${selectedStream.streamName} is stable enough to support field and control workflows right now.`,
+      crossModule:
+        selectedStream.domain === "Telemetry"
+          ? "This stream should stay tied to field, quality and copilot because sensor drift becomes an execution problem quickly."
+          : selectedStream.domain === "Connectivity"
+            ? "This stream should stay tied to field, document control and remote site supervision because link quality affects real daily operation."
+            : "This stream should stay tied to projects, field and AI handoff because connected data is only useful if it remains actionable.",
+      nextMove:
+        selectedStream.health === "critical"
+          ? "Protect the site workflow first, then restore freshness, then close alerts."
+          : selectedStream.health === "watch"
+            ? "Reduce alerts and recover freshness before promoting the stream back to healthy."
+            : "Keep monitoring coverage and freshness so the stream does not silently degrade."
+    };
+  }, [selectedStream]);
 
   useEffect(() => {
     if (!overview) {
@@ -223,7 +245,7 @@ export default function IntegrationsPage() {
     suggestedNextAction: string,
     successMessage?: string
   ) {
-    if (!selectedStream || !session.accessToken) {
+    if (!selectedStream) {
       return;
     }
 
@@ -338,6 +360,36 @@ export default function IntegrationsPage() {
             </section>
 
             <section className="grid cols2">
+              <Card
+                title="Connected workflow"
+                description="This route should already behave like an operable supervision surface, not just a telemetry wall."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo operable" : "live backend"}</Badge>}
+              >
+                <p className="sectionText">
+                  Open a stream, update the next action and move it one step at a time between `critical`, `watch` and `healthy` while checking whether field, quality and document flows remain protected.
+                </p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/field">Open field</Link>
+                  <Link className="buttonGhost" href="/projects">Open projects</Link>
+                  <Link className="buttonGhost" href="/document-control">Open document control</Link>
+                  <Link className="buttonGhost" href="/copilot">Open copilot</Link>
+                </div>
+              </Card>
+
+              <Card
+                title="Next recommended move"
+                description="Fast operator guidance from the selected connected stream."
+                aside={selectedStream ? <Badge tone={healthTone(selectedStream.health)}>{selectedStream.health}</Badge> : null}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Continuity</div><div>{workflowSignal?.continuity ?? "Choose a stream to inspect continuity."}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Cross-module read</div><div>{workflowSignal?.crossModule ?? "Choose a stream to inspect cross-module impact."}</div></div>
+                  <div className="detailRow"><div className="detailLabel">Recommended move</div><div>{workflowSignal?.nextMove ?? "Choose a stream to inspect the next move."}</div></div>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
               <Card title="Connected stack" description="Live stream health across BIM, telemetry, drones and remote site connectivity.">
                 <FilterBar summary={`${filteredStreams.length} integration streams match the current operating filters`}>
                   <label className="fieldLabel">
@@ -359,8 +411,8 @@ export default function IntegrationsPage() {
                       placeholder="Stream, domain or next action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? `demo mode · ${source}` : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "integrations ready"}</Badge>
                   <Badge tone={filteredSummary.criticalAlerts > 0 ? "danger" : filteredStreams.some((item) => item.health === "watch") ? "warning" : "success"}>
@@ -603,12 +655,12 @@ export default function IntegrationsPage() {
             title="Integration overview unavailable"
             description={error}
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Review login", href: "/login" }}
+            secondaryAction={{ label: "Open field", href: "/field" }}
           />
         ) : (
           <EmptyState
             title={isLoading ? "Loading integration overview" : "Integration overview not loaded yet"}
-            description="This route now expects a live backend integration response for the active tenant."
+            description="This route assembles connected telemetry so humans can operate supervision, field recovery and AI handoff from one place."
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

@@ -76,6 +76,365 @@ type RecentSiteSignalGroup = {
   tone: "success" | "warning" | "danger" | "info";
 };
 
+type DemoExecutiveSnapshot = {
+  crm: NonNullable<Awaited<ReturnType<typeof fetchCrmOverview>>>;
+  projects: NonNullable<Awaited<ReturnType<typeof fetchProjectsOverview>>>;
+  equipment: NonNullable<Awaited<ReturnType<typeof fetchEquipmentOverview>>>;
+  postSale: NonNullable<Awaited<ReturnType<typeof fetchPostSaleOverview>>>;
+};
+
+type ExecutiveAlertRow = {
+  area: string;
+  signal: string;
+  owner: string;
+  posture: string;
+};
+
+function buildDashboardAlertHref(area: string) {
+  switch (area) {
+    case "Sales":
+      return "/crm";
+    case "Compliance":
+      return "/compliance";
+    case "Procurement":
+      return "/procurement/requisitions";
+    case "Purchase orders":
+      return "/procurement/purchase-orders";
+    case "Supplier control":
+      return "/supplier-control";
+    case "Supplier master":
+      return "/supplier-master";
+    case "Accounts payable":
+      return "/accounts-payable";
+    case "Projects":
+      return "/projects";
+    case "Field materials":
+      return "/procurement/requisitions";
+    case "Daily log":
+      return "/daily-log";
+    case "Quality":
+      return "/quality";
+    case "Subcontracts":
+      return "/subcontracts";
+    case "Equipment":
+      return "/equipment";
+    case "Receiving":
+      return "/inventory/receiving";
+    case "Movements":
+      return "/inventory/movements";
+    case "Collections":
+      return "/estimations";
+    case "Cash flow":
+      return "/cash-flow";
+    case "Treasury runs":
+      return "/treasury/payment-runs";
+    case "Post-sale":
+      return "/post-sale";
+    case "Document control":
+      return "/document-control";
+    default:
+      return "/operations";
+  }
+}
+
+function buildDashboardRouteLabel(href: string) {
+  switch (href) {
+    case "/crm":
+      return "Open CRM";
+    case "/compliance":
+      return "Open compliance";
+    case "/procurement/requisitions":
+      return "Open requisitions";
+    case "/procurement/purchase-orders":
+      return "Open purchase orders";
+    case "/supplier-control":
+      return "Open supplier control";
+    case "/supplier-master":
+      return "Open supplier master";
+    case "/accounts-payable":
+      return "Open payables";
+    case "/projects":
+      return "Open projects";
+    case "/daily-log":
+      return "Open daily log";
+    case "/quality":
+      return "Open quality";
+    case "/subcontracts":
+      return "Open subcontracts";
+    case "/equipment":
+      return "Open equipment";
+    case "/inventory/receiving":
+      return "Open receiving";
+    case "/inventory/movements":
+      return "Open movements";
+    case "/estimations":
+      return "Open collections";
+    case "/cash-flow":
+      return "Open cash flow";
+    case "/treasury/payment-runs":
+      return "Open treasury";
+    case "/post-sale":
+      return "Open post-sale";
+    case "/document-control":
+      return "Open document control";
+    default:
+      return "Open operations";
+  }
+}
+
+function alertToneFromPosture(posture: string) {
+  const normalized = posture.toLowerCase();
+
+  if (
+    normalized.includes("critical") ||
+    normalized.includes("blocked") ||
+    normalized.includes("rejected") ||
+    normalized.includes("overdue")
+  ) {
+    return "danger" as const;
+  }
+
+  if (
+    normalized.includes("watch") ||
+    normalized.includes("warning") ||
+    normalized.includes("pending") ||
+    normalized.includes("at_risk") ||
+    normalized.includes("hold")
+  ) {
+    return "warning" as const;
+  }
+
+  if (
+    normalized.includes("healthy") ||
+    normalized.includes("approved") ||
+    normalized.includes("paid") ||
+    normalized.includes("controlled") ||
+    normalized.includes("ready")
+  ) {
+    return "success" as const;
+  }
+
+  return "info" as const;
+}
+
+function alertPriorityScore(row: ExecutiveAlertRow, jumps: string[]) {
+  const href = buildDashboardAlertHref(row.area);
+  const tone = alertToneFromPosture(row.posture);
+
+  let score = 0;
+
+  if (href === jumps[0]) {
+    score += 100;
+  } else if (jumps.includes(href)) {
+    score += 60;
+  }
+
+  if (tone === "danger") {
+    score += 30;
+  } else if (tone === "warning") {
+    score += 15;
+  }
+
+  return score;
+}
+
+function buildDashboardWorkflow(snapshot: ExecutiveSnapshot | null, demoSnapshot: DemoExecutiveSnapshot | null) {
+  if (snapshot) {
+    return "Use dashboard as the executive command layer: read pressure, choose the broken lane, then jump into projects, operations, finance or field to act.";
+  }
+
+  if (demoSnapshot) {
+    return "Use dashboard in demo mode to validate executive reading across sales, projects, equipment and handover even before the full live graph is connected.";
+  }
+
+  return "Dashboard should summarize pressure and send leadership into the exact module that resolves the issue.";
+}
+
+function buildExecutiveActionGate(snapshot: ExecutiveSnapshot | null, executiveKpis: { blackboardPressure: number; fieldChainPressure: number; supplyRisk: number; financeChainPressure: number; operatingHealth: number; } | null) {
+  if (!snapshot || !executiveKpis) {
+    return {
+      tone: "info" as const,
+      label: "No executive snapshot",
+      summary: "Load the live board to identify whether direction should react to field, supply, finance or closeout pressure.",
+      brokenLane: "No executive lane in focus yet.",
+      owner: "Direction / PMO",
+      jumps: ["/operations", "/projects"]
+    };
+  }
+
+  const closeoutPressure = snapshot.compliance.summary.atRiskCases + snapshot.documentControl.summary.openRfis + snapshot.postSale.summary.openCases;
+  const financePressure = snapshot.accountsPayable.summary.blockedInvoices + snapshot.treasury.summary.blockedRuns + snapshot.cashFlow.summary.criticalStreams;
+
+  if (financePressure >= 6 || executiveKpis.financeChainPressure >= 12) {
+    return {
+      tone: "danger" as const,
+      label: "Executive blocker",
+      summary: "Finance release is now the hardest blocker and should be treated before more operating work is pushed downstream.",
+      brokenLane: "Finance chain: blocked invoices, treasury release or critical cash streams are already constraining continuity.",
+      owner: "Finance lead + treasury",
+      jumps: ["/finance", "/accounts-payable", "/treasury/payment-runs"]
+    };
+  }
+
+  if (executiveKpis.fieldChainPressure >= 12) {
+    return {
+      tone: "danger" as const,
+      label: "Executive blocker",
+      summary: "Field continuity is already broken across daily logs, quality, equipment and live material demand.",
+      brokenLane: "Field chain: execution risk is propagating from site into release, equipment and supply continuity.",
+      owner: "Operations + field leadership",
+      jumps: ["/operations", "/field", "/quality"]
+    };
+  }
+
+  if (executiveKpis.supplyRisk >= 12) {
+    return {
+      tone: "warning" as const,
+      label: "Operate with control",
+      summary: "Supply pressure is accumulating, so direction should steer procurement, suppliers and receiving before it freezes the field.",
+      brokenLane: "Supply chain: procurement, suppliers, inbound receipts or inventory movement still carry unstable pressure.",
+      owner: "Procurement + supply control",
+      jumps: ["/procurement/requisitions", "/supplier-control", "/inventory/receiving"]
+    };
+  }
+
+  if (closeoutPressure >= 8 || executiveKpis.blackboardPressure >= 20) {
+    return {
+      tone: "warning" as const,
+      label: "Operate with control",
+      summary: "Closeout pressure is visible across compliance, document control and post-sale, so leadership should clear the closure lane before promising continuity.",
+      brokenLane: "Closeout lane: documents, compliance folders or customer cases still threaten clean continuity.",
+      owner: "Customer care + compliance",
+      jumps: ["/compliance", "/document-control", "/post-sale"]
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for continuity",
+    summary: "The board is stable enough for direction to keep steering portfolio rhythm instead of reacting to a broken lane.",
+    brokenLane: "No single lane dominates the board right now; leadership can work from portfolio cadence.",
+    owner: "Direction / PMO",
+    jumps: ["/projects", "/operations", "/finance"]
+  };
+}
+
+function buildExecutiveHumanStep(snapshot: ExecutiveSnapshot | null, executiveKpis: { blackboardPressure: number; fieldChainPressure: number; supplyRisk: number; financeChainPressure: number; operatingHealth: number; } | null) {
+  if (!snapshot || !executiveKpis) {
+    return "Load the executive board to identify the next human move.";
+  }
+
+  const gate = buildExecutiveActionGate(snapshot, executiveKpis);
+
+  if (gate.jumps[0] == "/finance") {
+    return "Open finance first, clear the blocked invoice or treasury release at the top of the chain, then return to dashboard to verify if operational pressure falls.";
+  }
+
+  if (gate.jumps[0] == "/operations") {
+    return "Jump into operations, identify the live field blocker, then validate quality and field follow-through in the same operating cycle.";
+  }
+
+  if (gate.jumps[0] == "/procurement/requisitions") {
+    return "Pull procurement and supplier control into the same conversation, protect inbound continuity and only then restart downstream promises.";
+  }
+
+  if (gate.jumps[0] == "/compliance") {
+    return "Review compliance and document-control pressure together, clear the real closure dependency and keep customer continuity aligned before escalating externally.";
+  }
+
+  return "Use the stable board to review portfolio cadence, confirm priorities and keep the next module jump intentional instead of reactive.";
+}
+
+function buildExecutiveWhyNow(snapshot: ExecutiveSnapshot | null, executiveKpis: { blackboardPressure: number; fieldChainPressure: number; supplyRisk: number; financeChainPressure: number; operatingHealth: number; } | null) {
+  if (!snapshot || !executiveKpis) {
+    return "Load the executive board to understand why the current broken lane matters right now.";
+  }
+
+  const gate = buildExecutiveActionGate(snapshot, executiveKpis);
+
+  if (gate.jumps[0] === "/finance") {
+    return "Finance is already constraining release continuity, so leadership delay here can cascade into payment, supply and operating confidence.";
+  }
+
+  if (gate.jumps[0] === "/operations") {
+    return "Field-chain pressure is already live, so staying only at dashboard level delays containment in the real execution lane.";
+  }
+
+  if (gate.jumps[0] === "/procurement/requisitions") {
+    return "Supply pressure is close enough to the field that procurement delay can quickly become site continuity loss.";
+  }
+
+  if (gate.jumps[0] === "/compliance") {
+    return "Closeout pressure is already threatening formal continuity, so direction should clear the closure lane before promising stability.";
+  }
+
+  return "No single lane dominates, so leadership can use dashboard as a rhythm board rather than an emergency queue.";
+}
+
+function buildExecutiveDownstreamEffect(snapshot: ExecutiveSnapshot | null, executiveKpis: { blackboardPressure: number; fieldChainPressure: number; supplyRisk: number; financeChainPressure: number; operatingHealth: number; } | null) {
+  if (!snapshot || !executiveKpis) {
+    return "Load the executive board to inspect what the broken lane can block downstream.";
+  }
+
+  const gate = buildExecutiveActionGate(snapshot, executiveKpis);
+
+  if (gate.jumps[0] === "/finance") {
+    return "The downstream effect is payment release, supplier confidence and treasury continuity across the operating chain.";
+  }
+
+  if (gate.jumps[0] === "/operations") {
+    return "The downstream effect is site continuity: field, quality, equipment and material movement can all degrade together.";
+  }
+
+  if (gate.jumps[0] === "/procurement/requisitions") {
+    return "The downstream effect is inbound continuity, warehouse readiness and eventual field stoppage if supply does not stabilize.";
+  }
+
+  if (gate.jumps[0] === "/compliance") {
+    return "The downstream effect is closeout, document integrity and customer-facing continuity.";
+  }
+
+  return "The downstream effect is mostly portfolio rhythm: preserve cadence across projects, operations and finance without creating a new broken lane.";
+}
+
+function buildExecutiveReportBack(snapshot: ExecutiveSnapshot | null, executiveKpis: { blackboardPressure: number; fieldChainPressure: number; supplyRisk: number; financeChainPressure: number; operatingHealth: number; } | null) {
+  if (!snapshot || !executiveKpis) {
+    return "Load the executive board to define the next report-back window.";
+  }
+
+  const gate = buildExecutiveActionGate(snapshot, executiveKpis);
+
+  if (gate.tone === "danger") {
+    return "Report back before the next executive cutoff with containment status, owner confirmation and proof that pressure actually dropped.";
+  }
+
+  if (gate.tone === "warning") {
+    return "Report back in the same operating cycle once the unstable lane is under control and the next owner is explicit.";
+  }
+
+  return "Report back on the next portfolio rhythm check confirming no new broken lane displaced the current stable posture.";
+}
+
+function buildExecutiveOwnerRoute(snapshot: ExecutiveSnapshot | null, executiveKpis: { blackboardPressure: number; fieldChainPressure: number; supplyRisk: number; financeChainPressure: number; operatingHealth: number; } | null) {
+  const gate = buildExecutiveActionGate(snapshot, executiveKpis);
+
+  return `The active owner route is ${gate.owner} through ${gate.jumps[0]}, and leadership should stay there until the first broken lane is genuinely absorbed.`;
+}
+
+function buildExecutiveReviewCondition(snapshot: ExecutiveSnapshot | null, executiveKpis: { blackboardPressure: number; fieldChainPressure: number; supplyRisk: number; financeChainPressure: number; operatingHealth: number; } | null) {
+  const gate = buildExecutiveActionGate(snapshot, executiveKpis);
+
+  if (gate.tone === "danger") {
+    return "Return to dashboard only after the first broken lane shows proof of containment and no second lane has become the new primary risk.";
+  }
+
+  if (gate.tone === "warning") {
+    return "Return to dashboard once the unstable lane is controlled enough that leadership can safely recheck the wider chain.";
+  }
+
+  return "Review dashboard again on the next rhythm check or if a new domain starts displacing the current stable posture.";
+}
+
 export default function DashboardPage() {
   const {
     activeCompany,
@@ -91,7 +450,9 @@ export default function DashboardPage() {
     apiBaseUrl,
     session
   } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [snapshot, setSnapshot] = useState<ExecutiveSnapshot | null>(null);
+  const [demoSnapshot, setDemoSnapshot] = useState<DemoExecutiveSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
 
@@ -106,14 +467,42 @@ export default function DashboardPage() {
   }, [activeCompany.id, auditEvents.length, dashboardSummary, refreshAuditTrail, refreshDashboard]);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setSnapshot(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoadingSnapshot(true);
     setSnapshotError(null);
+
+    if (!session.authenticated || !session.accessToken) {
+      void Promise.all([
+        fetchCrmOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+        fetchProjectsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+        fetchEquipmentOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
+        fetchPostSaleOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken })
+      ])
+        .then(([crm, projects, equipment, postSale]) => {
+          if (cancelled) {
+            return;
+          }
+
+          setSnapshot(null);
+
+          if (!crm || !projects || !equipment || !postSale) {
+            setDemoSnapshot(null);
+            setSnapshotError("Executive dashboard could not assemble the demo operating signals.");
+            return;
+          }
+
+          setDemoSnapshot({ crm, projects, equipment, postSale });
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsLoadingSnapshot(false);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
 
     void Promise.all([
       fetchCrmOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken }),
@@ -219,6 +608,7 @@ export default function DashboardPage() {
           finance,
           documentControl
         });
+        setDemoSnapshot(null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -567,8 +957,108 @@ export default function DashboardPage() {
       )
     };
   }, [snapshot]);
+  const executiveActionGate = useMemo(() => buildExecutiveActionGate(snapshot, executiveKpis), [executiveKpis, snapshot]);
+  const executiveHumanStep = useMemo(() => buildExecutiveHumanStep(snapshot, executiveKpis), [executiveKpis, snapshot]);
+  const executiveWhyNow = useMemo(() => buildExecutiveWhyNow(snapshot, executiveKpis), [executiveKpis, snapshot]);
+  const executiveDownstreamEffect = useMemo(() => buildExecutiveDownstreamEffect(snapshot, executiveKpis), [executiveKpis, snapshot]);
+  const executiveReportBack = useMemo(() => buildExecutiveReportBack(snapshot, executiveKpis), [executiveKpis, snapshot]);
+  const executiveOwnerRoute = useMemo(() => buildExecutiveOwnerRoute(snapshot, executiveKpis), [executiveKpis, snapshot]);
+  const executiveReviewCondition = useMemo(() => buildExecutiveReviewCondition(snapshot, executiveKpis), [executiveKpis, snapshot]);
+  const supplyChainRoute = useMemo(() => {
+    if (!snapshot) {
+      return [];
+    }
 
-  const alertRows = useMemo(() => {
+    return [
+      {
+        label: "Field demand",
+        detail:
+          snapshot.fieldMaterials.focusRequest
+            ? `${snapshot.fieldMaterials.focusRequest.frontName} · ${snapshot.fieldMaterials.focusRequest.summary}`
+            : "No active field request in focus.",
+        count: snapshot.fieldMaterials.summary.openRequests + snapshot.fieldMaterials.summary.criticalRequests,
+        href: "/field",
+        cta: "Open field",
+        tone:
+          snapshot.fieldMaterials.summary.criticalRequests > 0
+            ? "danger"
+            : snapshot.fieldMaterials.summary.openRequests > 0
+              ? "warning"
+              : "success"
+      },
+      {
+        label: "Requisition intake",
+        detail:
+          snapshot.procurementPurchaseOrders.focusPurchaseOrder?.requisitionCode ??
+          snapshot.procurement.focusPackage?.code ??
+          "No requisition currently in focus.",
+        count: snapshot.procurement.summary.openRequisitions,
+        href: "/procurement/requisitions",
+        cta: "Open requisitions",
+        tone:
+          snapshot.procurement.summary.openRequisitions > 0
+            ? "warning"
+            : "success"
+      },
+      {
+        label: "PO execution",
+        detail:
+          snapshot.procurementPurchaseOrders.focusPurchaseOrder
+            ? `${snapshot.procurementPurchaseOrders.focusPurchaseOrder.code} · ${snapshot.procurementPurchaseOrders.focusPurchaseOrder.status}`
+            : "No purchase order currently in focus.",
+        count:
+          snapshot.procurementPurchaseOrders.summary.inTransitOrders +
+          snapshot.procurementPurchaseOrders.summary.blockedOrders,
+        href: "/procurement/purchase-orders",
+        cta: "Open purchase orders",
+        tone:
+          snapshot.procurementPurchaseOrders.summary.blockedOrders > 0
+            ? "danger"
+            : snapshot.procurementPurchaseOrders.summary.inTransitOrders > 0
+              ? "warning"
+              : "success"
+      },
+      {
+        label: "Inbound receiving",
+        detail:
+          snapshot.inventoryReceiving.focusReceipt
+            ? `${snapshot.inventoryReceiving.focusReceipt.code} · ${snapshot.inventoryReceiving.focusReceipt.status}`
+            : "No receipt currently in focus.",
+        count:
+          snapshot.inventoryReceiving.summary.blockedReceipts +
+          snapshot.inventoryReceiving.summary.receiptsAtCommercialRisk,
+        href: "/inventory/receiving",
+        cta: "Open receiving",
+        tone:
+          snapshot.inventoryReceiving.summary.blockedReceipts > 0 ||
+          snapshot.inventoryReceiving.summary.receiptsAtCommercialRisk > 0
+            ? "danger"
+            : snapshot.inventoryReceiving.summary.overdueEta > 0
+              ? "warning"
+              : "success"
+      },
+      {
+        label: "Financial release",
+        detail:
+          snapshot.accountsPayable.focusInvoice?.code ??
+          snapshot.treasury.focusRun?.code ??
+          snapshot.finance.command.headline,
+        count:
+          snapshot.accountsPayable.summary.blockedInvoices +
+          snapshot.treasury.summary.blockedRuns,
+        href: "/accounts-payable",
+        cta: "Open finance chain",
+        tone:
+          snapshot.accountsPayable.summary.blockedInvoices > 0 || snapshot.treasury.summary.blockedRuns > 0
+            ? "danger"
+            : snapshot.finance.command.laneStatus === "watch"
+              ? "warning"
+              : "success"
+      }
+    ];
+  }, [snapshot]);
+
+  const alertRows = useMemo<ExecutiveAlertRow[]>(() => {
     if (!snapshot) {
       return [];
     }
@@ -701,14 +1191,28 @@ export default function DashboardPage() {
     ];
   }, [snapshot]);
 
+  const priorityActionRows = useMemo(
+    () =>
+      alertRows
+        .map((row) => ({
+          ...row,
+          href: buildDashboardAlertHref(row.area),
+          tone: alertToneFromPosture(row.posture),
+          score: alertPriorityScore(row, executiveActionGate.jumps)
+        }))
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 4),
+    [alertRows, executiveActionGate.jumps]
+  );
+
   return (
     <AppShell
       title="Executive dashboard"
       eyebrow="Direction layer"
       description="Cross-area decision support for sales, supply, compliance and operating risk in one live board."
       actions={
-        <Badge tone={source === "api" ? "success" : "warning"}>
-          {isRefreshingPlatform || isLoadingSnapshot ? "refreshing" : `${source} data source`}
+        <Badge tone={isDemoMode ? "warning" : "success"}>
+          {isRefreshingPlatform || isLoadingSnapshot ? "refreshing" : isDemoMode ? "demo operable" : "live backend"}
         </Badge>
       }
     >
@@ -811,6 +1315,76 @@ export default function DashboardPage() {
           </section>
 
           <section className="grid cols2">
+            <Card
+              title="Executive workflow"
+              description="Dashboard should not stop at visibility; it should route directors and PMO into the next working lane immediately."
+              aside={<Badge tone={executiveActionGate.tone}>{executiveActionGate.label}</Badge>}
+            >
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildDashboardWorkflow(snapshot, demoSnapshot)}</div></div>
+                <div className="detailRow"><div className="detailLabel">Executive state</div><div>{executiveActionGate.summary}</div></div>
+                <div className="detailRow"><div className="detailLabel">Broken lane</div><div>{executiveActionGate.brokenLane}</div></div>
+                <div className="detailRow"><div className="detailLabel">Owner to activate</div><div>{executiveActionGate.owner}</div></div>
+                <div className="detailRow"><div className="detailLabel">Why now</div><div>{executiveWhyNow}</div></div>
+                <div className="detailRow"><div className="detailLabel">Owner route</div><div>{executiveOwnerRoute}</div></div>
+                <div className="detailRow"><div className="detailLabel">Leadership use</div><div>Read cross-domain pressure first, then move into the exact execution lane that explains or resolves it.</div></div>
+                <div className="detailRow"><div className="detailLabel">Main jumps</div><div>Projects for portfolio posture, Operations for blackboard sequencing, Finance for release chain, Field for frontline continuity.</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className={executiveActionGate.jumps[0] === "/operations" ? "button" : "buttonGhost"} href="/operations">Open operations</Link>
+                <Link className={executiveActionGate.jumps[0] === "/projects" ? "button" : "buttonGhost"} href="/projects">Open projects</Link>
+                <Link className={executiveActionGate.jumps[0] === "/finance" ? "button" : "buttonGhost"} href="/finance">Open finance</Link>
+                <Link className={executiveActionGate.jumps[0] === "/field" ? "button" : "buttonGhost"} href="/field">Open field</Link>
+                <Link className={executiveActionGate.jumps[0] === "/compliance" ? "button" : "buttonGhost"} href="/compliance">Open compliance</Link>
+                <Link className={executiveActionGate.jumps[0] === "/document-control" ? "button" : "buttonGhost"} href="/document-control">Open document control</Link>
+              </div>
+            </Card>
+
+            <Card title="Executive next move" description="A human-readable instruction for what direction should do next, not just what the numbers say.">
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Next human step</div><div>{executiveHumanStep}</div></div>
+                <div className="detailRow"><div className="detailLabel">Priority jump</div><div>{executiveActionGate.jumps[0]}</div></div>
+                <div className="detailRow"><div className="detailLabel">Secondary jumps</div><div>{executiveActionGate.jumps.slice(1).join(" -> ")}</div></div>
+                <div className="detailRow"><div className="detailLabel">Downstream effect</div><div>{executiveDownstreamEffect}</div></div>
+                <div className="detailRow"><div className="detailLabel">Report back</div><div>{executiveReportBack}</div></div>
+                <div className="detailRow"><div className="detailLabel">Review condition</div><div>{executiveReviewCondition}</div></div>
+                <div className="detailRow"><div className="detailLabel">Operating rule</div><div>Resolve the first broken lane, then come back to dashboard and verify whether pressure actually dropped across the rest of the chain.</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                {executiveActionGate.jumps.map((jump, index) => (
+                  <Link key={jump} className={index === 0 ? "button" : "buttonGhost"} href={jump}>
+                    {jump === "/operations"
+                      ? "Open operations"
+                      : jump === "/projects"
+                        ? "Open projects"
+                        : jump === "/finance"
+                          ? "Open finance"
+                          : jump === "/field"
+                            ? "Open field"
+                            : jump === "/compliance"
+                              ? "Open compliance"
+                              : jump === "/document-control"
+                                ? "Open document control"
+                                : jump === "/accounts-payable"
+                                  ? "Open payables"
+                                  : jump === "/treasury/payment-runs"
+                                    ? "Open treasury"
+                                    : jump === "/quality"
+                                      ? "Open quality"
+                                      : jump === "/procurement/requisitions"
+                                        ? "Open requisitions"
+                                        : jump === "/supplier-control"
+                                          ? "Open supplier control"
+                                          : jump === "/inventory/receiving"
+                                            ? "Open receiving"
+                                            : jump}
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          </section>
+
+          <section className="grid cols2">
             <Card title="Latest project intake" description="Newest portfolio record already available for downstream field execution.">
               <div className="detailGrid">
                 <div className="detailRow"><div className="detailLabel">Project</div><div>{snapshot.projects.projects[0]?.name ?? "No project available"}</div></div>
@@ -869,6 +1443,25 @@ export default function DashboardPage() {
                 <Link className="button" href="/procurement/requisitions">Open requisitions</Link>
                 <Link className="buttonGhost" href="/procurement/purchase-orders">Open purchase orders</Link>
                 <Link className="buttonGhost" href="/inventory/receiving">Open receiving</Link>
+              </div>
+            </Card>
+
+            <Card title="Supply Chain Walkthrough" description="Follow the exact operating route from field demand to payment release without losing executive context.">
+              <div className="list">
+                {supplyChainRoute.map((step) => (
+                  <div className="listItem" key={step.label}>
+                    <div>
+                      <strong>{step.label}</strong>
+                      <p>{step.detail}</p>
+                    </div>
+                    <div className="row gap wrap">
+                      <Badge tone={step.tone as "success" | "warning" | "danger" | "info"}>{step.count}</Badge>
+                      <Link className="buttonGhost" href={step.href}>
+                        {step.cta}
+                      </Link>
+                    </div>
+                  </div>
+                ))}
               </div>
             </Card>
 
@@ -1047,6 +1640,105 @@ export default function DashboardPage() {
                       <p>{row.signal}</p>
                     </div>
                     <Badge tone="neutral">{row.owner}</Badge>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </section>
+        </>
+      ) : demoSnapshot ? (
+        <>
+          <section className="grid cols4">
+            <KpiCard
+              label="Active projects"
+              value={String(demoSnapshot.projects.summary.activeProjects)}
+              footnote="Demo portfolio already usable without production login."
+            />
+            <KpiCard
+              label="Execution risk"
+              value={String(demoSnapshot.projects.summary.executionRiskProjects)}
+              footnote="Projects already under field, quality or subcontract pressure."
+            />
+            <KpiCard
+              label="Tracked machines"
+              value={String(demoSnapshot.equipment.summary.trackedMachines)}
+              footnote="Fleet currently mapped to the active tenant walkthrough."
+            />
+            <KpiCard
+              label="Customer pressure"
+              value={String(demoSnapshot.postSale.summary.openCases)}
+              footnote="Deliveries and warranties already visible for human walkthroughs."
+            />
+          </section>
+
+          <section className="grid cols3">
+            <Card
+              title="Demo walkthrough ready"
+              description="Direction can already validate the executive flow before the full tenant backend is connected."
+              aside={<Badge tone="warning">browser-persisted</Badge>}
+            >
+              <div className="detailGrid">
+                <div className="detailRow">
+                  <div className="detailLabel">Focus project</div>
+                  <div>{demoSnapshot.projects.focusProject?.name ?? demoSnapshot.projects.projects[0]?.name ?? "No project available"}</div>
+                </div>
+                <div className="detailRow">
+                  <div className="detailLabel">Next milestone</div>
+                  <div>{demoSnapshot.projects.focusProject?.nextMilestone ?? "No milestone captured yet."}</div>
+                </div>
+                <div className="detailRow">
+                  <div className="detailLabel">Asset in focus</div>
+                  <div>{demoSnapshot.equipment.focusMachine?.machineName ?? "No machine in focus."}</div>
+                </div>
+                <div className="detailRow">
+                  <div className="detailLabel">Commercial focus</div>
+                  <div>{demoSnapshot.crm.focusBucket?.projectName ?? demoSnapshot.crm.leadBuckets[0]?.projectName ?? "No sales bucket available"}</div>
+                </div>
+                <div className="detailRow">
+                  <div className="detailLabel">Recommended flow</div>
+                  <div>Home / CRM / Projects / Field / Equipment / Post-sale. This walkthrough is already testable by human users.</div>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Commercial and customer pulse" description="The demo home now carries revenue pressure and customer continuity, not only execution telemetry.">
+              <div className="list">
+                <div className="listItem">
+                  <div>
+                    <strong>Qualified leads</strong>
+                    <p>{demoSnapshot.crm.summary.qualifiedLeads} visible opportunities with {demoSnapshot.crm.summary.reservations} reservations in flow.</p>
+                  </div>
+                  <Link className="buttonGhost" href="/crm">
+                    Open CRM
+                  </Link>
+                </div>
+                <div className="listItem">
+                  <div>
+                    <strong>Post-sale queue</strong>
+                    <p>{demoSnapshot.postSale.summary.openCases} open cases and {demoSnapshot.postSale.summary.criticalCases} critical customer situations already testable.</p>
+                  </div>
+                  <Link className="buttonGhost" href="/post-sale">
+                    Open post-sale
+                  </Link>
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Immediate actions" description="Shortlist the four most actionable jumps based on live pressure, owner and route.">
+              <div className="list">
+                {priorityActionRows.map((row, index) => (
+                  <div key={`${row.area}-${row.href}`} className="listItem">
+                    <div>
+                      <strong>{index + 1}. {row.area}</strong>
+                      <p>{row.signal}</p>
+                      <p className="tableCellMuted">Owner: {row.owner} · posture {row.posture}</p>
+                    </div>
+                    <div className="row gap wrap" style={{ alignItems: "center" }}>
+                      <Badge tone={row.tone}>{index === 0 ? "do first" : "next lane"}</Badge>
+                      <Link className={index === 0 ? "button" : "buttonGhost"} href={row.href}>
+                        {buildDashboardRouteLabel(row.href)}
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>

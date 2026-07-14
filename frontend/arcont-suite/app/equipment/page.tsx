@@ -15,6 +15,7 @@ import type { EquipmentOverviewContract, MachineItemContract } from "@/lib/contr
 import {
   createMachineItem,
   fetchEquipmentOverview,
+  fetchFieldMaterialRequestsOverview,
   fetchInventoryMovementsOverview,
   fetchQualityOverview,
   updateMachineItem
@@ -114,6 +115,7 @@ function deriveOverview(current: EquipmentOverviewContract, updatedMachine: Mach
 type EquipmentBridgeContext = {
   movements: NonNullable<Awaited<ReturnType<typeof fetchInventoryMovementsOverview>>>;
   quality: NonNullable<Awaited<ReturnType<typeof fetchQualityOverview>>>;
+  fieldMaterials: NonNullable<Awaited<ReturnType<typeof fetchFieldMaterialRequestsOverview>>>;
 } | null;
 
 function buildEquipmentStory(machine: MachineItemContract | null, bridge: EquipmentBridgeContext) {
@@ -123,6 +125,10 @@ function buildEquipmentStory(machine: MachineItemContract | null, bridge: Equipm
 
   const movementSignal = bridge?.movements.focusMovement ?? null;
   const qualitySignal = bridge?.quality.focusInspection ?? null;
+  const fieldMaterialSignal =
+    bridge?.fieldMaterials.requests.find(
+      (request) => request.projectName === machine.projectName && request.frontName === machine.frontName
+    ) ?? bridge?.fieldMaterials.focusRequest ?? null;
 
   return {
     fieldImpact:
@@ -141,6 +147,9 @@ function buildEquipmentStory(machine: MachineItemContract | null, bridge: Equipm
     inventoryDependency: movementSignal
       ? `${movementSignal.code} is the current stock-movement anchor with ${movementSignal.pendingEvidence} pending evidence items and ${movementSignal.impactLevel} impact.`
       : "No inventory movement is currently in focus for this asset lane.",
+    materialPressure: fieldMaterialSignal
+      ? `${fieldMaterialSignal.summary} remains ${fieldMaterialSignal.status} with ${fieldMaterialSignal.requestedVolume} pending for this front.`
+      : "No direct field material request is currently attached to this asset lane.",
     qualityConstraint: qualitySignal
       ? `${qualitySignal.code} remains ${qualitySignal.status} with ${qualitySignal.openFindings} open findings and ${qualitySignal.releaseReadiness}% release readiness.`
       : "No quality-release constraint is currently attached to the active equipment lane."
@@ -203,8 +212,642 @@ function validateMachineCreateForm(input: {
 
   return null;
 }
+
+function createMachineExample() {
+  return {
+    machineName: "Retroexcavadora John Deere 310L",
+    machineType: "Retroexcavadora",
+    projectName: "Villas del Mayab",
+    frontName: "Frente terracerias",
+    status: "maintenance" as MachineItemContract["status"],
+    health: "watch" as MachineItemContract["health"],
+    availabilityPercent: "74",
+    utilizationPercent: "81",
+    hourMeter: "2480",
+    nextMaintenanceHours: "12",
+    maintenanceBacklog: "1",
+    openFailures: "2",
+    criticalOpenFailures: "0",
+    nextAction: "Cerrar servicio preventivo y validar liberacion con supervisor de maquinaria antes de reasignar a obra"
+  };
+}
+
+function createMachinePreset(
+  preset: "dispatch_ready" | "maintenance_hold" | "critical_breakdown"
+): ReturnType<typeof createMachineExample> {
+  switch (preset) {
+    case "dispatch_ready":
+      return {
+        machineName: "Excavadora CAT 320",
+        machineType: "Excavadora",
+        projectName: "Residencial Arena",
+        frontName: "Frente cimentacion",
+        status: "available" as MachineItemContract["status"],
+        health: "healthy" as MachineItemContract["health"],
+        availabilityPercent: "95",
+        utilizationPercent: "72",
+        hourMeter: "1680",
+        nextMaintenanceHours: "96",
+        maintenanceBacklog: "0",
+        openFailures: "0",
+        criticalOpenFailures: "0",
+        nextAction: "Asignar operador y confirmar salida de equipo para el siguiente frente de excavacion."
+      };
+    case "maintenance_hold":
+      return createMachineExample();
+    default:
+      return {
+        machineName: "Motoniveladora Komatsu GD655",
+        machineType: "Motoniveladora",
+        projectName: "Villas del Mayab",
+        frontName: "Frente vialidades",
+        status: "down" as MachineItemContract["status"],
+        health: "critical" as MachineItemContract["health"],
+        availabilityPercent: "12",
+        utilizationPercent: "0",
+        hourMeter: "4120",
+        nextMaintenanceHours: "0",
+        maintenanceBacklog: "3",
+        openFailures: "4",
+        criticalOpenFailures: "2",
+        nextAction: "Aislar equipo, abrir orden critica y reprogramar frente con maquinaria de reemplazo."
+      };
+  }
+}
+
+function createMachineEmptyForm() {
+  return {
+    machineName: "",
+    machineType: "Excavator",
+    projectName: "Nuevo proyecto",
+    frontName: "Frente 1",
+    status: "available" as MachineItemContract["status"],
+    health: "healthy" as MachineItemContract["health"],
+    availabilityPercent: "92",
+    utilizationPercent: "68",
+    hourMeter: "1200",
+    nextMaintenanceHours: "80",
+    maintenanceBacklog: "0",
+    openFailures: "0",
+    criticalOpenFailures: "0",
+    nextAction: ""
+  };
+}
+
+function buildDispatchReadiness(machine: MachineItemContract | null) {
+  if (!machine) {
+    return {
+      tone: "info" as const,
+      label: "Select an asset",
+      description: "Choose a machine to verify if it can really be dispatched to field."
+    };
+  }
+
+  if (machine.status === "down" || machine.criticalOpenFailures > 0) {
+    return {
+      tone: "danger" as const,
+      label: "Blocked for dispatch",
+      description: "The machine should stay out of field assignment until the breakdown or critical failures are closed."
+    };
+  }
+
+  if (isMaintenanceOverdue(machine) || machine.health !== "healthy") {
+    return {
+      tone: "warning" as const,
+      label: "Dispatch with caution",
+      description: "Maintenance timing or health posture still requires supervision before releasing this asset."
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for dispatch",
+    description: "This asset can move into field planning without an obvious maintenance or failure blocker."
+  };
+}
+
+function buildEquipmentDestination(machine: MachineItemContract | null) {
+  if (!machine) {
+    return {
+      label: "No active route",
+      description: "Select a machine to decide which module should take the next step.",
+      href: "/equipment"
+    };
+  }
+
+  if (machine.status === "down" || machine.criticalOpenFailures > 0) {
+    return {
+      label: "Escalate to field",
+      description: "Production continuity is already exposed, so the front should be replanned from field execution.",
+      href: "/field"
+    };
+  }
+
+  if (isMaintenanceOverdue(machine) || machine.status === "maintenance") {
+    return {
+      label: "Review inventory flow",
+      description: "Maintenance recovery should stay aligned with inbound material and movements for the affected front.",
+      href: "/inventory/movements"
+    };
+  }
+
+  return {
+    label: "Validate quality release",
+    description: "If the asset is mechanically stable, confirm release posture before full field continuity.",
+    href: "/quality"
+  };
+}
+
+function buildFrontContinuity(machine: MachineItemContract | null) {
+  if (!machine) {
+    return {
+      label: "Select an asset",
+      description: "Choose a machine to understand how it affects the active front before dispatch or escalation."
+    };
+  }
+
+  if (machine.status === "down") {
+    return {
+      label: "Front exposed",
+      description: `${machine.projectName} · ${machine.frontName} should be replanned immediately because this asset is already down.`
+    };
+  }
+
+  if (machine.status === "maintenance" || machine.health === "critical") {
+    return {
+      label: "Front at risk",
+      description: `${machine.projectName} · ${machine.frontName} still depends on maintenance recovery before it can run with confidence.`
+    };
+  }
+
+  if (machine.health === "watch" || isMaintenanceOverdue(machine)) {
+    return {
+      label: "Front under watch",
+      description: `${machine.projectName} · ${machine.frontName} can continue, but dispatch should stay coordinated with field and maintenance.`
+    };
+  }
+
+  return {
+    label: "Front covered",
+    description: `${machine.projectName} · ${machine.frontName} currently has asset support without an obvious dispatch blocker.`
+  };
+}
+
+function buildFieldHandoff(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to see what field teams should do next.";
+  }
+
+  if (machine.status === "down") {
+    return "Field should protect the front, switch sequence if possible and confirm whether replacement equipment is required today.";
+  }
+
+  if (machine.status === "maintenance") {
+    return "Field should confirm whether work can continue around the maintenance window or whether the front must pause until release.";
+  }
+
+  if (machine.health === "watch") {
+    return "Field should keep the machine operating under supervision and report any new symptom before the next shift cut-off.";
+  }
+
+  return "Field can continue with normal execution, but the next action should still confirm who receives and uses the asset at the front.";
+}
+
+function buildReleaseCheckpoint(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to verify the final checkpoint before release to field.";
+  }
+
+  if (machine.criticalOpenFailures > 0) {
+    return "Critical failures must close before the asset can be treated as releasable for any front.";
+  }
+
+  if (isMaintenanceOverdue(machine)) {
+    return "Maintenance exposure still needs an explicit go/no-go decision before this asset returns to normal dispatch.";
+  }
+
+  if (machine.health === "watch") {
+    return "Release can happen only with an owner, supervision window and a clear next report-back to maintenance.";
+  }
+
+  return "The asset can be released if the operator, receiving front and next shift handoff are already confirmed.";
+}
+
+function buildDownstreamChain(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to visualize the next downstream chain.";
+  }
+
+  if (machine.status === "down") {
+    return "Equipment -> Field replanning -> Daily log -> Operations follow-up";
+  }
+
+  if (machine.status === "maintenance") {
+    return "Equipment -> Inventory movements -> Field confirmation -> Daily log";
+  }
+
+  if (machine.health === "watch") {
+    return "Equipment -> Field supervision -> Quality or daily log verification";
+  }
+
+  return "Equipment -> Field execution -> Daily log closeout";
+}
+
+function buildOperatingBottleneck(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to identify the main operational bottleneck.";
+  }
+
+  if (machine.criticalOpenFailures > 0) {
+    return "Critical failures are the main bottleneck and block normal dispatch.";
+  }
+
+  if (isMaintenanceOverdue(machine)) {
+    return "Overdue maintenance is the main bottleneck and still limits safe release.";
+  }
+
+  if (machine.health === "watch") {
+    return "Condition watch is the main bottleneck; field can continue only with closer supervision.";
+  }
+
+  return "No hard bottleneck is visible; the main task is disciplined release and front handoff.";
+}
+
+function buildImmediateCommand(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to see the immediate command.";
+  }
+
+  if (machine.status === "down") {
+    return "Protect the front, isolate the asset and trigger replacement or resequencing now.";
+  }
+
+  if (machine.status === "maintenance") {
+    return "Close the maintenance gate, confirm release criteria and tell field whether the front pauses or continues around it.";
+  }
+
+  if (machine.health === "watch") {
+    return "Release only with owner, monitoring window and clear report-back to maintenance and field.";
+  }
+
+  return "Confirm operator, receiving front and next-shift handoff, then release the asset into execution.";
+}
+
+function buildCommandOwner(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to identify the current owner.";
+  }
+
+  if (machine.status === "down") {
+    return "Maintenance lead with field supervision";
+  }
+
+  if (machine.status === "maintenance") {
+    return "Maintenance lead and dispatch coordinator";
+  }
+
+  if (machine.health === "watch") {
+    return "Dispatch coordinator with resident engineer";
+  }
+
+  return "Dispatch coordinator and receiving front owner";
+}
+
+function buildDispatchConfirmation(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to define the required confirmation.";
+  }
+
+  if (machine.status === "down") {
+    return "Confirm replacement plan or resequencing before the next field cutoff.";
+  }
+
+  if (machine.status === "maintenance") {
+    return "Confirm release criteria, operator handoff and whether the front pauses or continues around maintenance.";
+  }
+
+  if (machine.health === "watch") {
+    return "Confirm monitoring window, escalation threshold and report-back timing for the next shift.";
+  }
+
+  return "Confirm operator, front receiver and daily-log handoff before releasing the asset.";
+}
+
+function buildReportBackWindow(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to define when the team must report back.";
+  }
+
+  if (machine.status === "down") {
+    return "Report back before the next field cutoff with replacement status or resequencing confirmed.";
+  }
+
+  if (machine.status === "maintenance") {
+    return "Report back as soon as maintenance closeout is known and before the front commits the next production step.";
+  }
+
+  if (machine.health === "watch") {
+    return "Report back in the same shift with condition status and whether the watch posture is increasing or stabilizing.";
+  }
+
+  return "Report back at the next shift handoff confirming the asset actually reached and served the intended front.";
+}
+
+function buildEquipmentWhyNow(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to understand what equipment pressure needs attention right now.";
+  }
+
+  if (machine.status === "down" || machine.criticalOpenFailures > 0) {
+    return `${machine.machineName} is already blocking continuity because it is ${machine.status} with ${machine.criticalOpenFailures} critical failure(s) still open.`;
+  }
+
+  if (machine.status === "maintenance" || isMaintenanceOverdue(machine)) {
+    return `${machine.machineName} is still under maintenance pressure, so release decisions now directly shape whether ${machine.frontName} can keep moving.`;
+  }
+
+  if (machine.health === "watch") {
+    return `${machine.machineName} can still run, but the current watch posture means the next shift can degrade quickly without tighter supervision.`;
+  }
+
+  return `${machine.machineName} is close to clean dispatch, so the useful question now is whether handoff and field ownership are actually confirmed.`;
+}
+
+function buildEquipmentDownstreamEffect(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to inspect which downstream chain absorbs the impact.";
+  }
+
+  if (machine.status === "down") {
+    return "If this asset stays down, field replanning, daily logs and operations follow-up will absorb the disruption immediately.";
+  }
+
+  if (machine.status === "maintenance" || isMaintenanceOverdue(machine)) {
+    return "If maintenance recovery stalls, inventory support, field execution and quality release will all feel the delay next.";
+  }
+
+  if (machine.health === "watch") {
+    return "If the watch posture worsens, dispatch, field supervision and maintenance will all re-enter the loop within the same shift.";
+  }
+
+  return "If release stays disciplined, this asset should flow cleanly into field execution and daily-log closeout without extra escalation.";
+}
+
+function buildEquipmentHumanStep(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Select a machine to define the next human handoff.";
+  }
+
+  if (machine.status === "down") {
+    return "Tell field whether to replace the machine or resequence the front before the next production cutoff.";
+  }
+
+  if (machine.status === "maintenance") {
+    return "Tell maintenance and dispatch exactly who owns release criteria and whether the front pauses or continues around the service window.";
+  }
+
+  if (machine.health === "watch") {
+    return "Tell the receiving front and shift supervisor the monitoring window and escalation trigger before dispatch.";
+  }
+
+  return "Tell the operator and receiving front owner the exact handoff time so the asset does not stay 'available' only on paper.";
+}
+
+function buildEquipmentRouteSummary(machine: MachineItemContract | null) {
+  if (!machine) {
+    return "Use equipment as the control point between maintenance, dispatch, field continuity and quality release.";
+  }
+
+  if (machine.status === "down" || machine.criticalOpenFailures > 0) {
+    return "This machine should route first through containment and front replanning before field or quality keep depending on it.";
+  }
+
+  if (machine.status === "maintenance" || isMaintenanceOverdue(machine)) {
+    return "This machine should route through maintenance recovery and dispatch validation before the front assumes clean availability.";
+  }
+
+  if (machine.health === "watch") {
+    return "This machine should route through supervised field release and tighter report-back before normal continuity is assumed.";
+  }
+
+  return "This machine can continue through field execution and daily supervision with the current equipment context intact.";
+}
+
+function buildEquipmentOperationalLinks(machine: MachineItemContract | null) {
+  if (!machine) {
+    return [
+      { label: "Open movements", href: "/inventory/movements" },
+      { label: "Open field", href: "/field" },
+      { label: "Open quality", href: "/quality" }
+    ];
+  }
+
+  if (machine.status === "down" || machine.criticalOpenFailures > 0) {
+    return [
+      { label: "Open field", href: "/field" },
+      { label: "Open daily log", href: "/daily-log" },
+      { label: "Open movements", href: "/inventory/movements" }
+    ];
+  }
+
+  if (machine.status === "maintenance" || isMaintenanceOverdue(machine)) {
+    return [
+      { label: "Open movements", href: "/inventory/movements" },
+      { label: "Open receiving", href: "/inventory/receiving" },
+      { label: "Open field", href: "/field" }
+    ];
+  }
+
+  if (machine.health === "watch") {
+    return [
+      { label: "Open field", href: "/field" },
+      { label: "Open quality", href: "/quality" },
+      { label: "Open daily log", href: "/daily-log" }
+    ];
+  }
+
+  return [
+    { label: "Open quality", href: "/quality" },
+    { label: "Open field", href: "/field" },
+    { label: "Open movements", href: "/inventory/movements" }
+  ];
+}
+
+function buildDispatchPacketStatus(machine: MachineItemContract | null) {
+  if (!machine) {
+    return {
+      tone: "info" as const,
+      label: "Select an asset",
+      summary: "Choose a machine to summarize dispatch status."
+    };
+  }
+
+  if (machine.status === "down" || machine.criticalOpenFailures > 0) {
+    return {
+      tone: "danger" as const,
+      label: "Dispatch blocked",
+      summary: "The asset should not leave control until failures or replacement decisions are closed."
+    };
+  }
+
+  if (machine.status === "maintenance" || isMaintenanceOverdue(machine) || machine.health === "watch") {
+    return {
+      tone: "warning" as const,
+      label: "Dispatch under watch",
+      summary: "The asset can only move with explicit supervision, confirmation and report-back discipline."
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Dispatch aligned",
+    summary: "The asset is close to operational release if front, operator and handoff are confirmed."
+  };
+}
+
+function buildCrossPressureSummary(story: ReturnType<typeof buildEquipmentStory>) {
+  if (!story) {
+    return "Select a machine to review cross-pressure from inventory, materials and quality.";
+  }
+
+  const signals = [
+    story.inventoryDependency,
+    story.materialPressure,
+    story.qualityConstraint
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return signals;
+}
+
+function buildCreateMachineGate(input: {
+  machineName: string;
+  machineType: string;
+  projectName: string;
+  frontName: string;
+  availabilityPercent: number;
+  utilizationPercent: number;
+  hourMeter: number;
+  nextMaintenanceHours: number;
+  maintenanceBacklog: number;
+  openFailures: number;
+  criticalOpenFailures: number;
+  status: MachineItemContract["status"];
+  health: MachineItemContract["health"];
+  nextAction: string;
+}) {
+  const checks: string[] = [];
+
+  if ([input.machineName, input.machineType, input.projectName, input.frontName].some((value) => value.trim().length < 3)) {
+    checks.push("Machine, type, project and front still need more specific capture.");
+  }
+
+  if (!Number.isFinite(input.availabilityPercent) || input.availabilityPercent < 0 || input.availabilityPercent > 100) {
+    checks.push("Availability must stay between 0% and 100%.");
+  }
+
+  if (!Number.isFinite(input.utilizationPercent) || input.utilizationPercent < 0 || input.utilizationPercent > 100) {
+    checks.push("Utilization must stay between 0% and 100%.");
+  }
+
+  if (!Number.isFinite(input.hourMeter) || input.hourMeter < 0) {
+    checks.push("Hour meter must be zero or greater.");
+  }
+
+  if (!Number.isFinite(input.nextMaintenanceHours) || input.nextMaintenanceHours < 0) {
+    checks.push("Next maintenance hours must be zero or greater.");
+  }
+
+  if (!Number.isFinite(input.maintenanceBacklog) || input.maintenanceBacklog < 0) {
+    checks.push("Maintenance backlog must be zero or greater.");
+  }
+
+  if (!Number.isFinite(input.openFailures) || input.openFailures < 0) {
+    checks.push("Open failures must be zero or greater.");
+  }
+
+  if (!Number.isFinite(input.criticalOpenFailures) || input.criticalOpenFailures < 0) {
+    checks.push("Critical failures must be zero or greater.");
+  }
+
+  if (input.openFailures < input.criticalOpenFailures) {
+    checks.push("Open failures cannot be lower than critical failures.");
+  }
+
+  if (input.status === "available" && input.criticalOpenFailures > 0) {
+    checks.push("Available status is blocked while critical failures remain open.");
+  }
+
+  if (
+    input.health === "healthy" &&
+    (input.criticalOpenFailures > 0 || input.nextMaintenanceHours <= 0 || input.maintenanceBacklog > 0)
+  ) {
+    checks.push("Healthy status requires no critical failures and no overdue maintenance pressure.");
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    checks.push("Next action still needs enough detail for dispatch or maintenance follow-through.");
+  }
+
+  if (checks.length > 0) {
+    const hardBlock =
+      input.status === "available" && input.criticalOpenFailures > 0 ||
+      input.openFailures < input.criticalOpenFailures ||
+      (input.health === "healthy" &&
+        (input.criticalOpenFailures > 0 || input.nextMaintenanceHours <= 0 || input.maintenanceBacklog > 0));
+
+    return {
+      tone: hardBlock ? "danger" as const : "warning" as const,
+      label: hardBlock ? "Do not create yet" : "Create with control",
+      summary: hardBlock
+        ? "This asset would open with a hard maintenance or safety blocker."
+        : "The machine can be created, but dispatch discipline still needs tightening.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready to create",
+    summary: "The machine has enough structure to enter equipment control cleanly.",
+    checks: [
+      "The created machine will become the current focus item immediately.",
+      "Keep maintenance, dispatch and next-action context attached from the first capture."
+    ]
+  };
+}
+
+function buildCreateMachineHumanStep(input: {
+  status: MachineItemContract["status"];
+  health: MachineItemContract["health"];
+  nextMaintenanceHours: number;
+  maintenanceBacklog: number;
+  criticalOpenFailures: number;
+  nextAction: string;
+}) {
+  if (input.criticalOpenFailures > 0) {
+    return "Contain the critical failure first so the machine does not open as dispatchable by mistake.";
+  }
+
+  if (input.status === "maintenance" || input.maintenanceBacklog > 0 || input.nextMaintenanceHours <= 0) {
+    return "Create the asset only with an explicit maintenance closeout owner and release condition.";
+  }
+
+  if (input.health === "watch") {
+    return "Create the asset and assign same-shift supervision before sending it to the front.";
+  }
+
+  if (input.nextAction.trim().length < 8) {
+    return "Clarify the immediate maintenance or dispatch action before persisting the machine.";
+  }
+
+  return "Create the machine and continue directly into field dispatch, movement support or quality follow-through.";
+}
+
 export default function EquipmentPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<EquipmentOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<EquipmentBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -220,29 +863,29 @@ export default function EquipmentPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
-  const [createForm, setCreateForm] = useState({
-    machineName: "",
-    machineType: "Excavator",
-    projectName: "Nuevo proyecto",
-    frontName: "Frente 1",
-    status: "available" as MachineItemContract["status"],
-    health: "healthy" as MachineItemContract["health"],
-    availabilityPercent: "92",
-    utilizationPercent: "68",
-    hourMeter: "1200",
-    nextMaintenanceHours: "80",
-    maintenanceBacklog: "0",
-    openFailures: "0",
-    criticalOpenFailures: "0",
-    nextAction: ""
-  });
+  const [createForm, setCreateForm] = useState(createMachineEmptyForm);
+  const createFormNumbers = useMemo(
+    () => ({
+      availabilityPercent: Number(createForm.availabilityPercent),
+      utilizationPercent: Number(createForm.utilizationPercent),
+      hourMeter: Number(createForm.hourMeter),
+      nextMaintenanceHours: Number(createForm.nextMaintenanceHours),
+      maintenanceBacklog: Number(createForm.maintenanceBacklog),
+      openFailures: Number(createForm.openFailures),
+      criticalOpenFailures: Number(createForm.criticalOpenFailures)
+    }),
+    [
+      createForm.availabilityPercent,
+      createForm.criticalOpenFailures,
+      createForm.hourMeter,
+      createForm.maintenanceBacklog,
+      createForm.nextMaintenanceHours,
+      createForm.openFailures,
+      createForm.utilizationPercent
+    ]
+  );
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -256,12 +899,16 @@ export default function EquipmentPage() {
         apiBaseUrl,
         accessToken: session.accessToken
       }),
+      fetchFieldMaterialRequestsOverview(activeCompany.id, {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }),
       fetchQualityOverview(activeCompany.id, {
         apiBaseUrl,
         accessToken: session.accessToken
       })
     ])
-      .then(([result, movements, quality]) => {
+      .then(([result, movements, fieldMaterials, quality]) => {
         if (cancelled) {
           return;
         }
@@ -273,7 +920,7 @@ export default function EquipmentPage() {
 
         setOverview(result);
         setSelectedMachineId((current) => current ?? result.focusMachine?.id ?? result.machines[0]?.id ?? null);
-        setBridgeContext(movements && quality ? { movements, quality } : null);
+        setBridgeContext(movements && quality && fieldMaterials ? { movements, quality, fieldMaterials } : null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -284,7 +931,7 @@ export default function EquipmentPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredMachines = useMemo(() => {
     if (!overview) {
@@ -334,6 +981,56 @@ export default function EquipmentPage() {
   const equipmentStory = useMemo(() => {
     return buildEquipmentStory(selectedMachine, bridgeContext);
   }, [bridgeContext, selectedMachine]);
+  const dispatchReadiness = useMemo(() => buildDispatchReadiness(selectedMachine), [selectedMachine]);
+  const equipmentDestination = useMemo(() => buildEquipmentDestination(selectedMachine), [selectedMachine]);
+  const frontContinuity = useMemo(() => buildFrontContinuity(selectedMachine), [selectedMachine]);
+  const createMachineGate = useMemo(
+    () =>
+      buildCreateMachineGate({
+        machineName: createForm.machineName,
+        machineType: createForm.machineType,
+        projectName: createForm.projectName,
+        frontName: createForm.frontName,
+        availabilityPercent: createFormNumbers.availabilityPercent,
+        utilizationPercent: createFormNumbers.utilizationPercent,
+        hourMeter: createFormNumbers.hourMeter,
+        nextMaintenanceHours: createFormNumbers.nextMaintenanceHours,
+        maintenanceBacklog: createFormNumbers.maintenanceBacklog,
+        openFailures: createFormNumbers.openFailures,
+        criticalOpenFailures: createFormNumbers.criticalOpenFailures,
+        status: createForm.status,
+        health: createForm.health,
+        nextAction: createForm.nextAction
+      }),
+    [createForm, createFormNumbers]
+  );
+  const createMachineHumanStep = useMemo(
+    () =>
+      buildCreateMachineHumanStep({
+        status: createForm.status,
+        health: createForm.health,
+        nextMaintenanceHours: createFormNumbers.nextMaintenanceHours,
+        maintenanceBacklog: createFormNumbers.maintenanceBacklog,
+        criticalOpenFailures: createFormNumbers.criticalOpenFailures,
+        nextAction: createForm.nextAction
+      }),
+    [createForm.health, createForm.nextAction, createForm.status, createFormNumbers]
+  );
+  const fieldHandoff = useMemo(() => buildFieldHandoff(selectedMachine), [selectedMachine]);
+  const releaseCheckpoint = useMemo(() => buildReleaseCheckpoint(selectedMachine), [selectedMachine]);
+  const downstreamChain = useMemo(() => buildDownstreamChain(selectedMachine), [selectedMachine]);
+  const operatingBottleneck = useMemo(() => buildOperatingBottleneck(selectedMachine), [selectedMachine]);
+  const immediateCommand = useMemo(() => buildImmediateCommand(selectedMachine), [selectedMachine]);
+  const commandOwner = useMemo(() => buildCommandOwner(selectedMachine), [selectedMachine]);
+  const dispatchConfirmation = useMemo(() => buildDispatchConfirmation(selectedMachine), [selectedMachine]);
+  const reportBackWindow = useMemo(() => buildReportBackWindow(selectedMachine), [selectedMachine]);
+  const selectedWhyNow = useMemo(() => buildEquipmentWhyNow(selectedMachine), [selectedMachine]);
+  const selectedDownstreamEffect = useMemo(() => buildEquipmentDownstreamEffect(selectedMachine), [selectedMachine]);
+  const selectedHumanStep = useMemo(() => buildEquipmentHumanStep(selectedMachine), [selectedMachine]);
+  const selectedRouteSummary = useMemo(() => buildEquipmentRouteSummary(selectedMachine), [selectedMachine]);
+  const selectedOperationalLinks = useMemo(() => buildEquipmentOperationalLinks(selectedMachine), [selectedMachine]);
+  const dispatchPacketStatus = useMemo(() => buildDispatchPacketStatus(selectedMachine), [selectedMachine]);
+  const crossPressureSummary = useMemo(() => buildCrossPressureSummary(equipmentStory), [equipmentStory]);
 
   useEffect(() => {
     if (!overview) {
@@ -452,7 +1149,7 @@ export default function EquipmentPage() {
     health: MachineItemContract["health"],
     suggestedNextAction: string
   ) {
-    if (!selectedMachine || !session.accessToken) {
+    if (!selectedMachine) {
       return;
     }
 
@@ -495,7 +1192,7 @@ export default function EquipmentPage() {
   }
 
   async function handleCreateMachine() {
-    if (!overview || !session.accessToken) {
+    if (!overview) {
       return;
     }
 
@@ -574,20 +1271,11 @@ export default function EquipmentPage() {
     setNextActionDraft(newMachine.nextAction);
     setCreateMessage(`${newMachine.code} added to the equipment workbench.`);
     setCreateForm({
-      machineName: "",
+      ...createMachineEmptyForm(),
       machineType: createForm.machineType,
       projectName,
       frontName,
-      status: "available",
-      health: "healthy",
-      availabilityPercent: "92",
-      utilizationPercent: "68",
-      hourMeter: "0",
-      nextMaintenanceHours: "80",
-      maintenanceBacklog: "0",
-      openFailures: "0",
-      criticalOpenFailures: "0",
-      nextAction: ""
+      hourMeter: "0"
     });
     setIsCreating(false);
   }
@@ -629,7 +1317,43 @@ export default function EquipmentPage() {
               />
             </section>
 
+            {isDemoMode ? (
+              <Card
+                title="Operable demo mode"
+                description="Equipment actions are persisted locally in this browser so field and maintenance flows can be tested immediately."
+                aside={<Badge tone="warning">browser-persisted</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">What works</div>
+                    <div>Teams can inspect machines, change status or health, and register new assets without waiting for production auth.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Recommended test</div>
+                    <div>Move one machine from maintenance to available, then create a new asset tied to an active project front.</div>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
             <section className="grid cols3">
+              <Card
+                title="Equipment workflow"
+                description="Equipment should connect maintenance, inventory support and field release in one operating route."
+                aside={<Badge tone={filteredSummary.criticalOpenFailures > 0 ? "danger" : filteredSummary.overdueMaintenance > 0 ? "warning" : "success"}>{filteredSummary.criticalOpenFailures > 0 ? "critical lane" : filteredSummary.overdueMaintenance > 0 ? "maintenance watch" : "stable lane"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Asset readiness</div><div>Availability alone is not enough; maintenance and failure posture decide if a machine is truly dispatchable.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Material continuity</div><div>Equipment lanes should stay aligned with inbound material and site movements when the front depends on both.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Field release</div><div>After stabilizing the machine, operators should jump directly into field or quality follow-up instead of stopping in maintenance only.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/inventory/movements">Open movements</Link>
+                  <Link className="buttonGhost" href="/inventory/receiving">Open receiving</Link>
+                  <Link className="buttonGhost" href="/field">Open field</Link>
+                </div>
+              </Card>
+
               <Card title="Field execution impact" description="What the selected asset means for active production fronts.">
                 <p className="sectionText">
                   {equipmentStory?.fieldImpact ?? "Choose an asset to inspect its field execution impact."}
@@ -650,10 +1374,79 @@ export default function EquipmentPage() {
                   {equipmentStory?.inventoryDependency ?? "Choose an asset to inspect inventory dependency."}
                 </p>
               </Card>
+              <Card title="Material request pressure" description="Whether the front already carries a live supply request tied to this asset lane.">
+                <p className="sectionText">
+                  {equipmentStory?.materialPressure ?? "Choose an asset to inspect field material pressure."}
+                </p>
+              </Card>
               <Card title="Quality constraint" description="Release and corrective-work signal around the selected machine.">
                 <p className="sectionText">
                   {equipmentStory?.qualityConstraint ?? "Choose an asset to inspect quality constraints."}
                 </p>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card
+                title="Dispatch readiness"
+                description="Whether the selected machine can truly leave maintenance control and support field execution."
+                aside={<Badge tone={dispatchReadiness.tone}>{dispatchReadiness.label}</Badge>}
+              >
+                <p className="sectionText">{dispatchReadiness.description}</p>
+              </Card>
+              <Card title="Next route" description="Best module to continue the machine workflow from the current blocker.">
+                <p className="sectionText">{equipmentDestination.description}</p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button secondary" href={equipmentDestination.href}>
+                    {equipmentDestination.label}
+                  </Link>
+                </div>
+              </Card>
+              <Card title="Dispatcher checklist" description="Minimum controls before releasing machinery to the front.">
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Failures</div><div>No critical failures open for a machine that will be dispatched.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Maintenance</div><div>Do not release overdue maintenance without an explicit operational decision.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Follow-up</div><div>Every machine needs a next action that tells maintenance or field what happens next.</div></div>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card
+                title="Front continuity"
+                description="How the selected asset is shaping real execution continuity at the front."
+                aside={<Badge tone={frontContinuity.label === "Front exposed" ? "danger" : frontContinuity.label === "Front at risk" || frontContinuity.label === "Front under watch" ? "warning" : "success"}>{frontContinuity.label}</Badge>}
+              >
+                <p className="sectionText">{frontContinuity.description}</p>
+              </Card>
+              <Card title="Field handoff" description="What field teams should do next once equipment status is known.">
+                <p className="sectionText">{fieldHandoff}</p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button secondary" href="/field">
+                    Open field
+                  </Link>
+                  <Link className="buttonGhost" href="/daily-log">
+                    Open daily log
+                  </Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card title="Release checkpoint" description="Final gate before the machine is treated as truly usable in field.">
+                <p className="sectionText">{releaseCheckpoint}</p>
+              </Card>
+              <Card title="Downstream chain" description="What operational chain should happen after the equipment decision.">
+                <p className="sectionText">{downstreamChain}</p>
+              </Card>
+            </section>
+
+            <section className="grid cols2">
+              <Card title="Operating bottleneck" description="The main reason this asset is still pressuring execution right now.">
+                <p className="sectionText">{operatingBottleneck}</p>
+              </Card>
+              <Card title="Immediate command" description="What dispatch, maintenance or field should do now without further interpretation.">
+                <p className="sectionText">{immediateCommand}</p>
               </Card>
             </section>
 
@@ -698,8 +1491,8 @@ export default function EquipmentPage() {
                       placeholder="Machine, type, code or action"
                     />
                   </label>
-                  <Badge tone={session.authenticated ? "success" : "warning"}>
-                    {session.authenticated ? "live backend" : source}
+                  <Badge tone={isDemoMode ? "warning" : "success"}>
+                    {isDemoMode ? "demo operable" : "live backend"}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "equipment ready"}</Badge>
                   <Badge tone={filteredSummary.criticalOpenFailures > 0 ? "danger" : filteredSummary.overdueMaintenance > 0 ? "warning" : "success"}>
@@ -806,6 +1599,18 @@ export default function EquipmentPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Why now</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Downstream effect</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Route summary</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Next action</div>
                       <div>
                         <input
@@ -817,8 +1622,41 @@ export default function EquipmentPage() {
                       </div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Dispatch packet</div>
+                      <div className="tableCellStack">
+                        <Badge tone={dispatchPacketStatus.tone}>{dispatchPacketStatus.label}</Badge>
+                        <strong>{operatingBottleneck}</strong>
+                        <span className="tableCellMuted">{dispatchPacketStatus.summary}</span>
+                        <span className="tableCellMuted">{immediateCommand}</span>
+                        <span className="tableCellMuted">{commandOwner}</span>
+                        <span className="tableCellMuted">{reportBackWindow}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Cross-pressure</div>
+                      <div className="tableCellStack">
+                        <span>{crossPressureSummary}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Updated</div>
                       <div>{new Date(selectedMachine.updatedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Command owner</div>
+                      <div>{commandOwner}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Dispatch confirmation</div>
+                      <div>{dispatchConfirmation}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Next human step</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Report-back window</div>
+                      <div>{reportBackWindow}</div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Business rules</div>
@@ -831,12 +1669,11 @@ export default function EquipmentPage() {
                     <div className="detailRow">
                       <div className="detailLabel">Linked actions</div>
                       <div className="row gap wrap">
-                        <Link className="button secondary" href="/inventory/movements">
-                          Open movements
-                        </Link>
-                        <Link className="buttonGhost" href="/quality">
-                          Open quality
-                        </Link>
+                        {selectedOperationalLinks.map((link, index) => (
+                          <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                            {link.label}
+                          </Link>
+                        ))}
                       </div>
                     </div>
                     <div className="detailRow">
@@ -1008,6 +1845,18 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
+                    <div className="detailLabel">Maintenance backlog</div>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.maintenanceBacklog}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, maintenanceBacklog: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="detailRow">
                     <div className="detailLabel">Open failures</div>
                     <input
                       className="field"
@@ -1040,10 +1889,60 @@ export default function EquipmentPage() {
                   </label>
                 </div>
 
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">Creation gate</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createMachineGate.tone}>{createMachineGate.label}</Badge>
+                        <span>{createMachineGate.summary}</span>
+                      </div>
+                      {createMachineGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">
+                          {check}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Next human step</div>
+                    <div>{createMachineHumanStep}</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Immediate downstream</div>
+                    <div>
+                      {createForm.criticalOpenFailures !== "0"
+                        ? "Keep the asset out of field dispatch and movement support until failures are contained."
+                        : createForm.status === "maintenance" || createForm.health === "watch"
+                          ? "Route the asset through controlled maintenance or supervised dispatch before treating it as clean field capacity."
+                          : "The machine can continue into field dispatch, inventory support and quality follow-through with normal supervision."}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateMachine()}>
                     {isCreating ? "Saving..." : "Add machine"}
                   </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachineExample())}>
+                    Load demo example
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("dispatch_ready"))}>
+                    Dispatch-ready preset
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("maintenance_hold"))}>
+                    Maintenance preset
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("critical_breakdown"))}>
+                    Breakdown preset
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachineEmptyForm())}>
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/inventory/movements">Review movements</Link>
+                  <Link className="buttonGhost" href="/field">Review field</Link>
+                  <Link className="buttonGhost" href="/operations">Review operations</Link>
+                  <Link className="buttonGhost" href="/quality">Review quality</Link>
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
                 </div>
               </Card>
@@ -1064,6 +1963,14 @@ export default function EquipmentPage() {
                   <div className="detailRow">
                     <div className="detailLabel">Backend path</div>
                     <div>This form already persists through `POST /equipment/machines`, so the equipment lane is now backed by the API.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Starter presets</div>
+                    <div>Use the preset buttons to simulate dispatch-ready assets, maintenance holds or full breakdown scenarios.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Operational handoff</div>
+                    <div>The first useful action after creation should be obvious enough to continue straight into dispatch, maintenance or field support.</div>
                   </div>
                 </div>
               </Card>

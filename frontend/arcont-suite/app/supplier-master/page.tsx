@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
@@ -37,6 +38,26 @@ const emptyCreateForm = {
   nextAction: ""
 };
 
+function createSupplierMasterExample() {
+  return {
+    supplierName: "Concretos del Sureste",
+    tradeName: "Concretos del Sureste SA de CV",
+    rfc: "CSE240101AB1",
+    fiscalRegime: "601",
+    cfdiUse: "G03",
+    paymentMethod: "Transferencia",
+    paymentTermsDays: "30",
+    bankAccountMasked: "****4821",
+    contactName: "Martha Diaz",
+    contactEmail: "proveedores@concretosdelsureste.mx",
+    contactPhone: "9991234567",
+    complianceStatus: "watch" as SupplierMasterProfileContract["complianceStatus"],
+    satStatus: "watch" as SupplierMasterProfileContract["satStatus"],
+    fiscalPacketCompletion: "72",
+    nextAction: "Completar constancia fiscal y validar cuenta bancaria antes de habilitar pago."
+  };
+}
+
 function tone(status: SupplierMasterProfileContract["satStatus"] | SupplierMasterProfileContract["complianceStatus"]) {
   switch (status) {
     case "controlled":
@@ -49,8 +70,201 @@ function tone(status: SupplierMasterProfileContract["satStatus"] | SupplierMaste
   }
 }
 
+function buildSupplierWorkflow(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return null;
+  }
+
+  return {
+    onboardingRead:
+      profile.satStatus === "critical" || profile.complianceStatus === "blocked"
+        ? `${profile.supplierName} is still blocked at fiscal or compliance level, so it should not be treated as a clean supplier source for requisitions or payables.`
+        : `${profile.supplierName} is usable for procurement follow-up, but its fiscal packet should keep moving until the profile is fully controlled.`,
+    executionBridge:
+      profile.fiscalPacketCompletion < 100
+        ? `${profile.supplierName} still needs packet closure before purchase orders and payments become truly low-friction.`
+        : `${profile.supplierName} already has a complete packet and can move more cleanly into sourcing, purchase orders and payment release.`,
+    nextMove:
+      profile.satStatus === "critical"
+        ? "Recover SAT posture and fiscal evidence before enabling more commercial exposure."
+        : profile.complianceStatus === "blocked"
+          ? "Clear the blocked compliance step before routing this supplier deeper into live operations."
+          : "Use this supplier in sourcing or procurement follow-up while keeping the packet controlled."
+  };
+}
+
+function buildSupplierReadinessGate(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return {
+      tone: "info" as const,
+      label: "No supplier selected",
+      summary: "Choose a supplier to verify whether it is really ready for procurement and payables continuity.",
+      checks: ["Select a supplier profile from the current master board."]
+    };
+  }
+
+  const checks: string[] = [];
+
+  if (profile.satStatus === "critical") {
+    checks.push("SAT posture is still critical.");
+  }
+
+  if (profile.complianceStatus === "blocked") {
+    checks.push("Compliance posture is still blocked.");
+  }
+
+  if (profile.fiscalPacketCompletion < 100) {
+    checks.push(`Fiscal packet is only ${profile.fiscalPacketCompletion}% complete.`);
+  }
+
+  if (profile.paymentTermsDays <= 0) {
+    checks.push("Payment terms are still invalid for normal financial continuity.");
+  }
+
+  if (checks.length > 0) {
+    return {
+      tone:
+        profile.satStatus === "critical" || profile.complianceStatus === "blocked"
+          ? "danger" as const
+          : "warning" as const,
+      label:
+        profile.satStatus === "critical" || profile.complianceStatus === "blocked"
+          ? "Do not use yet"
+          : "Use with control",
+      summary:
+        profile.satStatus === "critical" || profile.complianceStatus === "blocked"
+          ? "The supplier still has hard fiscal blockers before it should keep moving into buying or payment flow."
+          : "The supplier can continue operating, but packet closure still needs explicit follow-through.",
+      checks
+    };
+  }
+
+  return {
+    tone: "success" as const,
+    label: "Ready for continuity",
+    summary: "SAT, compliance and fiscal packet posture are aligned for procurement and payables continuity.",
+    checks: [
+      "Continue into supplier control, purchase orders or accounts payable without rebuilding supplier context.",
+      "Keep the next action attached to the same supplier profile."
+    ]
+  };
+}
+
+function buildSupplierWhyNow(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return "Choose a supplier to understand why it deserves attention right now.";
+  }
+
+  if (profile.satStatus === "critical" || profile.complianceStatus === "blocked") {
+    return "This supplier is already blocked at fiscal or compliance level, so delay here can contaminate sourcing and payment continuity.";
+  }
+
+  if (profile.fiscalPacketCompletion < 100) {
+    return "An incomplete fiscal packet means the supplier can still distort procurement and AP flow even if commercial intent already exists.";
+  }
+
+  return "This supplier is close enough to usable continuity that the next owner should move now instead of leaving the packet half-controlled.";
+}
+
+function buildSupplierDownstreamEffect(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return "Choose a supplier to inspect what it can block downstream.";
+  }
+
+  if (profile.satStatus === "critical" || profile.complianceStatus === "blocked") {
+    return "The downstream effect is blocked procurement continuity, AP friction and weaker finance confidence.";
+  }
+
+  if (profile.fiscalPacketCompletion < 100) {
+    return "The downstream effect is avoidable drag across purchase orders, invoice readiness and treasury sequencing.";
+  }
+
+  return "The downstream effect is mostly continuity discipline: keep supplier-control, procurement and payables aligned so the profile stays usable.";
+}
+
+function buildSupplierReportBack(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return "Choose a supplier to define the next report-back window.";
+  }
+
+  if (profile.satStatus === "critical" || profile.complianceStatus === "blocked") {
+    return "Report back before the next procurement or payment cutoff with fiscal-blocker containment status.";
+  }
+
+  if (profile.fiscalPacketCompletion < 100) {
+    return "Report back in the same operating cycle once packet completion reaches a clean usable threshold.";
+  }
+
+  return "Report back on the next supplier review confirming the profile stayed controlled through buying and payment continuity.";
+}
+
+function buildSupplierHumanStep(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return "Choose a supplier to identify the next human move.";
+  }
+
+  if (profile.satStatus === "critical" || profile.complianceStatus === "blocked") {
+    return "Clear the fiscal or compliance blocker first, then return only when the supplier can re-enter live continuity.";
+  }
+
+  if (profile.fiscalPacketCompletion < 100) {
+    return "Finish the fiscal packet now and confirm who owns the missing supplier evidence before AP or procurement depends on it.";
+  }
+
+  return "Move into supplier control, procurement or payables now while the supplier profile is still clean enough to reuse without rework.";
+}
+
+function buildSupplierRouteSummary(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return "Use supplier master as the fiscal control lane before procurement, AP and treasury trust a supplier profile.";
+  }
+
+  if (profile.satStatus === "critical" || profile.complianceStatus === "blocked") {
+    return "This supplier should route first through fiscal and compliance cleanup before it is exposed to sourcing or payment flow.";
+  }
+
+  if (profile.fiscalPacketCompletion < 100) {
+    return "This supplier should route through packet completion before procurement and AP treat it as release-ready.";
+  }
+
+  return "This supplier can continue through supplier control, procurement and AP without rebuilding the same fiscal context.";
+}
+
+function buildSupplierOperationalLinks(profile: SupplierMasterProfileContract | null) {
+  if (!profile) {
+    return [
+      { label: "Open supplier control", href: "/supplier-control" },
+      { label: "Open requisitions", href: "/procurement/requisitions" },
+      { label: "Open accounts payable", href: "/accounts-payable" }
+    ];
+  }
+
+  if (profile.satStatus === "critical" || profile.complianceStatus === "blocked") {
+    return [
+      { label: "Open supplier control", href: "/supplier-control" },
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open requisitions", href: "/procurement/requisitions" }
+    ];
+  }
+
+  if (profile.fiscalPacketCompletion < 100) {
+    return [
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open supplier control", href: "/supplier-control" },
+      { label: "Open requisitions", href: "/procurement/requisitions" }
+    ];
+  }
+
+  return [
+    { label: "Open supplier control", href: "/supplier-control" },
+    { label: "Open requisitions", href: "/procurement/requisitions" },
+    { label: "Open accounts payable", href: "/accounts-payable" }
+  ];
+}
+
 export default function SupplierMasterPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<SupplierMasterOverviewContract | null>(null);
   const [supplierControlNote, setSupplierControlNote] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -68,11 +282,6 @@ export default function SupplierMasterPage() {
   const [createForm, setCreateForm] = useState(emptyCreateForm);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
 
@@ -102,7 +311,7 @@ export default function SupplierMasterPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
   const filteredItems = useMemo(() => {
     if (!overview) {
@@ -154,6 +363,14 @@ export default function SupplierMasterPage() {
     () => overview?.risks.filter((risk) => risk.supplierProfileId === selectedItem?.id) ?? [],
     [overview, selectedItem]
   );
+  const supplierWorkflow = useMemo(() => buildSupplierWorkflow(selectedItem), [selectedItem]);
+  const supplierReadinessGate = useMemo(() => buildSupplierReadinessGate(selectedItem), [selectedItem]);
+  const supplierHumanStep = useMemo(() => buildSupplierHumanStep(selectedItem), [selectedItem]);
+  const supplierWhyNow = useMemo(() => buildSupplierWhyNow(selectedItem), [selectedItem]);
+  const supplierDownstreamEffect = useMemo(() => buildSupplierDownstreamEffect(selectedItem), [selectedItem]);
+  const supplierReportBack = useMemo(() => buildSupplierReportBack(selectedItem), [selectedItem]);
+  const supplierRouteSummary = useMemo(() => buildSupplierRouteSummary(selectedItem), [selectedItem]);
+  const supplierOperationalLinks = useMemo(() => buildSupplierOperationalLinks(selectedItem), [selectedItem]);
 
   useEffect(() => {
     if (!overview) {
@@ -182,7 +399,7 @@ export default function SupplierMasterPage() {
     satStatus: SupplierMasterProfileContract["satStatus"],
     fiscalPacketCompletion: number
   ) {
-    if (!selectedItem || !session.accessToken) {
+    if (!selectedItem) {
       return;
     }
 
@@ -240,7 +457,7 @@ export default function SupplierMasterPage() {
   }
 
   async function handleCreate() {
-    if (!session.accessToken || !overview) {
+    if (!overview) {
       return;
     }
 
@@ -367,6 +584,61 @@ export default function SupplierMasterPage() {
               <KpiCard label="Packet completion" value={`${filteredSummary.averageFiscalPacketCompletion}%`} footnote="Average fiscal packet completion across the visible supplier base." />
             </section>
 
+            {isDemoMode ? (
+              <Card
+                title="Operable demo mode"
+                description="Supplier fiscal onboarding can be tested locally, including SAT posture, payment readiness and packet completion."
+                aside={<Badge tone="warning">browser-persisted</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow">
+                    <div className="detailLabel">What works</div>
+                    <div>Create supplier master profiles, move them across SAT/compliance states, and validate packet completion from one board.</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">Recommended test</div>
+                    <div>Register a supplier with RFC and contact data, escalate it to critical, then mark it controlled once the fiscal packet reaches 100%.</div>
+                  </div>
+                </div>
+              </Card>
+            ) : null}
+
+            <section className="grid cols1">
+              <Card
+                title="Fiscal onboarding workflow"
+                description="This route should already connect supplier onboarding with procurement continuity and accounts-payable readiness."
+              >
+                <p className="sectionText">
+                  Build the supplier profile, normalize RFC and packet posture, then continue into `supplier-control`
+                  or `accounts-payable` depending on whether the next issue is supply execution or payment release.
+                </p>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/supplier-control">Open supplier control</Link>
+                  <Link className="buttonGhost" href="/procurement/requisitions">Open requisitions</Link>
+                  <Link className="buttonGhost" href="/procurement/purchase-orders">Open purchase orders</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Open accounts payable</Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Onboarding continuity" description="Whether the selected supplier is truly ready to move into active buying flow.">
+                <p className="sectionText">
+                  {supplierWorkflow?.onboardingRead ?? "Choose a supplier profile to inspect onboarding continuity."}
+                </p>
+              </Card>
+              <Card title="Execution bridge" description="How this supplier should connect to requisitions, purchase orders and payment release.">
+                <p className="sectionText">
+                  {supplierWorkflow?.executionBridge ?? "Choose a supplier profile to inspect execution bridge."}
+                </p>
+              </Card>
+              <Card title="Next recommended move" description="Fast operator guidance for the selected supplier profile.">
+                <p className="sectionText">
+                  {supplierWorkflow?.nextMove ?? "Choose a supplier profile to inspect the next move."}
+                </p>
+              </Card>
+            </section>
+
             <section className="grid cols3">
               <Card title="Supplier master board" description="RFC, SAT and payment packet readiness for strategic vendors.">
                 <FilterBar summary={`${filteredItems.length} supplier profiles match the active fiscal filters`}>
@@ -404,7 +676,7 @@ export default function SupplierMasterPage() {
                     onChange={(event) => setSearchFilter(event.target.value)}
                     placeholder="Supplier, RFC, contact or next action"
                   />
-                  <Badge tone={session.authenticated ? "success" : "warning"}>{session.authenticated ? "live backend" : source}</Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo operable" : "live backend"}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "supplier master ready"}</Badge>
                   <Badge tone={filteredSummary.criticalSuppliers > 0 ? "danger" : filteredSummary.incompletePackets > 0 ? "warning" : "success"}>
                     {filteredSummary.criticalSuppliers > 0
@@ -461,6 +733,12 @@ export default function SupplierMasterPage() {
                     <div className="detailRow"><div className="detailLabel">Bank account</div><div>{selectedItem.bankAccountMasked}</div></div>
                     <div className="detailRow"><div className="detailLabel">Compliance</div><div><Badge tone={tone(selectedItem.complianceStatus)}>{selectedItem.complianceStatus}</Badge></div></div>
                     <div className="detailRow"><div className="detailLabel">Supplier control</div><div>{supplierControlNote ?? "No supplier-control anchor visible right now."}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Supplier readiness gate</div><div className="tableCellStack"><Badge tone={supplierReadinessGate.tone}>{supplierReadinessGate.label}</Badge><span className="tableCellMuted">{supplierReadinessGate.summary}</span>{supplierReadinessGate.checks.map((check) => <span key={check} className="tableCellMuted">{check}</span>)}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Next human step</div><div>{supplierHumanStep}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Why now</div><div>{supplierWhyNow}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Downstream effect</div><div>{supplierDownstreamEffect}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Route summary</div><div>{supplierRouteSummary}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Report back</div><div>{supplierReportBack}</div></div>
                     <label className="stack">
                       <span className="detailLabel">Next action</span>
                       <textarea className="field" rows={4} value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} />
@@ -475,6 +753,13 @@ export default function SupplierMasterPage() {
                       <button type="button" className="button" disabled={isSaving} onClick={() => void handleUpdate("complete", "controlled", 100)}>
                         Mark Controlled
                       </button>
+                    </div>
+                    <div className="row gap wrap">
+                      {supplierOperationalLinks.map((link) => (
+                        <Link key={`${link.href}-${link.label}`} className="buttonGhost" href={link.href}>{link.label}</Link>
+                      ))}
+                      <Link className="buttonGhost" href="/procurement/purchase-orders">Open purchase orders</Link>
+                      <Link className="buttonGhost" href="/accounts-payable">Open accounts payable</Link>
                     </div>
                     {actionError ? <EmptyState title="Update blocked" description={actionError} /> : null}
                     {actionMessage ? <EmptyState title="Profile updated" description={actionMessage} /> : null}
@@ -501,7 +786,25 @@ export default function SupplierMasterPage() {
             </section>
 
             <section className="grid cols2">
-              <Card title="Register supplier profile" description="Create a supplier master profile directly in the tenant backend.">
+              <Card
+                title="Register supplier profile"
+                description={
+                  isDemoMode
+                    ? "Create a supplier fiscal profile in local demo persistence so SAT and payment readiness can be tested end to end."
+                    : "Create a supplier master profile directly in the tenant backend."
+                }
+              >
+                <div className="row gap wrap" style={{ marginBottom: 16 }}>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createSupplierMasterExample())}>
+                    Load demo example
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(emptyCreateForm)}>
+                    Reset form
+                  </button>
+                  <Link className="buttonGhost" href="/supplier-control">Open supplier control</Link>
+                  <Link className="buttonGhost" href="/procurement/requisitions">Open requisitions</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Open accounts payable</Link>
+                </div>
                 <div className="detailGrid">
                   <label className="detailRow"><div className="detailLabel">Supplier</div><input className="field" value={createForm.supplierName} onChange={(event) => setCreateForm((current) => ({ ...current, supplierName: event.target.value }))} /></label>
                   <label className="detailRow"><div className="detailLabel">Trade name</div><input className="field" value={createForm.tradeName} onChange={(event) => setCreateForm((current) => ({ ...current, tradeName: event.target.value }))} /></label>
