@@ -159,6 +159,9 @@ export default function EstimationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | EstimationCollectionLineContract["collectionHealth"]>("all");
+  const [projectStatusFilter, setProjectStatusFilter] = useState<"all" | EstimationCollectionLineContract["projectStatus"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -221,9 +224,30 @@ export default function EstimationsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredLines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.lines.filter((line) => {
+      const matchesHealth = healthFilter === "all" || line.collectionHealth === healthFilter;
+      const matchesProjectStatus = projectStatusFilter === "all" || line.projectStatus === projectStatusFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        line.projectName.toLowerCase().includes(normalizedSearch) ||
+        line.collectionOwner.toLowerCase().includes(normalizedSearch) ||
+        line.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesProjectStatus && matchesSearch;
+    });
+  }, [healthFilter, overview, projectStatusFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLines), [filteredLines]);
+
   const selectedLine = useMemo(
-    () => overview?.lines.find((item) => item.id === selectedLineId) ?? overview?.focusLine ?? null,
-    [overview, selectedLineId]
+    () => filteredLines.find((item) => item.id === selectedLineId) ?? filteredLines[0] ?? null,
+    [filteredLines, selectedLineId]
   );
 
   const selectedExceptions = useMemo(
@@ -243,6 +267,22 @@ export default function EstimationsPage() {
   );
 
   const actionOptions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLines.length === 0) {
+      setSelectedLineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLines.some((line) => line.id === selectedLineId);
+    if (!isSelectedVisible) {
+      setSelectedLineId(filteredLines[0]?.id ?? null);
+    }
+  }, [filteredLines, overview, selectedLineId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLine?.nextAction ?? "");
@@ -323,28 +363,28 @@ export default function EstimationsPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Tracked projects"
-                value={String(overview.summary.trackedProjects)}
-                footnote="Projects with active executed-work and collection posture."
+                value={String(filteredSummary.trackedProjects)}
+                footnote="Visible projects with active executed-work and collection posture."
               />
               <KpiCard
                 label="Estimated portfolio"
-                value={`MXN ${overview.summary.estimatedPortfolio.toLocaleString()}`}
-                footnote="Theoretical executed-work portfolio at current baseline."
+                value={`MXN ${filteredSummary.estimatedPortfolio.toLocaleString()}`}
+                footnote="Visible executed-work portfolio at the current baseline."
               />
               <KpiCard
                 label="Submitted estimations"
-                value={`MXN ${overview.summary.submittedPortfolio.toLocaleString()}`}
-                footnote="Work already packaged into billable or collectible estimations."
+                value={`MXN ${filteredSummary.submittedPortfolio.toLocaleString()}`}
+                footnote="Visible work already packaged into billable or collectible estimations."
               />
               <KpiCard
                 label="Pending collection"
-                value={`MXN ${overview.summary.pendingCollection.toLocaleString()}`}
-                footnote="Value still exposed between submitted work and effective collection."
+                value={`MXN ${filteredSummary.pendingCollection.toLocaleString()}`}
+                footnote="Visible value still exposed between submitted work and effective collection."
               />
               <KpiCard
                 label="Overdue tranches"
-                value={String(overview.summary.overdueCollections)}
-                footnote="Projects where the oldest pending collection already exceeded its expected collection window."
+                value={String(filteredSummary.overdueCollections)}
+                footnote="Visible projects where the oldest pending collection exceeded its expected window."
               />
               <KpiCard
                 label="Collections chain"
@@ -377,14 +417,54 @@ export default function EstimationsPage() {
               </Card>
 
               <Card title="Estimation board" description="Project progress, evidence gap and collection exposure in one live board.">
-                <FilterBar summary={`${overview.lines.length} estimation lines in the active tenant`}>
+                <FilterBar summary={`${filteredLines.length} estimation lines match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Collection health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="controlled">Controlled</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Project status
+                    <select
+                      className="field"
+                      value={projectStatusFilter}
+                      onChange={(event) => setProjectStatusFilter(event.target.value as typeof projectStatusFilter)}
+                    >
+                      <option value="all">All</option>
+                      <option value="active">Active</option>
+                      <option value="at_risk">At risk</option>
+                      <option value="blocked">Blocked</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Project, owner or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "estimations ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalCollections > 0 ? "danger" : filteredSummary.overdueCollections > 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalCollections > 0
+                      ? `${filteredSummary.criticalCollections} critical`
+                      : filteredSummary.overdueCollections > 0
+                        ? `${filteredSummary.overdueCollections} overdue`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.lines}
+                  rows={filteredLines}
                   columns={[
                     {
                       key: "project",
