@@ -59,6 +59,17 @@ type ExecutiveSnapshot = {
   documentControl: NonNullable<Awaited<ReturnType<typeof fetchDocumentControlOverview>>>;
 };
 
+type RecentSiteSignal = {
+  id: string;
+  project: string;
+  area: string;
+  title: string;
+  detail: string;
+  owner: string;
+  href: string;
+  tone: "success" | "warning" | "danger" | "info";
+};
+
 export default function DashboardPage() {
   const {
     activeCompany,
@@ -389,6 +400,88 @@ export default function DashboardPage() {
               : "success"
       }
     ];
+  }, [snapshot]);
+
+  const recentSiteSignals = useMemo<RecentSiteSignal[]>(() => {
+    if (!snapshot) {
+      return [];
+    }
+
+    const rows: RecentSiteSignal[] = [];
+
+    if (snapshot.projects.projects[0]) {
+      rows.push({
+        id: `project-${snapshot.projects.projects[0].id}`,
+        project: snapshot.projects.projects[0].name,
+        area: "Projects",
+        title: snapshot.projects.projects[0].code,
+        detail: snapshot.projects.projects[0].nextMilestone,
+        owner: snapshot.projects.projects[0].client,
+        href: "/projects",
+        tone:
+          snapshot.projects.projects[0].status === "blocked"
+            ? "danger"
+            : snapshot.projects.projects[0].status === "at_risk" || snapshot.projects.projects[0].status === "planning"
+              ? "warning"
+              : "success"
+      });
+    }
+
+    if (snapshot.dailyLog.focusEntry) {
+      rows.push({
+        id: `daily-log-${snapshot.dailyLog.focusEntry.id}`,
+        project: snapshot.dailyLog.focusEntry.projectName,
+        area: "Daily log",
+        title: snapshot.dailyLog.focusEntry.frontName,
+        detail: `${snapshot.dailyLog.focusEntry.progressPercent}% progress · ${snapshot.dailyLog.focusEntry.nextAction}`,
+        owner: snapshot.dailyLog.focusEntry.supervisor,
+        href: "/field",
+        tone:
+          snapshot.dailyLog.focusEntry.status === "flagged"
+            ? "danger"
+            : snapshot.dailyLog.focusEntry.status === "submitted"
+              ? "info"
+              : "success"
+      });
+    }
+
+    if (snapshot.quality.focusInspection) {
+      rows.push({
+        id: `quality-${snapshot.quality.focusInspection.id}`,
+        project: snapshot.quality.focusInspection.projectName,
+        area: "Quality",
+        title: snapshot.quality.focusInspection.areaName,
+        detail: `${snapshot.quality.focusInspection.openFindings} findings · ${snapshot.quality.focusInspection.nextAction}`,
+        owner: snapshot.quality.focusInspection.contractorName,
+        href: "/quality",
+        tone:
+          snapshot.quality.focusInspection.severity === "critical"
+            ? "danger"
+            : snapshot.quality.focusInspection.severity === "major"
+              ? "warning"
+              : "info"
+      });
+    }
+
+    if (snapshot.documentControl.focusItem) {
+      rows.push({
+        id: `document-${snapshot.documentControl.focusItem.id}`,
+        project: snapshot.documentControl.focusItem.projectName,
+        area: "Document control",
+        title: snapshot.documentControl.focusItem.subject,
+        detail: `${snapshot.documentControl.focusItem.documentType} · ${snapshot.documentControl.focusItem.nextAction}`,
+        owner: snapshot.documentControl.focusItem.owner,
+        href: "/document-control",
+        tone:
+          snapshot.documentControl.focusItem.health === "critical"
+            ? "danger"
+            : snapshot.documentControl.focusItem.health === "watch"
+              ? "warning"
+              : "success"
+      });
+    }
+
+    return rows;
   }, [snapshot]);
 
   const executiveKpis = useMemo(() => {
@@ -844,6 +937,23 @@ export default function DashboardPage() {
           </section>
 
           <section className="grid cols3">
+            <Card title="Recent site signals" description="Latest project-linked operating signals already visible to direction.">
+              <div className="list">
+                {recentSiteSignals.map((signal) => (
+                  <div className="listItem" key={signal.id}>
+                    <div>
+                      <strong>{signal.project} · {signal.area}</strong>
+                      <p>{signal.title} · {signal.detail}</p>
+                    </div>
+                    <div className="row gap wrap">
+                      <Badge tone={signal.tone}>{signal.owner}</Badge>
+                      <Link className="buttonGhost" href={signal.href}>Open</Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
             <Card title="Executive pipeline" description="Directors can now read the commercial and operating funnel quickly.">
               <div className="detailGrid">
                 <div className="detailRow">
