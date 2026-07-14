@@ -96,6 +96,9 @@ export default function SubcontractsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | SubcontractLineContract["subcontractHealth"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -139,9 +142,40 @@ export default function SubcontractsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const projectOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return Array.from(new Set(overview.lines.map((item) => item.projectName))).sort((left, right) =>
+      left.localeCompare(right)
+    );
+  }, [overview]);
+
+  const filteredLines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.lines.filter((item) => {
+      const matchesProject = projectFilter === "all" || item.projectName === projectFilter;
+      const matchesHealth = healthFilter === "all" || item.subcontractHealth === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.contractorName.toLowerCase().includes(normalizedSearch) ||
+        item.frontName.toLowerCase().includes(normalizedSearch) ||
+        item.code.toLowerCase().includes(normalizedSearch);
+
+      return matchesProject && matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, projectFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLines), [filteredLines]);
+
   const selectedLine = useMemo(
-    () => overview?.lines.find((item) => item.id === selectedLineId) ?? overview?.focusLine ?? null,
-    [overview, selectedLineId]
+    () => filteredLines.find((item) => item.id === selectedLineId) ?? filteredLines[0] ?? null,
+    [filteredLines, selectedLineId]
   );
 
   const selectedRisks = useMemo(
@@ -150,6 +184,22 @@ export default function SubcontractsPage() {
   );
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLines.length === 0) {
+      setSelectedLineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLines.some((item) => item.id === selectedLineId);
+    if (!isSelectedVisible) {
+      setSelectedLineId(filteredLines[0]?.id ?? null);
+    }
+  }, [filteredLines, overview, selectedLineId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLine?.nextAction ?? "");
@@ -239,41 +289,65 @@ export default function SubcontractsPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Active subcontracts"
-                value={String(overview.summary.activeSubcontracts)}
+                value={String(filteredSummary.activeSubcontracts)}
                 footnote="Contractor fronts currently tracked in live execution."
               />
               <KpiCard
                 label="Contracted"
-                value={`MXN ${overview.summary.contractedAmount.toLocaleString()}`}
+                value={`MXN ${filteredSummary.contractedAmount.toLocaleString()}`}
                 footnote="Baseline value currently under contractor execution."
               />
               <KpiCard
                 label="Earned"
-                value={`MXN ${overview.summary.earnedAmount.toLocaleString()}`}
+                value={`MXN ${filteredSummary.earnedAmount.toLocaleString()}`}
                 footnote="Earned value implied by field advance and current productivity."
               />
               <KpiCard
                 label="Pending destajo"
-                value={`MXN ${overview.summary.pendingDestajo.toLocaleString()}`}
+                value={`MXN ${filteredSummary.pendingDestajo.toLocaleString()}`}
                 footnote="Value still pending to settle between invoiced and paid progress."
               />
               <KpiCard
                 label="Execution risk"
-                value={String(overview.summary.executionRiskSubcontracts)}
+                value={String(filteredSummary.executionRiskSubcontracts)}
                 footnote="Subcontracts already under flagged field logs, poor quality readiness or critical posture."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Subcontract board" description="Destajo, progress and contractor operating posture across active fronts.">
-                <FilterBar summary={`${overview.lines.length} subcontract lines in the active tenant`}>
+                <FilterBar summary={`${filteredLines.length} subcontract lines in the active tenant`}>
+                  <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                    <option value="all">All projects</option>
+                    {projectOptions.map((projectName) => (
+                      <option key={projectName} value={projectName}>
+                        {projectName}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="selectField"
+                    value={healthFilter}
+                    onChange={(event) => setHealthFilter(event.target.value as "all" | SubcontractLineContract["subcontractHealth"])}
+                  >
+                    <option value="all">All health</option>
+                    <option value="controlled">controlled</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search contractor, front or code"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "subcontracts ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.lines}
+                  rows={filteredLines}
                   columns={[
                     {
                       key: "contractor",
