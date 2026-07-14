@@ -140,6 +140,7 @@ export default function QualityPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [areaFilter, setAreaFilter] = useState<string>("all");
   const [createForm, setCreateForm] = useState({
     projectName: "Proyecto central",
     areaName: "Frente 1",
@@ -214,15 +215,30 @@ export default function QualityPage() {
     );
   }, [overview]);
 
+  const areaOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const scopedInspections =
+      projectFilter === "all"
+        ? overview.inspectionsBoard
+        : overview.inspectionsBoard.filter((item) => item.projectName === projectFilter);
+
+    return Array.from(new Set(scopedInspections.map((item) => item.areaName))).sort((left, right) => left.localeCompare(right));
+  }, [overview, projectFilter]);
+
   const filteredInspections = useMemo(() => {
     if (!overview) {
       return [];
     }
 
-    return projectFilter === "all"
-      ? overview.inspectionsBoard
-      : overview.inspectionsBoard.filter((item) => item.projectName === projectFilter);
-  }, [overview, projectFilter]);
+    return overview.inspectionsBoard.filter(
+      (item) =>
+        (projectFilter === "all" || item.projectName === projectFilter) &&
+        (areaFilter === "all" || item.areaName === areaFilter)
+    );
+  }, [areaFilter, overview, projectFilter]);
 
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.inspectionId === selectedInspection?.id) ?? [],
@@ -234,13 +250,14 @@ export default function QualityPage() {
       return [];
     }
 
-    return projectFilter === "all"
-      ? overview.risks
-      : overview.risks.filter((risk) => {
-          const parent = overview.inspectionsBoard.find((item) => item.id === risk.inspectionId);
-          return parent?.projectName === projectFilter;
-        });
-  }, [overview, projectFilter]);
+    return overview.risks.filter((risk) => {
+      const parent = overview.inspectionsBoard.find((item) => item.id === risk.inspectionId);
+      return (
+        (!!parent && (projectFilter === "all" || parent.projectName === projectFilter)) &&
+        (!!parent && (areaFilter === "all" || parent.areaName === areaFilter))
+      );
+    });
+  }, [areaFilter, overview, projectFilter]);
 
   const actionOptions = useMemo(
     () => (selectedInspection ? qualityActionOptions(selectedInspection) : []),
@@ -502,6 +519,14 @@ export default function QualityPage() {
                     {projectOptions.map((project) => (
                       <option key={project} value={project}>
                         {project}
+                      </option>
+                    ))}
+                  </select>
+                  <select className="selectField" value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
+                    <option value="all">All areas</option>
+                    {areaOptions.map((area) => (
+                      <option key={area} value={area}>
+                        {area}
                       </option>
                     ))}
                   </select>

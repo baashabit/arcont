@@ -179,6 +179,7 @@ export default function DocumentControlPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>("all");
   const [createForm, setCreateForm] = useState({
     documentType: "RFI",
     subject: "",
@@ -254,15 +255,25 @@ export default function DocumentControlPage() {
     return Array.from(new Set(overview.items.map((item) => item.projectName))).sort((left, right) => left.localeCompare(right));
   }, [overview]);
 
+  const documentTypeOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return Array.from(new Set(overview.items.map((item) => item.documentType))).sort((left, right) => left.localeCompare(right));
+  }, [overview]);
+
   const filteredItems = useMemo(() => {
     if (!overview) {
       return [];
     }
 
-    return projectFilter === "all"
-      ? overview.items
-      : overview.items.filter((item) => item.projectName === projectFilter);
-  }, [overview, projectFilter]);
+    return overview.items.filter(
+      (item) =>
+        (projectFilter === "all" || item.projectName === projectFilter) &&
+        (documentTypeFilter === "all" || item.documentType === documentTypeFilter)
+    );
+  }, [documentTypeFilter, overview, projectFilter]);
 
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.itemId === selectedItem?.id) ?? [],
@@ -274,13 +285,14 @@ export default function DocumentControlPage() {
       return [];
     }
 
-    return projectFilter === "all"
-      ? overview.risks
-      : overview.risks.filter((risk) => {
-          const parent = overview.items.find((item) => item.id === risk.itemId);
-          return parent?.projectName === projectFilter;
-        });
-  }, [overview, projectFilter]);
+    return overview.risks.filter((risk) => {
+      const parent = overview.items.find((item) => item.id === risk.itemId);
+      return (
+        (!!parent && (projectFilter === "all" || parent.projectName === projectFilter)) &&
+        (!!parent && (documentTypeFilter === "all" || parent.documentType === documentTypeFilter))
+      );
+    });
+  }, [documentTypeFilter, overview, projectFilter]);
 
   const selectedStory = useMemo(() => buildDocumentBridge(selectedItem, bridgeContext), [bridgeContext, selectedItem]);
 
@@ -505,6 +517,14 @@ export default function DocumentControlPage() {
                     {projectOptions.map((project) => (
                       <option key={project} value={project}>
                         {project}
+                      </option>
+                    ))}
+                  </select>
+                  <select className="selectField" value={documentTypeFilter} onChange={(event) => setDocumentTypeFilter(event.target.value)}>
+                    <option value="all">All types</option>
+                    {documentTypeOptions.map((documentType) => (
+                      <option key={documentType} value={documentType}>
+                        {documentType}
                       </option>
                     ))}
                   </select>
