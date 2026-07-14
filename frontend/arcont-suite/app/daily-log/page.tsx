@@ -151,6 +151,9 @@ export default function DailyLogPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | DailyLogEntryContract["status"]>("all");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -224,9 +227,35 @@ export default function DailyLogPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredEntries = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedProject = projectFilter.trim().toLowerCase();
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.entries.filter((entry) => {
+      const matchesStatus = statusFilter === "all" || entry.status === statusFilter;
+      const matchesProject =
+        normalizedProject.length === 0 ||
+        entry.projectName.toLowerCase().includes(normalizedProject) ||
+        entry.frontName.toLowerCase().includes(normalizedProject);
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        entry.supervisor.toLowerCase().includes(normalizedSearch) ||
+        entry.nextAction.toLowerCase().includes(normalizedSearch) ||
+        entry.frontName.toLowerCase().includes(normalizedSearch) ||
+        entry.projectName.toLowerCase().includes(normalizedSearch);
+
+      return matchesStatus && matchesProject && matchesSearch;
+    });
+  }, [overview, projectFilter, searchFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredEntries), [filteredEntries]);
+
   const selectedEntry = useMemo(
-    () => overview?.entries.find((entry) => entry.id === selectedEntryId) ?? overview?.focusEntry ?? null,
-    [overview, selectedEntryId]
+    () => filteredEntries.find((entry) => entry.id === selectedEntryId) ?? filteredEntries[0] ?? null,
+    [filteredEntries, selectedEntryId]
   );
 
   const selectedRisks = useMemo(
@@ -240,6 +269,22 @@ export default function DailyLogPage() {
   );
 
   const entryActions = useMemo(() => (selectedEntry ? actionOptions(selectedEntry) : []), [selectedEntry]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredEntries.length === 0) {
+      setSelectedEntryId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredEntries.some((entry) => entry.id === selectedEntryId);
+    if (!isSelectedVisible) {
+      setSelectedEntryId(filteredEntries[0]?.id ?? null);
+    }
+  }, [filteredEntries, overview, selectedEntryId]);
 
   useEffect(() => {
     setNextActionDraft(selectedEntry?.nextAction ?? "");
@@ -450,28 +495,28 @@ export default function DailyLogPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Submitted today"
-                value={String(overview.summary.submittedToday)}
-                footnote="Logs already out of draft and visible to supervision today."
+                value={String(filteredSummary.submittedToday)}
+                footnote="Visible logs already out of draft and visible to supervision today."
               />
               <KpiCard
                 label="Approved logs"
-                value={String(overview.summary.approvedLogs)}
-                footnote="Field logs that already cleared review with evidence discipline."
+                value={String(filteredSummary.approvedLogs)}
+                footnote="Visible field logs that already cleared review with evidence discipline."
               />
               <KpiCard
                 label="Flagged logs"
-                value={String(overview.summary.flaggedLogs)}
-                footnote="Logs still blocked by issues, evidence gaps or field exceptions."
+                value={String(filteredSummary.flaggedLogs)}
+                footnote="Visible logs still blocked by issues, evidence gaps or field exceptions."
               />
               <KpiCard
                 label="Pending evidence"
-                value={String(overview.summary.pendingEvidence)}
+                value={String(filteredSummary.pendingEvidence)}
                 footnote="Directional evidence debt still pending before clean field closure."
               />
               <KpiCard
                 label="Execution risk"
-                value={String(overview.summary.executionRiskLogs)}
-                footnote="Logs already carrying field, quality or subcontract execution risk."
+                value={String(filteredSummary.executionRiskLogs)}
+                footnote="Visible logs already carrying field, quality or subcontract execution risk."
               />
             </section>
 
@@ -495,14 +540,51 @@ export default function DailyLogPage() {
 
             <section className="grid cols2">
               <Card title="Daily log board" description="Shift capture, productivity and blocker posture across the active fronts.">
-                <FilterBar summary={`${overview.entries.length} logs in the active tenant`}>
+                <FilterBar summary={`${filteredEntries.length} logs match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Status
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                      <option value="all">All</option>
+                      <option value="draft">Draft</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="approved">Approved</option>
+                      <option value="flagged">Flagged</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 200 }}>
+                    Project
+                    <input
+                      className="field"
+                      type="search"
+                      value={projectFilter}
+                      onChange={(event) => setProjectFilter(event.target.value)}
+                      placeholder="Project or front"
+                    />
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Supervisor or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "field diary ready"}</Badge>
+                  <Badge tone={filteredSummary.flaggedLogs > 0 ? "danger" : filteredSummary.executionRiskLogs > 0 ? "warning" : "success"}>
+                    {filteredSummary.flaggedLogs > 0
+                      ? `${filteredSummary.flaggedLogs} flagged`
+                      : filteredSummary.executionRiskLogs > 0
+                        ? `${filteredSummary.executionRiskLogs} at risk`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.entries}
+                  rows={filteredEntries}
                   columns={[
                     {
                       key: "frontName",
