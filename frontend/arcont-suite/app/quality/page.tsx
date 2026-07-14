@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -126,8 +127,11 @@ function buildQualityStory(inspection: QualityInspectionContract | null, bridge:
   };
 }
 
-export default function QualityPage() {
+function QualityPageContent() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [overview, setOverview] = useState<QualityOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<QualityBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -154,6 +158,13 @@ export default function QualityPage() {
     status: "in_progress" as QualityInspectionContract["status"],
     nextAction: ""
   });
+
+  useEffect(() => {
+    const project = searchParams.get("project");
+    const area = searchParams.get("area");
+    setProjectFilter(project && project.length > 0 ? project : "all");
+    setAreaFilter(area && area.length > 0 ? area : "all");
+  }, [searchParams]);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -258,6 +269,28 @@ export default function QualityPage() {
       );
     });
   }, [areaFilter, overview, projectFilter]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    if (projectFilter === "all") {
+      nextParams.delete("project");
+    } else {
+      nextParams.set("project", projectFilter);
+    }
+
+    if (areaFilter === "all") {
+      nextParams.delete("area");
+    } else {
+      nextParams.set("area", areaFilter);
+    }
+
+    const nextQuery = nextParams.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [areaFilter, pathname, projectFilter, router, searchParams]);
 
   const actionOptions = useMemo(
     () => (selectedInspection ? qualityActionOptions(selectedInspection) : []),
@@ -801,5 +834,13 @@ export default function QualityPage() {
         )}
       </ModuleGate>
     </AppShell>
+  );
+}
+
+export default function QualityPage() {
+  return (
+    <Suspense fallback={null}>
+      <QualityPageContent />
+    </Suspense>
   );
 }

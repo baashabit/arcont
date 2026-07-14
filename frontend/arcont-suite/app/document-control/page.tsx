@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -165,8 +166,11 @@ function validateDocumentCreateForm(input: {
   return null;
 }
 
-export default function DocumentControlPage() {
+function DocumentControlPageContent() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [overview, setOverview] = useState<DocumentControlOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<DocumentBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -192,6 +196,13 @@ export default function DocumentControlPage() {
     health: "watch" as DocumentControlItemContract["health"],
     nextAction: ""
   });
+
+  useEffect(() => {
+    const project = searchParams.get("project");
+    const documentType = searchParams.get("documentType");
+    setProjectFilter(project && project.length > 0 ? project : "all");
+    setDocumentTypeFilter(documentType && documentType.length > 0 ? documentType : "all");
+  }, [searchParams]);
 
   useEffect(() => {
     if (!session.authenticated || !session.accessToken) {
@@ -293,6 +304,28 @@ export default function DocumentControlPage() {
       );
     });
   }, [documentTypeFilter, overview, projectFilter]);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    if (projectFilter === "all") {
+      nextParams.delete("project");
+    } else {
+      nextParams.set("project", projectFilter);
+    }
+
+    if (documentTypeFilter === "all") {
+      nextParams.delete("documentType");
+    } else {
+      nextParams.set("documentType", documentTypeFilter);
+    }
+
+    const nextQuery = nextParams.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }
+  }, [documentTypeFilter, pathname, projectFilter, router, searchParams]);
 
   const selectedStory = useMemo(() => buildDocumentBridge(selectedItem, bridgeContext), [bridgeContext, selectedItem]);
 
@@ -802,5 +835,13 @@ export default function DocumentControlPage() {
         )}
       </ModuleGate>
     </AppShell>
+  );
+}
+
+export default function DocumentControlPage() {
+  return (
+    <Suspense fallback={null}>
+      <DocumentControlPageContent />
+    </Suspense>
   );
 }
