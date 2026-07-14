@@ -111,6 +111,8 @@ export default function CrmPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | CrmLeadBucketContract["health"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [signalDraft, setSignalDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -173,9 +175,45 @@ export default function CrmPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredBuckets = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.leadBuckets.filter((bucket) => {
+      const matchesHealth = healthFilter === "all" || bucket.health === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        bucket.projectName.toLowerCase().includes(normalizedSearch) ||
+        bucket.segment.toLowerCase().includes(normalizedSearch) ||
+        bucket.owner.toLowerCase().includes(normalizedSearch) ||
+        bucket.signal.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, searchFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const qualifiedLeads = filteredBuckets.reduce((sum, bucket) => sum + bucket.openOpportunities, 0);
+    const reservations = filteredBuckets.reduce((sum, bucket) => sum + bucket.reservations, 0);
+    const forecastRevenue = filteredBuckets.reduce((sum, bucket) => sum + bucket.forecastRevenue, 0);
+    const visitConversion =
+      filteredBuckets.length > 0
+        ? Number((filteredBuckets.reduce((sum, bucket) => sum + bucket.conversionRate, 0) / filteredBuckets.length).toFixed(1))
+        : 0;
+
+    return {
+      qualifiedLeads,
+      visitConversion,
+      reservations,
+      forecastRevenue
+    };
+  }, [filteredBuckets]);
+
   const selectedBucket = useMemo(
-    () => overview?.leadBuckets.find((bucket) => bucket.id === selectedBucketId) ?? overview?.focusBucket ?? null,
-    [overview, selectedBucketId]
+    () => filteredBuckets.find((bucket) => bucket.id === selectedBucketId) ?? filteredBuckets[0] ?? null,
+    [filteredBuckets, selectedBucketId]
   );
 
   const selectedRisks = useMemo(
@@ -186,6 +224,22 @@ export default function CrmPage() {
   const selectedStory = useMemo(() => buildCommercialBridge(selectedBucket, commercialBridge), [commercialBridge, selectedBucket]);
 
   const actionOptions = useMemo(() => (selectedBucket ? crmActionOptions(selectedBucket) : []), [selectedBucket]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredBuckets.length === 0) {
+      setSelectedBucketId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredBuckets.some((bucket) => bucket.id === selectedBucketId);
+    if (!isSelectedVisible) {
+      setSelectedBucketId(filteredBuckets[0]?.id ?? null);
+    }
+  }, [filteredBuckets, overview, selectedBucketId]);
 
   useEffect(() => {
     setSignalDraft(selectedBucket?.signal ?? "");
@@ -272,36 +326,62 @@ export default function CrmPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Qualified leads"
-                value={String(overview.summary.qualifiedLeads)}
-                footnote="Active opportunities ready for advisor, broker or closer action."
+                value={String(filteredSummary.qualifiedLeads)}
+                footnote="Visible opportunities ready for advisor, broker or closer action."
               />
               <KpiCard
                 label="Visit conversion"
-                value={`${overview.summary.visitConversion}%`}
-                footnote="Average conversion signal across the current sales buckets."
+                value={`${filteredSummary.visitConversion}%`}
+                footnote="Average conversion signal across the visible sales buckets."
               />
               <KpiCard
                 label="Reservations"
-                value={String(overview.summary.reservations)}
-                footnote="Reservations now competing for inventory and documentation bandwidth."
+                value={String(filteredSummary.reservations)}
+                footnote="Visible reservations competing for inventory and documentation bandwidth."
               />
               <KpiCard
                 label="Forecast revenue"
-                value={`MXN ${overview.summary.forecastRevenue.toLocaleString()}`}
-                footnote="Commercial revenue forecast tied to the active tenant pipeline."
+                value={`MXN ${filteredSummary.forecastRevenue.toLocaleString()}`}
+                footnote="Commercial revenue forecast tied to the visible tenant pipeline."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Commercial board" description="Live project demand, conversion and reservation pressure.">
-                <FilterBar summary={`${overview.leadBuckets.length} commercial buckets in the active tenant`}>
+                <FilterBar summary={`${filteredBuckets.length} commercial buckets match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="healthy">Healthy</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Project, segment, owner or signal"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "crm ready"}</Badge>
+                  <Badge tone={filteredBuckets.some((bucket) => bucket.health === "critical") ? "danger" : filteredBuckets.some((bucket) => bucket.health === "watch") ? "warning" : "success"}>
+                    {filteredBuckets.some((bucket) => bucket.health === "critical")
+                      ? "critical buckets visible"
+                      : filteredBuckets.some((bucket) => bucket.health === "watch")
+                        ? "watch buckets visible"
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.leadBuckets}
+                  rows={filteredBuckets}
                   columns={[
                     {
                       key: "project",
