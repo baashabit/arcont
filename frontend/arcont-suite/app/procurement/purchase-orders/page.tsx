@@ -195,6 +195,9 @@ export default function ProcurementPurchaseOrdersPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | ProcurementPurchaseOrderContract["status"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -265,10 +268,55 @@ export default function ProcurementPurchaseOrdersPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const projectOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return Array.from(new Set(overview.purchaseOrders.map((item) => item.projectName))).sort((left, right) =>
+      left.localeCompare(right)
+    );
+  }, [overview]);
+
+  const filteredPurchaseOrders = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.purchaseOrders.filter((item) => {
+      const matchesProject = projectFilter === "all" || item.projectName === projectFilter;
+      const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.code.toLowerCase().includes(normalizedSearch) ||
+        item.projectName.toLowerCase().includes(normalizedSearch) ||
+        item.supplierName.toLowerCase().includes(normalizedSearch) ||
+        item.category.toLowerCase().includes(normalizedSearch);
+
+      return matchesProject && matchesStatus && matchesSearch;
+    });
+  }, [overview, projectFilter, searchFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => {
+    return {
+      openOrders: filteredPurchaseOrders.filter((item) => item.status !== "received").length,
+      inTransitOrders: filteredPurchaseOrders.filter((item) => item.status === "in_transit" || item.status === "partial").length,
+      blockedOrders: filteredPurchaseOrders.filter((item) => item.status === "blocked").length,
+      averageReceivedPercent:
+        filteredPurchaseOrders.length > 0
+          ? Number(
+              (
+                filteredPurchaseOrders.reduce((sum, item) => sum + item.receivedPercent, 0) / filteredPurchaseOrders.length
+              ).toFixed(1)
+            )
+          : 0
+    };
+  }, [filteredPurchaseOrders]);
+
   const selectedPurchaseOrder = useMemo(
-    () =>
-      overview?.purchaseOrders.find((item) => item.id === selectedPurchaseOrderId) ?? overview?.focusPurchaseOrder ?? null,
-    [overview, selectedPurchaseOrderId]
+    () => filteredPurchaseOrders.find((item) => item.id === selectedPurchaseOrderId) ?? filteredPurchaseOrders[0] ?? null,
+    [filteredPurchaseOrders, selectedPurchaseOrderId]
   );
 
   const selectedRisks = useMemo(
@@ -312,6 +360,22 @@ export default function ProcurementPurchaseOrdersPage() {
       bridgeContext?.requisitions.requisitions.filter((item) => item.status === "approved" || item.status === "sourcing") ?? [],
     [bridgeContext]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredPurchaseOrders.length === 0) {
+      setSelectedPurchaseOrderId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredPurchaseOrders.some((item) => item.id === selectedPurchaseOrderId);
+    if (!isSelectedVisible) {
+      setSelectedPurchaseOrderId(filteredPurchaseOrders[0]?.id ?? null);
+    }
+  }, [filteredPurchaseOrders, overview, selectedPurchaseOrderId]);
 
   useEffect(() => {
     setNextActionDraft(selectedPurchaseOrder?.nextAction ?? "");
@@ -480,10 +544,10 @@ export default function ProcurementPurchaseOrdersPage() {
         {overview ? (
           <>
             <section className="grid cols4">
-              <KpiCard label="Open orders" value={String(overview.summary.openOrders)} footnote="Orders still not fully received." />
-              <KpiCard label="In transit" value={String(overview.summary.inTransitOrders)} footnote="Orders actively moving through logistics or partial receipt." />
-              <KpiCard label="Blocked orders" value={String(overview.summary.blockedOrders)} footnote="Orders stopped by commercial, fiscal or execution issues." />
-              <KpiCard label="Receipt progress" value={`${overview.summary.averageReceivedPercent}%`} footnote="Average receipt completion across current orders." />
+              <KpiCard label="Open orders" value={String(filteredSummary.openOrders)} footnote="Orders still not fully received." />
+              <KpiCard label="In transit" value={String(filteredSummary.inTransitOrders)} footnote="Orders actively moving through logistics or partial receipt." />
+              <KpiCard label="Blocked orders" value={String(filteredSummary.blockedOrders)} footnote="Orders stopped by commercial, fiscal or execution issues." />
+              <KpiCard label="Receipt progress" value={`${filteredSummary.averageReceivedPercent}%`} footnote="Average receipt completion across visible orders." />
             </section>
 
             <section className="grid cols3">
@@ -506,14 +570,43 @@ export default function ProcurementPurchaseOrdersPage() {
 
             <section className="grid cols2">
               <Card title="Purchase order board" description="Supplier execution, ETA control and fiscal matching across the active tenant.">
-                <FilterBar summary={`${overview.purchaseOrders.length} purchase orders in the active tenant`}>
+                <FilterBar summary={`${filteredPurchaseOrders.length} purchase orders in the active tenant`}>
+                  <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                    <option value="all">All projects</option>
+                    {projectOptions.map((projectName) => (
+                      <option key={projectName} value={projectName}>
+                        {projectName}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="selectField"
+                    value={statusFilter}
+                    onChange={(event) =>
+                      setStatusFilter(event.target.value as "all" | ProcurementPurchaseOrderContract["status"])
+                    }
+                  >
+                    <option value="all">All status</option>
+                    <option value="issued">issued</option>
+                    <option value="confirmed">confirmed</option>
+                    <option value="in_transit">in_transit</option>
+                    <option value="partial">partial</option>
+                    <option value="blocked">blocked</option>
+                    <option value="received">received</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search order, project, supplier or category"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "purchase orders ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.purchaseOrders}
+                  rows={filteredPurchaseOrders}
                   columns={[
                     {
                       key: "code",
