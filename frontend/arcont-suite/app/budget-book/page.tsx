@@ -144,6 +144,9 @@ export default function BudgetBookPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [procurementFilter, setProcurementFilter] = useState<"all" | BudgetBookLineContract["procurementStatus"]>("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | BudgetBookLineContract["generatorHealth"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -187,9 +190,32 @@ export default function BudgetBookPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredLines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.lines.filter((line) => {
+      const matchesProcurement = procurementFilter === "all" || line.procurementStatus === procurementFilter;
+      const matchesHealth = healthFilter === "all" || line.generatorHealth === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        line.conceptCode.toLowerCase().includes(normalizedSearch) ||
+        line.packageName.toLowerCase().includes(normalizedSearch) ||
+        line.projectName.toLowerCase().includes(normalizedSearch) ||
+        line.buyer.toLowerCase().includes(normalizedSearch) ||
+        line.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesProcurement && matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, procurementFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLines), [filteredLines]);
+
   const selectedLine = useMemo(
-    () => overview?.lines.find((item) => item.id === selectedLineId) ?? overview?.focusLine ?? null,
-    [overview, selectedLineId]
+    () => filteredLines.find((item) => item.id === selectedLineId) ?? filteredLines[0] ?? null,
+    [filteredLines, selectedLineId]
   );
 
   const selectedRisks = useMemo(
@@ -198,6 +224,22 @@ export default function BudgetBookPage() {
   );
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLines.length === 0) {
+      setSelectedLineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLines.some((line) => line.id === selectedLineId);
+    if (!isSelectedVisible) {
+      setSelectedLineId(filteredLines[0]?.id ?? null);
+    }
+  }, [filteredLines, overview, selectedLineId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLine?.nextAction ?? "");
@@ -274,42 +316,83 @@ export default function BudgetBookPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Active concepts"
-                value={String(overview.summary.activeConcepts)}
-                footnote="Concepts currently anchored to live procurement packages."
+                value={String(filteredSummary.activeConcepts)}
+                footnote="Concepts currently visible in the operating filter."
               />
               <KpiCard
                 label="Baseline budget"
-                value={`MXN ${overview.summary.baselineBudget.toLocaleString()}`}
-                footnote="Budget baseline currently loaded into the concept catalog."
+                value={`MXN ${filteredSummary.baselineBudget.toLocaleString()}`}
+                footnote="Budget baseline currently loaded into the visible subset."
               />
               <KpiCard
                 label="Estimated budget"
-                value={`MXN ${Math.round(overview.summary.estimatedBudget).toLocaleString()}`}
-                footnote="Commercial value already backed by current generators and evidence."
+                value={`MXN ${Math.round(filteredSummary.estimatedBudget).toLocaleString()}`}
+                footnote="Commercial value already backed by generators and evidence in view."
               />
               <KpiCard
                 label="Pending budget"
-                value={`MXN ${Math.round(overview.summary.pendingBudget).toLocaleString()}`}
+                value={`MXN ${Math.round(filteredSummary.pendingBudget).toLocaleString()}`}
                 footnote="Value still exposed by incomplete generators, approvals or blocked sourcing."
               />
               <KpiCard
                 label="Cash-risk concepts"
-                value={String(overview.summary.conceptsAtCashRisk)}
-                footnote="Concepts already carrying collection exposure or overdue cash conversion."
+                value={String(filteredSummary.conceptsAtCashRisk)}
+                footnote="Visible concepts already carrying collection exposure or overdue cash conversion."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Concept board" description="Live catalog of budget concepts with quantity closure and procurement posture.">
-                <FilterBar summary={`${overview.lines.length} concepts in the active tenant`}>
+                <FilterBar summary={`${filteredLines.length} concepts match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Procurement
+                    <select
+                      className="field"
+                      value={procurementFilter}
+                      onChange={(event) => setProcurementFilter(event.target.value as typeof procurementFilter)}
+                    >
+                      <option value="all">All</option>
+                      <option value="draft">Draft</option>
+                      <option value="sourcing">Sourcing</option>
+                      <option value="awaiting_approval">Awaiting approval</option>
+                      <option value="awarded">Awarded</option>
+                      <option value="blocked">Blocked</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Generator health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="controlled">Controlled</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Concept, project, package, buyer or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "budget book ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalConcepts > 0 ? "danger" : filteredSummary.conceptsAtCashRisk > 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalConcepts > 0
+                      ? `${filteredSummary.criticalConcepts} critical`
+                      : filteredSummary.conceptsAtCashRisk > 0
+                        ? `${filteredSummary.conceptsAtCashRisk} at cash risk`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
 
                 <DataTable
-                  rows={overview.lines}
+                  rows={filteredLines}
                   columns={[
                     {
                       key: "concept",
