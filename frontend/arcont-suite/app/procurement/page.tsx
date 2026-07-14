@@ -88,6 +88,9 @@ export default function ProcurementPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | ProcurementPackageContract["status"]>("all");
+  const [strategicFilter, setStrategicFilter] = useState<"all" | "strategic" | "standard">("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -131,9 +134,51 @@ export default function ProcurementPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredPackages = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.packages.filter((procurementPackage) => {
+      const matchesStatus = statusFilter === "all" || procurementPackage.status === statusFilter;
+      const matchesStrategic =
+        strategicFilter === "all" ||
+        (strategicFilter === "strategic" && procurementPackage.strategic) ||
+        (strategicFilter === "standard" && !procurementPackage.strategic);
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        procurementPackage.packageName.toLowerCase().includes(normalizedSearch) ||
+        procurementPackage.code.toLowerCase().includes(normalizedSearch) ||
+        procurementPackage.projectName.toLowerCase().includes(normalizedSearch) ||
+        procurementPackage.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesStatus && matchesStrategic && matchesSearch;
+    });
+  }, [overview, searchFilter, statusFilter, strategicFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const openPackages = filteredPackages.filter((item) => item.status !== "awarded");
+    const averageApprovalHours =
+      openPackages.length > 0
+        ? Number((openPackages.reduce((sum, item) => sum + item.approvalHours, 0) / openPackages.length).toFixed(1))
+        : 0;
+    const averageBidCount =
+      filteredPackages.length > 0
+        ? Number((filteredPackages.reduce((sum, item) => sum + item.bidCount, 0) / filteredPackages.length).toFixed(1))
+        : 0;
+
+    return {
+      openRequisitions: openPackages.length,
+      averageApprovalHours,
+      strategicPackages: filteredPackages.filter((item) => item.strategic).length,
+      averageBidCount
+    };
+  }, [filteredPackages]);
+
   const selectedPackage = useMemo(
-    () => overview?.packages.find((item) => item.id === selectedPackageId) ?? overview?.focusPackage ?? null,
-    [overview, selectedPackageId]
+    () => filteredPackages.find((item) => item.id === selectedPackageId) ?? filteredPackages[0] ?? null,
+    [filteredPackages, selectedPackageId]
   );
 
   const selectedRisks = useMemo(
@@ -145,6 +190,22 @@ export default function ProcurementPage() {
     () => (selectedPackage ? procurementActionOptions(selectedPackage) : []),
     [selectedPackage]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredPackages.length === 0) {
+      setSelectedPackageId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredPackages.some((procurementPackage) => procurementPackage.id === selectedPackageId);
+    if (!isSelectedVisible) {
+      setSelectedPackageId(filteredPackages[0]?.id ?? null);
+    }
+  }, [filteredPackages, overview, selectedPackageId]);
 
   useEffect(() => {
     setNextActionDraft(selectedPackage?.nextAction ?? "");
@@ -230,33 +291,69 @@ export default function ProcurementPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Open requisitions"
-                value={String(overview.summary.openRequisitions)}
-                footnote="Open buying pressure still moving through sourcing or approvals."
+                value={String(filteredSummary.openRequisitions)}
+                footnote="Visible buying pressure still moving through sourcing or approvals."
               />
               <KpiCard
                 label="Avg approval time"
-                value={`${overview.summary.averageApprovalHours}h`}
-                footnote="Current cycle time for open packages in the tenant."
+                value={`${filteredSummary.averageApprovalHours}h`}
+                footnote="Current cycle time for visible open packages."
               />
               <KpiCard
                 label="Strategic packages"
-                value={String(overview.summary.strategicPackages)}
-                footnote="Packages large enough to require director-level attention."
+                value={String(filteredSummary.strategicPackages)}
+                footnote="Visible packages large enough to require director-level attention."
               />
               <KpiCard
                 label="Supplier contention"
-                value={`${overview.summary.averageBidCount}`}
-                footnote="Average bid competition across current procurement flow."
+                value={`${filteredSummary.averageBidCount}`}
+                footnote="Average bid competition across the visible procurement flow."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Sourcing board" description="Live packages, budget pressure and award readiness.">
-                <FilterBar summary={`${overview.packages.length} packages in the active tenant`}>
+                <FilterBar summary={`${filteredPackages.length} packages match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Status
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                      <option value="all">All</option>
+                      <option value="draft">Draft</option>
+                      <option value="sourcing">Sourcing</option>
+                      <option value="awaiting_approval">Awaiting approval</option>
+                      <option value="blocked">Blocked</option>
+                      <option value="awarded">Awarded</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Scope
+                    <select className="field" value={strategicFilter} onChange={(event) => setStrategicFilter(event.target.value as typeof strategicFilter)}>
+                      <option value="all">All</option>
+                      <option value="strategic">Strategic</option>
+                      <option value="standard">Standard</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Package, code, project or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "board ready"}</Badge>
+                  <Badge tone={filteredPackages.some((item) => item.status === "blocked") ? "danger" : filteredSummary.strategicPackages > 0 ? "warning" : "success"}>
+                    {filteredPackages.some((item) => item.status === "blocked")
+                      ? "blocked packages visible"
+                      : filteredSummary.strategicPackages > 0
+                        ? `${filteredSummary.strategicPackages} strategic`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
                   rows={overview.packages}
