@@ -152,6 +152,8 @@ export default function DailyLogPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | DailyLogEntryContract["status"]>("all");
+  const [shiftFilter, setShiftFilter] = useState<"all" | DailyLogEntryContract["shift"]>("all");
+  const [weatherFilter, setWeatherFilter] = useState<"all" | DailyLogEntryContract["weather"]>("all");
   const [projectFilter, setProjectFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
@@ -236,6 +238,8 @@ export default function DailyLogPage() {
     const normalizedSearch = searchFilter.trim().toLowerCase();
     return overview.entries.filter((entry) => {
       const matchesStatus = statusFilter === "all" || entry.status === statusFilter;
+      const matchesShift = shiftFilter === "all" || entry.shift === shiftFilter;
+      const matchesWeather = weatherFilter === "all" || entry.weather === weatherFilter;
       const matchesProject =
         normalizedProject.length === 0 ||
         entry.projectName.toLowerCase().includes(normalizedProject) ||
@@ -247,9 +251,9 @@ export default function DailyLogPage() {
         entry.frontName.toLowerCase().includes(normalizedSearch) ||
         entry.projectName.toLowerCase().includes(normalizedSearch);
 
-      return matchesStatus && matchesProject && matchesSearch;
+      return matchesStatus && matchesShift && matchesWeather && matchesProject && matchesSearch;
     });
-  }, [overview, projectFilter, searchFilter, statusFilter]);
+  }, [overview, projectFilter, searchFilter, shiftFilter, statusFilter, weatherFilter]);
 
   const filteredSummary = useMemo(() => recomputeSummary(filteredEntries), [filteredEntries]);
 
@@ -549,6 +553,26 @@ export default function DailyLogPage() {
                       <option value="submitted">Submitted</option>
                       <option value="approved">Approved</option>
                       <option value="flagged">Flagged</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Shift
+                    <select className="field" value={shiftFilter} onChange={(event) => setShiftFilter(event.target.value as typeof shiftFilter)}>
+                      <option value="all">All</option>
+                      <option value="morning">Morning</option>
+                      <option value="afternoon">Afternoon</option>
+                      <option value="night">Night</option>
+                      <option value="mixed">Mixed</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Weather
+                    <select className="field" value={weatherFilter} onChange={(event) => setWeatherFilter(event.target.value as typeof weatherFilter)}>
+                      <option value="all">All</option>
+                      <option value="clear">Clear</option>
+                      <option value="windy">Windy</option>
+                      <option value="rain">Rain</option>
+                      <option value="storm">Storm</option>
                     </select>
                   </label>
                   <label className="fieldLabel" style={{ minWidth: 200 }}>
