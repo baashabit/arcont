@@ -73,6 +73,7 @@ type RecentSiteSignal = {
 type RecentSiteSignalGroup = {
   project: string;
   items: RecentSiteSignal[];
+  tone: "success" | "warning" | "danger" | "info";
 };
 
 export default function DashboardPage() {
@@ -500,7 +501,14 @@ export default function DashboardPage() {
 
     return Array.from(groups.entries()).map(([project, items]) => ({
       project,
-      items
+      items,
+      tone: items.some((item) => item.tone === "danger")
+        ? "danger"
+        : items.some((item) => item.tone === "warning")
+          ? "warning"
+          : items.some((item) => item.tone === "info")
+            ? "info"
+            : "success"
     }));
   }, [recentSiteSignals]);
 
@@ -966,7 +974,7 @@ export default function DashboardPage() {
                       <p>{group.items.map((item) => `${item.area}: ${item.title}`).join(" · ")}</p>
                     </div>
                     <div className="row gap wrap">
-                      <Badge tone="info">{group.items.length} signals</Badge>
+                      <Badge tone={group.tone}>{group.items.length} signals</Badge>
                       <Link className="buttonGhost" href={`/field?projectName=${encodeURIComponent(group.project)}`}>Open field</Link>
                     </div>
                   </div>
