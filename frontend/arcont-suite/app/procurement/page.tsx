@@ -356,7 +356,7 @@ export default function ProcurementPage() {
                   </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.packages}
+                  rows={filteredPackages}
                   columns={[
                     {
                       key: "package",
