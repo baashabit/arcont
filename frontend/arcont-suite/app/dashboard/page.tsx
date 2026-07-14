@@ -229,6 +229,16 @@ export default function DashboardPage() {
 
     return [
       {
+        title: "Portfolio intake",
+        detail: `${snapshot.projects.projects.length} projects are registered, latest intake: ${snapshot.projects.projects[0]?.code ?? "n/a"} · ${snapshot.projects.projects[0]?.name ?? "No recent project"}.`,
+        tone:
+          snapshot.projects.projects[0]?.status === "blocked"
+            ? "danger"
+            : snapshot.projects.projects[0]?.status === "planning" || snapshot.projects.projects[0]?.status === "at_risk"
+              ? "warning"
+              : "success"
+      },
+      {
         title: "Commercial pipeline",
         detail: `${snapshot.crm.summary.reservations} reservations and ${snapshot.crm.summary.qualifiedLeads} qualified leads in active flow.`,
         tone: snapshot.crm.summary.visitConversion < 20 ? "warning" : "success"
@@ -672,9 +682,26 @@ export default function DashboardPage() {
               value={`${executiveKpis.operatingHealth}%`}
               footnote="Blended directional signal from close, documents and compliance."
             />
+            <KpiCard
+              label="Portfolio records"
+              value={String(snapshot.projects.projects.length)}
+              footnote="Projects currently available to feed field, quality and operations capture."
+            />
           </section>
 
           <section className="grid cols2">
+            <Card title="Latest project intake" description="Newest portfolio record already available for downstream field execution.">
+              <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">Project</div><div>{snapshot.projects.projects[0]?.name ?? "No project available"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Code / status</div><div>{snapshot.projects.projects[0] ? `${snapshot.projects.projects[0].code} · ${snapshot.projects.projects[0].status}` : "No recent intake"}</div></div>
+                <div className="detailRow"><div className="detailLabel">Next milestone</div><div>{snapshot.projects.projects[0]?.nextMilestone ?? "No milestone captured yet"}</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className="buttonGhost" href="/projects">Open projects</Link>
+                <Link className="buttonGhost" href="/field">Open field</Link>
+              </div>
+            </Card>
+
             <Card title="Inter-area bottlenecks" description="Where direction should pay attention first across the current portfolio.">
               <div className="list">
                 {bottlenecks.map((item) => (

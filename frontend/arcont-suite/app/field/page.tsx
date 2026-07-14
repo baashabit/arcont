@@ -216,6 +216,7 @@ export default function FieldPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [signals, setSignals] = useState<FieldSignal[]>([]);
   const [customSignals, setCustomSignals] = useState<FieldSignal[]>([]);
+  const [projectsOverview, setProjectsOverview] = useState<NonNullable<Awaited<ReturnType<typeof fetchProjectsOverview>>> | null>(null);
   const [materialOverview, setMaterialOverview] = useState<NonNullable<Awaited<ReturnType<typeof fetchFieldMaterialRequestsOverview>>> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -254,8 +255,30 @@ export default function FieldPage() {
         }
 
         setMaterialOverview(fieldMaterials);
+        setProjectsOverview(projects);
 
         const nextSignals: FieldSignal[] = [];
+
+        nextSignals.push(
+          ...projects.projects.slice(0, 3).map((project) => ({
+            id: `project-anchor-${project.id}`,
+            title: project.name,
+            detail: `${project.activeFronts} fronts · ${project.progress}% progress · ${project.nextMilestone}`,
+            owner: project.client,
+            area: "Project anchor",
+            nextAction:
+              project.status === "planning"
+                ? "Open first field capture or quality checkpoint to activate this project in site execution."
+                : project.nextMilestone,
+            posture: (
+              project.status === "blocked"
+                ? "critical"
+                : project.status === "at_risk" || project.status === "planning"
+                  ? "watch"
+                  : "healthy"
+            ) as FieldSignal["posture"]
+          }))
+        );
 
         if (projects.focusProject) {
           nextSignals.push({
@@ -390,6 +413,17 @@ export default function FieldPage() {
       cancelled = true;
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
+
+  useEffect(() => {
+    if (createForm.projectName || !projectsOverview?.projects.length) {
+      return;
+    }
+
+    setCreateForm((current) => ({
+      ...current,
+      projectName: projectsOverview.projects[0]?.name ?? current.projectName
+    }));
+  }, [createForm.projectName, projectsOverview]);
 
   const combinedSignals = useMemo(() => [...customSignals, ...signals], [customSignals, signals]);
 
@@ -924,6 +958,14 @@ export default function FieldPage() {
 
             <section className="grid cols3">
               <Card title="Capture field workflow" description="Create a structured field record for the main mobile workflows already expected on site.">
+                {projectsOverview ? (
+                  <div className="detailGrid" style={{ marginBottom: 16 }}>
+                    <div className="detailRow">
+                      <div className="detailLabel">Project intake</div>
+                      <div>{projectsOverview.projects.length} registered projects are already available for direct field capture.</div>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="tagRow" style={{ marginBottom: 16 }}>
                   {(["daily_log", "quality_incident", "material_request", "document_control", "equipment_issue"] as FieldCaptureMode[]).map((mode) => {
                     const meta = captureModeMeta(mode);
@@ -952,12 +994,26 @@ export default function FieldPage() {
                 <div className="detailGrid">
                   <label className="detailRow">
                     <div className="detailLabel">Project</div>
-                    <input
-                      className="field"
-                      value={createForm.projectName}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
-                      placeholder="Residencial Norte"
-                    />
+                    {projectsOverview?.projects.length ? (
+                      <select
+                        className="selectField"
+                        value={createForm.projectName}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                      >
+                        {projectsOverview.projects.map((project) => (
+                          <option key={project.id} value={project.name}>
+                            {project.code} · {project.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="field"
+                        value={createForm.projectName}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                        placeholder="Residencial Norte"
+                      />
+                    )}
                   </label>
                   <label className="detailRow">
                     <div className="detailLabel">Front</div>
