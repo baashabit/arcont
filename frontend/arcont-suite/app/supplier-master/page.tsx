@@ -56,6 +56,7 @@ export default function SupplierMasterPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [satFilter, setSatFilter] = useState<"all" | SupplierMasterProfileContract["satStatus"]>("all");
   const [complianceFilter, setComplianceFilter] = useState<"all" | SupplierMasterProfileContract["complianceStatus"]>("all");
+  const [packetFilter, setPacketFilter] = useState<"all" | "complete" | "incomplete" | "critical">("all");
   const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -112,15 +113,23 @@ export default function SupplierMasterPage() {
     return overview.items.filter((item) => {
       const matchesSat = satFilter === "all" || item.satStatus === satFilter;
       const matchesCompliance = complianceFilter === "all" || item.complianceStatus === complianceFilter;
+      const matchesPacket =
+        packetFilter === "all" ||
+        (packetFilter === "complete" && item.fiscalPacketCompletion >= 100) ||
+        (packetFilter === "incomplete" && item.fiscalPacketCompletion < 100) ||
+        (packetFilter === "critical" && item.fiscalPacketCompletion < 70);
       const matchesSearch =
         normalizedSearch.length === 0 ||
         item.supplierName.toLowerCase().includes(normalizedSearch) ||
         item.tradeName.toLowerCase().includes(normalizedSearch) ||
-        item.rfc.toLowerCase().includes(normalizedSearch);
+        item.rfc.toLowerCase().includes(normalizedSearch) ||
+        item.contactName.toLowerCase().includes(normalizedSearch) ||
+        item.contactEmail.toLowerCase().includes(normalizedSearch) ||
+        item.nextAction.toLowerCase().includes(normalizedSearch);
 
-      return matchesSat && matchesCompliance && matchesSearch;
+      return matchesSat && matchesCompliance && matchesPacket && matchesSearch;
     });
-  }, [complianceFilter, overview, satFilter, searchFilter]);
+  }, [complianceFilter, overview, packetFilter, satFilter, searchFilter]);
 
   const filteredSummary = useMemo(() => {
     const averageFiscalPacketCompletion =
@@ -360,7 +369,7 @@ export default function SupplierMasterPage() {
 
             <section className="grid cols3">
               <Card title="Supplier master board" description="RFC, SAT and payment packet readiness for strategic vendors.">
-                <FilterBar summary={`${filteredItems.length} supplier profiles in the active tenant`}>
+                <FilterBar summary={`${filteredItems.length} supplier profiles match the active fiscal filters`}>
                   <select
                     className="selectField"
                     value={satFilter}
@@ -383,14 +392,27 @@ export default function SupplierMasterPage() {
                     <option value="watch">watch</option>
                     <option value="blocked">blocked</option>
                   </select>
+                  <select className="selectField" value={packetFilter} onChange={(event) => setPacketFilter(event.target.value as typeof packetFilter)}>
+                    <option value="all">All packets</option>
+                    <option value="complete">Complete</option>
+                    <option value="incomplete">Incomplete</option>
+                    <option value="critical">Critical packet</option>
+                  </select>
                   <input
                     className="field"
                     value={searchFilter}
                     onChange={(event) => setSearchFilter(event.target.value)}
-                    placeholder="Search supplier, trade name or RFC"
+                    placeholder="Supplier, RFC, contact or next action"
                   />
                   <Badge tone={session.authenticated ? "success" : "warning"}>{session.authenticated ? "live backend" : source}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "supplier master ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalSuppliers > 0 ? "danger" : filteredSummary.incompletePackets > 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalSuppliers > 0
+                      ? `${filteredSummary.criticalSuppliers} critical`
+                      : filteredSummary.incompletePackets > 0
+                        ? `${filteredSummary.incompletePackets} incomplete`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
                   rows={filteredItems}
