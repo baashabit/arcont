@@ -54,6 +54,9 @@ export default function SupplierMasterPage() {
   const [overview, setOverview] = useState<SupplierMasterOverviewContract | null>(null);
   const [supplierControlNote, setSupplierControlNote] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [satFilter, setSatFilter] = useState<"all" | SupplierMasterProfileContract["satStatus"]>("all");
+  const [complianceFilter, setComplianceFilter] = useState<"all" | SupplierMasterProfileContract["complianceStatus"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -100,15 +103,64 @@ export default function SupplierMasterPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredItems = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.items.filter((item) => {
+      const matchesSat = satFilter === "all" || item.satStatus === satFilter;
+      const matchesCompliance = complianceFilter === "all" || item.complianceStatus === complianceFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.supplierName.toLowerCase().includes(normalizedSearch) ||
+        item.tradeName.toLowerCase().includes(normalizedSearch) ||
+        item.rfc.toLowerCase().includes(normalizedSearch);
+
+      return matchesSat && matchesCompliance && matchesSearch;
+    });
+  }, [complianceFilter, overview, satFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const averageFiscalPacketCompletion =
+      filteredItems.length > 0
+        ? Number((filteredItems.reduce((sum, item) => sum + item.fiscalPacketCompletion, 0) / filteredItems.length).toFixed(1))
+        : 0;
+
+    return {
+      totalSuppliers: filteredItems.length,
+      criticalSuppliers: filteredItems.filter((item) => item.satStatus === "critical" || item.complianceStatus === "blocked").length,
+      incompletePackets: filteredItems.filter((item) => item.fiscalPacketCompletion < 100).length,
+      averageFiscalPacketCompletion
+    };
+  }, [filteredItems]);
+
   const selectedItem = useMemo(
-    () => overview?.items.find((item) => item.id === selectedId) ?? overview?.focusItem ?? null,
-    [overview, selectedId]
+    () => filteredItems.find((item) => item.id === selectedId) ?? filteredItems[0] ?? null,
+    [filteredItems, selectedId]
   );
 
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.supplierProfileId === selectedItem?.id) ?? [],
     [overview, selectedItem]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredItems.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredItems.some((item) => item.id === selectedId);
+    if (!isSelectedVisible) {
+      setSelectedId(filteredItems[0]?.id ?? null);
+    }
+  }, [filteredItems, overview, selectedId]);
 
   useEffect(() => {
     setNextActionDraft(selectedItem?.nextAction ?? "");
@@ -300,20 +352,48 @@ export default function SupplierMasterPage() {
         {overview ? (
           <>
             <section className="grid cols4">
-              <KpiCard label="Suppliers" value={String(overview.summary.totalSuppliers)} footnote="Profiles already registered in the tenant master." />
-              <KpiCard label="Critical" value={String(overview.summary.criticalSuppliers)} footnote="Suppliers blocked by fiscal or compliance posture." />
-              <KpiCard label="Incomplete packets" value={String(overview.summary.incompletePackets)} footnote="Profiles still missing full fiscal packet closure." />
-              <KpiCard label="Packet completion" value={`${overview.summary.averageFiscalPacketCompletion}%`} footnote="Average fiscal packet completion across the active supplier base." />
+              <KpiCard label="Suppliers" value={String(filteredSummary.totalSuppliers)} footnote="Profiles currently visible in the tenant master." />
+              <KpiCard label="Critical" value={String(filteredSummary.criticalSuppliers)} footnote="Suppliers blocked by fiscal or compliance posture." />
+              <KpiCard label="Incomplete packets" value={String(filteredSummary.incompletePackets)} footnote="Profiles still missing full fiscal packet closure." />
+              <KpiCard label="Packet completion" value={`${filteredSummary.averageFiscalPacketCompletion}%`} footnote="Average fiscal packet completion across the visible supplier base." />
             </section>
 
             <section className="grid cols3">
               <Card title="Supplier master board" description="RFC, SAT and payment packet readiness for strategic vendors.">
-                <FilterBar summary={`${overview.items.length} supplier profiles in the active tenant`}>
+                <FilterBar summary={`${filteredItems.length} supplier profiles in the active tenant`}>
+                  <select
+                    className="selectField"
+                    value={satFilter}
+                    onChange={(event) => setSatFilter(event.target.value as "all" | SupplierMasterProfileContract["satStatus"])}
+                  >
+                    <option value="all">All SAT</option>
+                    <option value="controlled">controlled</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <select
+                    className="selectField"
+                    value={complianceFilter}
+                    onChange={(event) =>
+                      setComplianceFilter(event.target.value as "all" | SupplierMasterProfileContract["complianceStatus"])
+                    }
+                  >
+                    <option value="all">All compliance</option>
+                    <option value="complete">complete</option>
+                    <option value="watch">watch</option>
+                    <option value="blocked">blocked</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search supplier, trade name or RFC"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>{session.authenticated ? "live backend" : source}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "supplier master ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.items}
+                  rows={filteredItems}
                   columns={[
                     {
                       key: "supplier",
