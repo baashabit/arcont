@@ -176,6 +176,8 @@ function DocumentControlPageContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | DocumentControlItemContract["health"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -254,8 +256,8 @@ function DocumentControlPageContent() {
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
   const selectedItem = useMemo(
-    () => overview?.items.find((item) => item.id === selectedItemId) ?? overview?.focusItem ?? null,
-    [overview, selectedItemId]
+    () => filteredItems.find((item) => item.id === selectedItemId) ?? filteredItems[0] ?? null,
+    [filteredItems, selectedItemId]
   );
 
   const projectOptions = useMemo(() => {
@@ -279,12 +281,34 @@ function DocumentControlPageContent() {
       return [];
     }
 
+    const normalizedSearch = searchFilter.trim().toLowerCase();
     return overview.items.filter(
       (item) =>
         (projectFilter === "all" || item.projectName === projectFilter) &&
-        (documentTypeFilter === "all" || item.documentType === documentTypeFilter)
+        (documentTypeFilter === "all" || item.documentType === documentTypeFilter) &&
+        (healthFilter === "all" || item.health === healthFilter) &&
+        (normalizedSearch.length === 0 ||
+          item.subject.toLowerCase().includes(normalizedSearch) ||
+          item.code.toLowerCase().includes(normalizedSearch) ||
+          item.owner.toLowerCase().includes(normalizedSearch) ||
+          item.nextAction.toLowerCase().includes(normalizedSearch))
     );
-  }, [documentTypeFilter, overview, projectFilter]);
+  }, [documentTypeFilter, healthFilter, overview, projectFilter, searchFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const openRfis = filteredItems.filter((item) => item.documentType === "RFI" && item.status !== "approved").length;
+    const activeSubmittals = filteredItems.filter((item) => item.documentType === "Submittal" && item.status !== "approved").length;
+    const controlledVersions = filteredItems.reduce((sum, item) => sum + item.revisionCount, 0);
+    const averageTurnaroundDays =
+      filteredItems.length > 0 ? Number((filteredItems.reduce((sum, item) => sum + item.turnaroundDays, 0) / filteredItems.length).toFixed(1)) : 0;
+
+    return {
+      openRfis,
+      activeSubmittals,
+      controlledVersions,
+      averageTurnaroundDays
+    };
+  }, [filteredItems]);
 
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.itemId === selectedItem?.id) ?? [],
@@ -534,29 +558,29 @@ function DocumentControlPageContent() {
             <section className="grid cols4">
               <KpiCard
                 label="Open RFIs"
-                value={String(overview.summary.openRfis)}
+                value={String(filteredSummary.openRfis)}
                 footnote="RFIs still awaiting resolution or formal response."
               />
               <KpiCard
                 label="Active submittals"
-                value={String(overview.summary.activeSubmittals)}
+                value={String(filteredSummary.activeSubmittals)}
                 footnote="Technical submittals currently moving through review."
               />
               <KpiCard
                 label="Controlled versions"
-                value={String(overview.summary.controlledVersions)}
+                value={String(filteredSummary.controlledVersions)}
                 footnote="Revision count representing active document control flow."
               />
               <KpiCard
                 label="Turnaround"
-                value={`${overview.summary.averageTurnaroundDays} d`}
+                value={`${filteredSummary.averageTurnaroundDays} d`}
                 footnote="Average current response time across document-control items."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Document board" description="Live RFIs, submittals, transmittals and meeting-note control.">
-                <FilterBar summary={`${overview.items.length} document-control items in the active tenant`}>
+                <FilterBar summary={`${filteredItems.length} document-control items match the current operating filters`}>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
@@ -577,6 +601,27 @@ function DocumentControlPageContent() {
                       </option>
                     ))}
                   </select>
+                  <select className="selectField" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                    <option value="all">All health</option>
+                    <option value="critical">Critical</option>
+                    <option value="watch">Watch</option>
+                    <option value="healthy">Healthy</option>
+                  </select>
+                  <input
+                    className="field"
+                    type="search"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Subject, code, owner or next action"
+                    style={{ minWidth: 220 }}
+                  />
+                  <Badge tone={filteredItems.some((item) => item.health === "critical") ? "danger" : filteredItems.some((item) => item.health === "watch") ? "warning" : "success"}>
+                    {filteredItems.some((item) => item.health === "critical")
+                      ? "critical items visible"
+                      : filteredItems.some((item) => item.health === "watch")
+                        ? "watch items visible"
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
                   rows={filteredItems}
