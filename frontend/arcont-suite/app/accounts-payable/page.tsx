@@ -56,6 +56,9 @@ export default function AccountsPayablePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<AccountsPayableOverviewContract | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | AccountsPayableInvoiceContract["status"]>("all");
+  const [satFilter, setSatFilter] = useState<"all" | AccountsPayableInvoiceContract["satStatus"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [paymentDateDraft, setPaymentDateDraft] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -116,15 +119,65 @@ export default function AccountsPayablePage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredInvoices = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.invoices.filter((invoice) => {
+      const matchesStatus = statusFilter === "all" || invoice.status === statusFilter;
+      const matchesSat = satFilter === "all" || invoice.satStatus === satFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        invoice.code.toLowerCase().includes(normalizedSearch) ||
+        invoice.supplierName.toLowerCase().includes(normalizedSearch) ||
+        invoice.invoiceNumber.toLowerCase().includes(normalizedSearch) ||
+        invoice.projectName.toLowerCase().includes(normalizedSearch);
+
+      return matchesStatus && matchesSat && matchesSearch;
+    });
+  }, [overview, satFilter, searchFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const now = Date.now();
+    return {
+      trackedInvoices: filteredInvoices.length,
+      openAmount: Number(filteredInvoices.filter((item) => item.status !== "paid").reduce((sum, item) => sum + item.pendingAmount, 0).toFixed(1)),
+      scheduledAmount: Number(
+        filteredInvoices.filter((item) => item.status === "scheduled").reduce((sum, item) => sum + item.pendingAmount, 0).toFixed(1)
+      ),
+      blockedInvoices: filteredInvoices.filter((item) => item.status === "blocked").length,
+      criticalInvoices: filteredInvoices.filter((item) => item.satStatus === "critical" || item.complementStatus === "risk").length,
+      overdueInvoices: filteredInvoices.filter((item) => item.status !== "paid" && Date.parse(item.dueDate) < now).length
+    };
+  }, [filteredInvoices]);
+
   const selectedInvoice = useMemo(
-    () => overview?.invoices.find((invoice) => invoice.id === selectedId) ?? overview?.focusInvoice ?? null,
-    [overview, selectedId]
+    () => filteredInvoices.find((invoice) => invoice.id === selectedId) ?? filteredInvoices[0] ?? null,
+    [filteredInvoices, selectedId]
   );
 
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.invoiceId === selectedInvoice?.id) ?? [],
     [overview, selectedInvoice]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredInvoices.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredInvoices.some((invoice) => invoice.id === selectedId);
+    if (!isSelectedVisible) {
+      setSelectedId(filteredInvoices[0]?.id ?? null);
+    }
+  }, [filteredInvoices, overview, selectedId]);
 
   useEffect(() => {
     setNextActionDraft(selectedInvoice?.nextAction ?? "");
@@ -376,20 +429,48 @@ export default function AccountsPayablePage() {
         {overview ? (
           <>
             <section className="grid cols4">
-              <KpiCard label="Invoices" value={String(overview.summary.trackedInvoices)} footnote="CXP invoices currently tracked in this tenant." />
-              <KpiCard label="Open amount" value={`MXN ${overview.summary.openAmount.toLocaleString()}`} footnote="Pending amount still pressing treasury." />
-              <KpiCard label="Blocked" value={String(overview.summary.blockedInvoices)} footnote="Invoices blocked by fiscal, receipt or commercial issues." />
-              <KpiCard label="Overdue" value={String(overview.summary.overdueInvoices)} footnote="Invoices already past due and still unresolved." />
+              <KpiCard label="Invoices" value={String(filteredSummary.trackedInvoices)} footnote="CXP invoices currently visible in this tenant." />
+              <KpiCard label="Open amount" value={`MXN ${filteredSummary.openAmount.toLocaleString()}`} footnote="Pending amount still pressing treasury." />
+              <KpiCard label="Blocked" value={String(filteredSummary.blockedInvoices)} footnote="Invoices blocked by fiscal, receipt or commercial issues." />
+              <KpiCard label="Overdue" value={String(filteredSummary.overdueInvoices)} footnote="Invoices already past due and still unresolved." />
             </section>
 
             <section className="grid cols3">
               <Card title="Payables board" description="Facturas, CFDI and payment scheduling in one queue.">
-                <FilterBar summary={`${overview.invoices.length} invoices in the active tenant`}>
+                <FilterBar summary={`${filteredInvoices.length} invoices in the active tenant`}>
+                  <select
+                    className="selectField"
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value as "all" | AccountsPayableInvoiceContract["status"])}
+                  >
+                    <option value="all">All status</option>
+                    <option value="received">received</option>
+                    <option value="matched">matched</option>
+                    <option value="scheduled">scheduled</option>
+                    <option value="blocked">blocked</option>
+                    <option value="paid">paid</option>
+                  </select>
+                  <select
+                    className="selectField"
+                    value={satFilter}
+                    onChange={(event) => setSatFilter(event.target.value as "all" | AccountsPayableInvoiceContract["satStatus"])}
+                  >
+                    <option value="all">All SAT</option>
+                    <option value="controlled">controlled</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search invoice, supplier, number or project"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>{session.authenticated ? "live backend" : source}</Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "payables ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.invoices}
+                  rows={filteredInvoices}
                   columns={[
                     {
                       key: "invoice",
