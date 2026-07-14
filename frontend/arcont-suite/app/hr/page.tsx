@@ -66,6 +66,8 @@ export default function HrPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedWorkforceId, setSelectedWorkforceId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | HrWorkforceItemContract["safetyStatus"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -109,9 +111,43 @@ export default function HrPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredWorkforces = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.workforces.filter((item) => {
+      const matchesHealth = healthFilter === "all" || item.safetyStatus === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.contractorName.toLowerCase().includes(normalizedSearch) ||
+        item.frontName.toLowerCase().includes(normalizedSearch) ||
+        item.code.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, searchFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const activeHeadcount = filteredWorkforces.reduce((sum, item) => sum + item.activeHeadcount, 0);
+    const attendanceRate =
+      filteredWorkforces.length > 0
+        ? Number((filteredWorkforces.reduce((sum, item) => sum + item.attendanceRate, 0) / filteredWorkforces.length).toFixed(1))
+        : 0;
+    const openIncidents = filteredWorkforces.reduce((sum, item) => sum + item.incidentCount, 0);
+
+    return {
+      activeHeadcount,
+      activeContractors: filteredWorkforces.length,
+      attendanceRate,
+      openIncidents
+    };
+  }, [filteredWorkforces]);
+
   const selectedWorkforce = useMemo(
-    () => overview?.workforces.find((item) => item.id === selectedWorkforceId) ?? overview?.focusWorkforce ?? null,
-    [overview, selectedWorkforceId]
+    () => filteredWorkforces.find((item) => item.id === selectedWorkforceId) ?? filteredWorkforces[0] ?? null,
+    [filteredWorkforces, selectedWorkforceId]
   );
 
   const selectedRisks = useMemo(
@@ -123,6 +159,22 @@ export default function HrPage() {
     () => (selectedWorkforce ? workforceActionOptions(selectedWorkforce) : []),
     [selectedWorkforce]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredWorkforces.length === 0) {
+      setSelectedWorkforceId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredWorkforces.some((item) => item.id === selectedWorkforceId);
+    if (!isSelectedVisible) {
+      setSelectedWorkforceId(filteredWorkforces[0]?.id ?? null);
+    }
+  }, [filteredWorkforces, overview, selectedWorkforceId]);
 
   useEffect(() => {
     setNextActionDraft(selectedWorkforce?.nextAction ?? "");
@@ -208,36 +260,52 @@ export default function HrPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Active headcount"
-                value={String(overview.summary.activeHeadcount)}
+                value={String(filteredSummary.activeHeadcount)}
                 footnote="People currently assigned across active contractors and fronts."
               />
               <KpiCard
                 label="Active contractors"
-                value={String(overview.summary.activeContractors)}
+                value={String(filteredSummary.activeContractors)}
                 footnote="Contractors currently represented in the active workforce board."
               />
               <KpiCard
                 label="Attendance rate"
-                value={`${overview.summary.attendanceRate}%`}
+                value={`${filteredSummary.attendanceRate}%`}
                 footnote="Attendance signal aggregated from live contractor workforce buckets."
               />
               <KpiCard
                 label="Open incidents"
-                value={String(overview.summary.openIncidents)}
+                value={String(filteredSummary.openIncidents)}
                 footnote="Field issues affecting continuity, compliance or safety posture."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Workforce board" description="Live crew capacity, attendance and contractor operating posture.">
-                <FilterBar summary={`${overview.workforces.length} workforce buckets in the active tenant`}>
+                <FilterBar summary={`${filteredWorkforces.length} workforce buckets in the active tenant`}>
+                  <select
+                    className="selectField"
+                    value={healthFilter}
+                    onChange={(event) => setHealthFilter(event.target.value as "all" | HrWorkforceItemContract["safetyStatus"])}
+                  >
+                    <option value="all">All safety</option>
+                    <option value="controlled">controlled</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search contractor, front or code"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "workforce ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.workforces}
+                  rows={filteredWorkforces}
                   columns={[
                     {
                       key: "contractor",
