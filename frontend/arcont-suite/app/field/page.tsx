@@ -34,6 +34,7 @@ type FieldSignal = {
   detail: string;
   owner: string;
   area: string;
+  projectName?: string | null;
   posture: "healthy" | "watch" | "critical";
   nextAction: string;
 };
@@ -269,6 +270,7 @@ function FieldPageContent() {
             detail: `${project.activeFronts} fronts · ${project.progress}% progress · ${project.nextMilestone}`,
             owner: project.client,
             area: "Project anchor",
+            projectName: project.name,
             nextAction:
               project.status === "planning"
                 ? "Open first field capture or quality checkpoint to activate this project in site execution."
@@ -290,6 +292,7 @@ function FieldPageContent() {
             detail: `${projects.focusProject.activeFronts} active fronts · ${projects.focusProject.progress}% progress`,
             owner: projects.focusProject.client,
             area: "Project progress",
+            projectName: projects.focusProject.name,
             nextAction:
               projects.focusProject.progress >= 85
                 ? "Close remaining fronts and protect turnover readiness."
@@ -330,6 +333,7 @@ function FieldPageContent() {
             detail: `${quality.focusInspection.openFindings} findings · ${quality.focusInspection.evidenceCompletion}% evidence`,
             owner: quality.focusInspection.contractorName,
             area: "Quality",
+            projectName: quality.focusInspection.projectName,
             nextAction:
               quality.focusInspection.openFindings > 0
                 ? "Close critical findings and complete missing field evidence."
@@ -370,6 +374,7 @@ function FieldPageContent() {
             detail: `${equipment.focusMachine.projectName} · ${equipment.focusMachine.frontName} · ${equipment.focusMachine.availabilityPercent}% availability`,
             owner: equipment.focusMachine.machineType,
             area: "Equipment",
+            projectName: equipment.focusMachine.projectName,
             nextAction: equipment.focusMachine.nextAction,
             posture: equipment.focusMachine.health
           });
@@ -394,6 +399,7 @@ function FieldPageContent() {
             detail: `${documentControl.focusItem.documentType} · ${documentControl.focusItem.openComments} comments`,
             owner: documentControl.focusItem.owner,
             area: "Documentation",
+            projectName: documentControl.focusItem.projectName,
             nextAction: documentControl.focusItem.nextAction,
             posture: documentControl.focusItem.health
           });
@@ -440,30 +446,44 @@ function FieldPageContent() {
   }, [projectQuery]);
 
   const combinedSignals = useMemo(() => [...customSignals, ...signals], [customSignals, signals]);
+  const visibleSignals = useMemo(() => {
+    if (!projectQuery) {
+      return combinedSignals;
+    }
+
+    const normalizedQuery = projectQuery.toLowerCase();
+    return combinedSignals.filter((signal) => {
+      const projectName = signal.projectName?.toLowerCase() ?? "";
+      const title = signal.title.toLowerCase();
+      const detail = signal.detail.toLowerCase();
+
+      return projectName === normalizedQuery || title.includes(normalizedQuery) || detail.includes(normalizedQuery);
+    });
+  }, [combinedSignals, projectQuery]);
 
   const metrics = useMemo(() => {
-    const critical = combinedSignals.filter((signal) => signal.posture === "critical").length;
-    const watch = combinedSignals.filter((signal) => signal.posture === "watch").length;
-    const healthy = combinedSignals.filter((signal) => signal.posture === "healthy").length;
+    const critical = visibleSignals.filter((signal) => signal.posture === "critical").length;
+    const watch = visibleSignals.filter((signal) => signal.posture === "watch").length;
+    const healthy = visibleSignals.filter((signal) => signal.posture === "healthy").length;
 
     return {
-      capturesToday: combinedSignals.length * 24,
+      capturesToday: visibleSignals.length * 24,
       offlineSync: healthy > 0 ? Math.max(72, 100 - critical * 7) : 0,
-      photosLinked: combinedSignals.length * 96,
+      photosLinked: visibleSignals.length * 96,
       checklistDiscipline: Math.max(55, 100 - watch * 6 - critical * 8)
     };
-  }, [combinedSignals]);
+  }, [visibleSignals]);
 
   const prioritySignals = useMemo(
     () =>
-      combinedSignals
+      visibleSignals
         .slice()
         .sort((left, right) => {
           const postureWeight = { critical: 0, watch: 1, healthy: 2 };
           return postureWeight[left.posture] - postureWeight[right.posture];
         })
         .slice(0, 4),
-    [combinedSignals]
+    [visibleSignals]
   );
 
   const equipmentPriority = useMemo(
@@ -839,7 +859,7 @@ function FieldPageContent() {
       }
     >
       <ModuleGate moduleKeys={["projects.control"]} requiredPermissions={["projects:*"]} title="Field App">
-        {combinedSignals.length > 0 ? (
+        {visibleSignals.length > 0 ? (
           <>
             <section className="grid cols4">
               <KpiCard
@@ -871,12 +891,18 @@ function FieldPageContent() {
 
             <section className="grid cols2">
               <Card title="Field flows" description="The mobile layer now reflects live site pressure across execution areas.">
+                {projectQuery ? (
+                  <div className="row gap wrap" style={{ marginBottom: 12 }}>
+                    <Badge tone="info">Filtered by {projectQuery}</Badge>
+                    <Link className="buttonGhost" href="/field">Clear filter</Link>
+                  </div>
+                ) : null}
                 <div className="list">
-                  {combinedSignals.map((signal) => (
+                  {visibleSignals.map((signal) => (
                     <div className="listItem" key={signal.id}>
                       <div>
                         <strong>{signal.title}</strong>
-                        <p>{signal.detail}</p>
+                        <p>{signal.projectName ? `${signal.projectName} · ${signal.detail}` : signal.detail}</p>
                       </div>
                       <Badge tone={postureTone(signal.posture)}>{signal.area}</Badge>
                     </div>
@@ -1240,15 +1266,15 @@ function FieldPageContent() {
                 <div className="detailGrid">
                   <div className="detailRow">
                     <div className="detailLabel">Critical signals</div>
-                    <div>{combinedSignals.filter((signal) => signal.posture === "critical").length}</div>
+                    <div>{visibleSignals.filter((signal) => signal.posture === "critical").length}</div>
                   </div>
                   <div className="detailRow">
                     <div className="detailLabel">Watch signals</div>
-                    <div>{combinedSignals.filter((signal) => signal.posture === "watch").length}</div>
+                    <div>{visibleSignals.filter((signal) => signal.posture === "watch").length}</div>
                   </div>
                   <div className="detailRow">
                     <div className="detailLabel">Healthy signals</div>
-                    <div>{combinedSignals.filter((signal) => signal.posture === "healthy").length}</div>
+                    <div>{visibleSignals.filter((signal) => signal.posture === "healthy").length}</div>
                   </div>
                 </div>
               </Card>
@@ -1266,6 +1292,13 @@ function FieldPageContent() {
             description={error}
             primaryAction={{ label: "Open operations", href: "/operations" }}
             secondaryAction={{ label: "Review login", href: "/login" }}
+          />
+        ) : projectQuery ? (
+          <EmptyState
+            title={`No field signals for ${projectQuery}`}
+            description="The selected project does not currently expose visible field, quality, equipment or document signals in this mobile layer."
+            primaryAction={{ label: "Open all field signals", href: "/field" }}
+            secondaryAction={{ label: "Review projects", href: "/projects" }}
           />
         ) : (
           <EmptyState
