@@ -6,6 +6,7 @@ import { useAppState } from "@/components/providers/app-state-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { ModuleContract, PlatformSystemReadinessContract, RoleContract, UserContract } from "@/lib/contracts";
 import { fetchPlatformSystemReadiness } from "@/lib/platform-api";

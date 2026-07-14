@@ -211,7 +211,9 @@ export default function EquipmentPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | MachineItemContract["status"]>("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | MachineItemContract["health"]>("all");
   const [projectFilter, setProjectFilter] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -290,16 +292,24 @@ export default function EquipmentPage() {
     }
 
     const normalizedProject = projectFilter.trim().toLowerCase();
+    const normalizedSearch = searchFilter.trim().toLowerCase();
     return overview.machines.filter((machine) => {
       const matchesStatus = statusFilter === "all" || machine.status === statusFilter;
+      const matchesHealth = healthFilter === "all" || machine.health === healthFilter;
       const matchesProject =
         normalizedProject.length === 0 ||
         machine.projectName.toLowerCase().includes(normalizedProject) ||
         machine.frontName.toLowerCase().includes(normalizedProject);
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        machine.machineName.toLowerCase().includes(normalizedSearch) ||
+        machine.machineType.toLowerCase().includes(normalizedSearch) ||
+        machine.code.toLowerCase().includes(normalizedSearch) ||
+        machine.nextAction.toLowerCase().includes(normalizedSearch);
 
-      return matchesStatus && matchesProject;
+      return matchesStatus && matchesHealth && matchesProject && matchesSearch;
     });
-  }, [overview, projectFilter, statusFilter]);
+  }, [healthFilter, overview, projectFilter, searchFilter, statusFilter]);
 
   const filteredSummary = useMemo(() => recomputeSummary(filteredMachines), [filteredMachines]);
 
@@ -659,14 +669,33 @@ export default function EquipmentPage() {
                       <option value="down">Down</option>
                     </select>
                   </label>
+                  <label className="fieldLabel">
+                    Health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="healthy">Healthy</option>
+                      <option value="watch">Watch</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </label>
                   <label className="fieldLabel" style={{ minWidth: 220 }}>
-                    Project
+                    Project / front
                     <input
                       className="field"
                       type="search"
                       value={projectFilter}
                       onChange={(event) => setProjectFilter(event.target.value)}
                       placeholder="Project or front"
+                    />
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Asset search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Machine, type, code or action"
                     />
                   </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
