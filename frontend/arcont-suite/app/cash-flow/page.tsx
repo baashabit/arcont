@@ -125,6 +125,9 @@ export default function CashFlowPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | CashFlowLineContract["health"]>("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | CashFlowLineContract["sourceType"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -185,9 +188,31 @@ export default function CashFlowPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredLines = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.lines.filter((line) => {
+      const matchesHealth = healthFilter === "all" || line.health === healthFilter;
+      const matchesSource = sourceFilter === "all" || line.sourceType === sourceFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        line.streamName.toLowerCase().includes(normalizedSearch) ||
+        line.code.toLowerCase().includes(normalizedSearch) ||
+        line.sourceType.toLowerCase().includes(normalizedSearch) ||
+        line.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesSource && matchesSearch;
+    });
+  }, [healthFilter, overview, searchFilter, sourceFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLines), [filteredLines]);
+
   const selectedLine = useMemo(
-    () => overview?.lines.find((item) => item.id === selectedLineId) ?? overview?.focusLine ?? null,
-    [overview, selectedLineId]
+    () => filteredLines.find((item) => item.id === selectedLineId) ?? filteredLines[0] ?? null,
+    [filteredLines, selectedLineId]
   );
 
   const selectedRisks = useMemo(
@@ -208,6 +233,22 @@ export default function CashFlowPage() {
   );
 
   const lineActions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLines.length === 0) {
+      setSelectedLineId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLines.some((line) => line.id === selectedLineId);
+    if (!isSelectedVisible) {
+      setSelectedLineId(filteredLines[0]?.id ?? null);
+    }
+  }, [filteredLines, overview, selectedLineId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLine?.nextAction ?? "");
@@ -285,23 +326,23 @@ export default function CashFlowPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Tracked streams"
-                value={String(overview.summary.trackedStreams)}
-                footnote="Treasury streams actively projected for the current tenant."
+                value={String(filteredSummary.trackedStreams)}
+                footnote="Treasury streams visible in the current operating filter."
               />
               <KpiCard
                 label="Projected inflows"
-                value={`MXN ${overview.summary.projectedInflows.toLocaleString()}`}
-                footnote="Expected short-term cash intake from current operational posture."
+                value={`MXN ${filteredSummary.projectedInflows.toLocaleString()}`}
+                footnote="Expected short-term cash intake from the visible subset."
               />
               <KpiCard
                 label="Projected outflows"
-                value={`MXN ${overview.summary.projectedOutflows.toLocaleString()}`}
-                footnote="Expected short-term cash drain from costs, payables and fiscal load."
+                value={`MXN ${filteredSummary.projectedOutflows.toLocaleString()}`}
+                footnote="Expected short-term cash drain from the visible subset."
               />
               <KpiCard
                 label="Weekly net"
-                value={`MXN ${overview.summary.weeklyNet.toLocaleString()}`}
-                footnote="Directional weekly liquidity gap or surplus from active streams."
+                value={`MXN ${filteredSummary.weeklyNet.toLocaleString()}`}
+                footnote="Directional weekly liquidity gap or surplus from visible streams."
               />
               <KpiCard
                 label="Treasury chain"
@@ -334,15 +375,53 @@ export default function CashFlowPage() {
             </Card>
 
               <Card title="Cash flow board" description="Treasury signal board across collections, payables, tax and close pressure.">
-                <FilterBar summary={`${overview.lines.length} cash flow streams in the active tenant`}>
+                <FilterBar summary={`${filteredLines.length} cash flow streams match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="controlled">Controlled</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Source
+                    <select className="field" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as typeof sourceFilter)}>
+                      <option value="all">All</option>
+                      <option value="cash">Cash</option>
+                      <option value="payables">Payables</option>
+                      <option value="collections">Collections</option>
+                      <option value="tax">Tax</option>
+                      <option value="close">Close</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Stream, code, source or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "cash flow ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalStreams > 0 ? "danger" : filteredSummary.weeklyNet < 0 ? "warning" : "success"}>
+                    {filteredSummary.criticalStreams > 0
+                      ? `${filteredSummary.criticalStreams} critical`
+                      : filteredSummary.weeklyNet < 0
+                        ? "negative net"
+                        : "visible subset controlled"}
+                  </Badge>
+                  <Badge tone="info">{filteredSummary.averageConfidence}% confidence</Badge>
                 </FilterBar>
 
                 <DataTable
-                  rows={overview.lines}
+                  rows={filteredLines}
                   columns={[
                     {
                       key: "stream",
