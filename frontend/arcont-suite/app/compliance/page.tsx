@@ -145,6 +145,9 @@ export default function CompliancePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | ComplianceCaseContract["status"]>("all");
+  const [healthFilter, setHealthFilter] = useState<"all" | ComplianceCaseContract["health"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -199,9 +202,46 @@ export default function CompliancePage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredCases = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.cases.filter((item) => {
+      const matchesStatus = statusFilter === "all" || item.status === statusFilter;
+      const matchesHealth = healthFilter === "all" || item.health === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.subject.toLowerCase().includes(normalizedSearch) ||
+        item.queueName.toLowerCase().includes(normalizedSearch) ||
+        item.unitOrContract.toLowerCase().includes(normalizedSearch) ||
+        item.code.toLowerCase().includes(normalizedSearch);
+
+      return matchesStatus && matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, searchFilter, statusFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const activeCases = filteredCases.filter((item) => item.status !== "closed").length;
+    const atRiskCases = filteredCases.filter((item) => item.health !== "healthy").length;
+    const averageDocumentCompletion =
+      filteredCases.length > 0
+        ? Number((filteredCases.reduce((sum, item) => sum + item.documentCompletion, 0) / filteredCases.length).toFixed(1))
+        : 0;
+    const openFindings = filteredCases.reduce((sum, item) => sum + item.openFindings, 0);
+
+    return {
+      activeCases,
+      atRiskCases,
+      averageDocumentCompletion,
+      openFindings
+    };
+  }, [filteredCases]);
+
   const selectedCase = useMemo(
-    () => overview?.cases.find((item) => item.id === selectedCaseId) ?? overview?.focusCase ?? null,
-    [overview, selectedCaseId]
+    () => filteredCases.find((item) => item.id === selectedCaseId) ?? filteredCases[0] ?? null,
+    [filteredCases, selectedCaseId]
   );
 
   const selectedRisks = useMemo(
@@ -212,6 +252,22 @@ export default function CompliancePage() {
   const selectedStory = useMemo(() => buildComplianceBridge(selectedCase, bridgeContext), [bridgeContext, selectedCase]);
 
   const actionOptions = useMemo(() => (selectedCase ? complianceActionOptions(selectedCase) : []), [selectedCase]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredCases.length === 0) {
+      setSelectedCaseId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredCases.some((item) => item.id === selectedCaseId);
+    if (!isSelectedVisible) {
+      setSelectedCaseId(filteredCases[0]?.id ?? null);
+    }
+  }, [filteredCases, overview, selectedCaseId]);
 
   useEffect(() => {
     setNextActionDraft(selectedCase?.nextAction ?? "");
@@ -299,36 +355,64 @@ export default function CompliancePage() {
             <section className="grid cols4">
               <KpiCard
                 label="Active cases"
-                value={String(overview.summary.activeCases)}
+                value={String(filteredSummary.activeCases)}
                 footnote="Open legal, handover and warranty items currently under management."
               />
               <KpiCard
                 label="At-risk cases"
-                value={String(overview.summary.atRiskCases)}
+                value={String(filteredSummary.atRiskCases)}
                 footnote="Cases under document, SLA or approval pressure."
               />
               <KpiCard
                 label="Document completion"
-                value={`${overview.summary.averageDocumentCompletion}%`}
+                value={`${filteredSummary.averageDocumentCompletion}%`}
                 footnote="Average completion across active folders, contracts and handover packs."
               />
               <KpiCard
                 label="Open findings"
-                value={String(overview.summary.openFindings)}
+                value={String(filteredSummary.openFindings)}
                 footnote="Outstanding issues still affecting closure readiness and compliance health."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Compliance board" description="Live legal, post-sale and handover queues tied to the active tenant.">
-                <FilterBar summary={`${overview.cases.length} compliance queues in the active tenant`}>
+                <FilterBar summary={`${filteredCases.length} compliance queues in the active tenant`}>
+                  <select
+                    className="selectField"
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value as "all" | ComplianceCaseContract["status"])}
+                  >
+                    <option value="all">All status</option>
+                    <option value="monitoring">monitoring</option>
+                    <option value="in_progress">in_progress</option>
+                    <option value="at_risk">at_risk</option>
+                    <option value="blocked">blocked</option>
+                    <option value="closed">closed</option>
+                  </select>
+                  <select
+                    className="selectField"
+                    value={healthFilter}
+                    onChange={(event) => setHealthFilter(event.target.value as "all" | ComplianceCaseContract["health"])}
+                  >
+                    <option value="all">All health</option>
+                    <option value="healthy">healthy</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search subject, queue, contract or code"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "compliance ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.cases}
+                  rows={filteredCases}
                   columns={[
                     {
                       key: "queue",
