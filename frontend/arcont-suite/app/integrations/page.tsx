@@ -64,6 +64,8 @@ export default function IntegrationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | IntegrationStreamContract["health"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -107,9 +109,43 @@ export default function IntegrationsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredStreams = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.streams.filter((stream) => {
+      const matchesHealth = healthFilter === "all" || stream.health === healthFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        stream.streamName.toLowerCase().includes(normalizedSearch) ||
+        stream.domain.toLowerCase().includes(normalizedSearch) ||
+        stream.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesSearch;
+    });
+  }, [healthFilter, overview, searchFilter]);
+
+  const filteredSummary = useMemo(() => {
+    const averageCoverage =
+      filteredStreams.length > 0
+        ? Number((filteredStreams.reduce((sum, item) => sum + item.automationCoverage, 0) / filteredStreams.length).toFixed(1))
+        : 0;
+
+    return {
+      liveStreams: filteredStreams.length,
+      criticalAlerts: filteredStreams
+        .filter((item) => item.health === "critical")
+        .reduce((sum, item) => sum + item.openAlerts, 0),
+      averageCoverage,
+      linkedAssets: filteredStreams.reduce((sum, item) => sum + item.linkedAssets, 0)
+    };
+  }, [filteredStreams]);
+
   const selectedStream = useMemo(
-    () => overview?.streams.find((item) => item.id === selectedStreamId) ?? overview?.focusStream ?? null,
-    [overview, selectedStreamId]
+    () => filteredStreams.find((item) => item.id === selectedStreamId) ?? filteredStreams[0] ?? null,
+    [filteredStreams, selectedStreamId]
   );
 
   const selectedRisks = useMemo(
@@ -121,6 +157,22 @@ export default function IntegrationsPage() {
     () => buildStreamImpact(selectedStream, selectedRisks.length),
     [selectedRisks.length, selectedStream]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredStreams.length === 0) {
+      setSelectedStreamId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredStreams.some((stream) => stream.id === selectedStreamId);
+    if (!isSelectedVisible) {
+      setSelectedStreamId(filteredStreams[0]?.id ?? null);
+    }
+  }, [filteredStreams, overview, selectedStreamId]);
 
   const actionOptions = useMemo(() => {
     if (!selectedStream) {
@@ -265,36 +317,62 @@ export default function IntegrationsPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Live streams"
-                value={String(overview.summary.liveStreams)}
+                value={String(filteredSummary.liveStreams)}
                 footnote="Connected BIM, telemetry and field-data streams active in the current tenant."
               />
               <KpiCard
                 label="Critical alerts"
-                value={String(overview.summary.criticalAlerts)}
+                value={String(filteredSummary.criticalAlerts)}
                 footnote="Alerts currently concentrated in the highest-risk connected streams."
               />
               <KpiCard
                 label="Automation coverage"
-                value={`${overview.summary.averageCoverage}%`}
+                value={`${filteredSummary.averageCoverage}%`}
                 footnote="Current coverage of useful automations and structured signal routing."
               />
               <KpiCard
                 label="Linked assets"
-                value={String(overview.summary.linkedAssets)}
+                value={String(filteredSummary.linkedAssets)}
                 footnote="Assets, model objects or field elements already tied into the connected stack."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Connected stack" description="Live stream health across BIM, telemetry, drones and remote site connectivity.">
-                <FilterBar summary={`${overview.streams.length} integration streams in the active tenant`}>
+                <FilterBar summary={`${filteredStreams.length} integration streams match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="healthy">Healthy</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Stream, domain or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "integrations ready"}</Badge>
+                  <Badge tone={filteredSummary.criticalAlerts > 0 ? "danger" : filteredStreams.some((item) => item.health === "watch") ? "warning" : "success"}>
+                    {filteredSummary.criticalAlerts > 0
+                      ? `${filteredSummary.criticalAlerts} critical alerts`
+                      : filteredStreams.some((item) => item.health === "watch")
+                        ? "watch streams visible"
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.streams}
+                  rows={filteredStreams}
                   columns={[
                     {
                       key: "stream",
