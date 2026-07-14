@@ -140,6 +140,9 @@ export default function ProcurementRequisitionsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRequisitionId, setSelectedRequisitionId] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [urgencyFilter, setUrgencyFilter] = useState<"all" | ProcurementRequisitionContract["urgency"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -204,9 +207,44 @@ export default function ProcurementRequisitionsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const projectOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return Array.from(new Set(overview.requisitions.map((item) => item.projectName))).sort((left, right) =>
+      left.localeCompare(right)
+    );
+  }, [overview]);
+
+  const filteredRequisitions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.requisitions.filter((item) => {
+      const matchesProject = projectFilter === "all" || item.projectName === projectFilter;
+      const matchesUrgency = urgencyFilter === "all" || item.urgency === urgencyFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        item.code.toLowerCase().includes(normalizedSearch) ||
+        item.projectName.toLowerCase().includes(normalizedSearch) ||
+        item.frontName.toLowerCase().includes(normalizedSearch) ||
+        item.category.toLowerCase().includes(normalizedSearch);
+
+      return matchesProject && matchesUrgency && matchesSearch;
+    });
+  }, [overview, projectFilter, searchFilter, urgencyFilter]);
+
+  const filteredSummary = useMemo(
+    () => recomputeSummary(filteredRequisitions),
+    [filteredRequisitions]
+  );
+
   const selectedRequisition = useMemo(
-    () => overview?.requisitions.find((item) => item.id === selectedRequisitionId) ?? overview?.focusRequisition ?? null,
-    [overview?.focusRequisition, overview?.requisitions, selectedRequisitionId]
+    () => filteredRequisitions.find((item) => item.id === selectedRequisitionId) ?? filteredRequisitions[0] ?? null,
+    [filteredRequisitions, selectedRequisitionId]
   );
 
   const selectedRisks = useMemo(
@@ -229,6 +267,22 @@ export default function ProcurementRequisitionsPage() {
     () => (selectedRequisition ? requisitionActionOptions(selectedRequisition) : []),
     [selectedRequisition]
   );
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredRequisitions.length === 0) {
+      setSelectedRequisitionId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredRequisitions.some((item) => item.id === selectedRequisitionId);
+    if (!isSelectedVisible) {
+      setSelectedRequisitionId(filteredRequisitions[0]?.id ?? null);
+    }
+  }, [filteredRequisitions, overview, selectedRequisitionId]);
 
   useEffect(() => {
     setNextActionDraft(selectedRequisition?.nextAction ?? "");
@@ -381,27 +435,53 @@ export default function ProcurementRequisitionsPage() {
         {overview ? (
           <>
             <section className="grid cols4">
-              <KpiCard label="Open requisitions" value={String(overview.summary.openRequisitions)} footnote="Requests still not handed off to sourcing." />
-              <KpiCard label="Pending approval" value={String(overview.summary.pendingApproval)} footnote="Submitted requisitions still waiting for approval." />
-              <KpiCard label="Critical urgency" value={String(overview.summary.criticalUrgency)} footnote="Requests already carrying execution pressure." />
-              <KpiCard label="Supplier coverage" value={`${overview.summary.supplierCoverage}`} footnote="Average supplier paths already identified per requisition." />
+              <KpiCard label="Open requisitions" value={String(filteredSummary.openRequisitions)} footnote="Requests still not handed off to sourcing." />
+              <KpiCard label="Pending approval" value={String(filteredSummary.pendingApproval)} footnote="Submitted requisitions still waiting for approval." />
+              <KpiCard label="Critical urgency" value={String(filteredSummary.criticalUrgency)} footnote="Requests already carrying execution pressure." />
+              <KpiCard label="Supplier coverage" value={`${filteredSummary.supplierCoverage}`} footnote="Average supplier paths already identified per requisition." />
               <KpiCard
                 label="Field-origin links"
-                value={String(overview.origins.length)}
-                footnote="Requisitions currently traced back to a persisted field material request."
+                value={String(overview.origins.filter((origin) => filteredRequisitions.some((item) => item.id === origin.requisitionId)).length)}
+                footnote="Requisitions currently traced back to a persisted field material request within the visible board."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Requisition board" description="Field intake, approval aging and sourcing readiness across the active tenant.">
-                <FilterBar summary={`${overview.requisitions.length} requisitions in the active tenant`}>
+                <FilterBar summary={`${filteredRequisitions.length} visible requisitions in the active tenant`}>
+                  <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                    <option value="all">All projects</option>
+                    {projectOptions.map((projectName) => (
+                      <option key={projectName} value={projectName}>
+                        {projectName}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="selectField"
+                    value={urgencyFilter}
+                    onChange={(event) =>
+                      setUrgencyFilter(event.target.value as "all" | ProcurementRequisitionContract["urgency"])
+                    }
+                  >
+                    <option value="all">All urgency</option>
+                    <option value="planned">planned</option>
+                    <option value="watch">watch</option>
+                    <option value="critical">critical</option>
+                  </select>
+                  <input
+                    className="field"
+                    value={searchFilter}
+                    onChange={(event) => setSearchFilter(event.target.value)}
+                    placeholder="Search code, project, front or category"
+                  />
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "requisitions ready"}</Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.requisitions}
+                  rows={filteredRequisitions}
                   columns={[
                     {
                       key: "code",
@@ -504,13 +584,13 @@ export default function ProcurementRequisitionsPage() {
                               <div className="detailLabel">Field detail</div>
                               <div>{selectedOrigin.detail}</div>
                             </div>
-                            <div className="detailRow">
-                              <div className="detailLabel">Field next action</div>
-                              <div>{selectedOrigin.nextAction}</div>
-                            </div>
-                          </div>
-                          <div className="row gap wrap" style={{ marginTop: 16 }}>
-                            <Link className="buttonGhost" href="/field">
+                        <div className="detailRow">
+                          <div className="detailLabel">Field next action</div>
+                          <div>{selectedOrigin.nextAction}</div>
+                        </div>
+                      </div>
+                      <div className="row gap wrap" style={{ marginTop: 16 }}>
+                            <Link className="buttonGhost" href={`/field?projectName=${encodeURIComponent(selectedOrigin.projectName)}`}>
                               Open field
                             </Link>
                             <Link className="buttonGhost" href="/inventory/receiving">
