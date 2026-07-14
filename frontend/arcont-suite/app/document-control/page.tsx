@@ -178,6 +178,7 @@ export default function DocumentControlPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string>("all");
   const [createForm, setCreateForm] = useState({
     documentType: "RFI",
     subject: "",
@@ -245,10 +246,41 @@ export default function DocumentControlPage() {
     [overview, selectedItemId]
   );
 
+  const projectOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return Array.from(new Set(overview.items.map((item) => item.projectName))).sort((left, right) => left.localeCompare(right));
+  }, [overview]);
+
+  const filteredItems = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return projectFilter === "all"
+      ? overview.items
+      : overview.items.filter((item) => item.projectName === projectFilter);
+  }, [overview, projectFilter]);
+
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.itemId === selectedItem?.id) ?? [],
     [overview, selectedItem]
   );
+
+  const filteredRisks = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return projectFilter === "all"
+      ? overview.risks
+      : overview.risks.filter((risk) => {
+          const parent = overview.items.find((item) => item.id === risk.itemId);
+          return parent?.projectName === projectFilter;
+        });
+  }, [overview, projectFilter]);
 
   const selectedStory = useMemo(() => buildDocumentBridge(selectedItem, bridgeContext), [bridgeContext, selectedItem]);
 
@@ -468,9 +500,17 @@ export default function DocumentControlPage() {
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "docs ready"}</Badge>
+                  <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                    <option value="all">All projects</option>
+                    {projectOptions.map((project) => (
+                      <option key={project} value={project}>
+                        {project}
+                      </option>
+                    ))}
+                  </select>
                 </FilterBar>
                 <DataTable
-                  rows={overview.items}
+                  rows={filteredItems}
                   columns={[
                     {
                       key: "item",
@@ -689,7 +729,7 @@ export default function DocumentControlPage() {
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <DataTable
-                    rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
+                    rows={selectedRisks.length > 0 ? selectedRisks : filteredRisks}
                     columns={[
                       {
                         key: "risk",

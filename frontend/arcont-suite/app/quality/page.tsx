@@ -139,6 +139,7 @@ export default function QualityPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string>("all");
   const [createForm, setCreateForm] = useState({
     projectName: "Proyecto central",
     areaName: "Frente 1",
@@ -203,10 +204,43 @@ export default function QualityPage() {
     [overview, selectedInspectionId]
   );
 
+  const projectOptions = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return Array.from(new Set(overview.inspectionsBoard.map((item) => item.projectName))).sort((left, right) =>
+      left.localeCompare(right)
+    );
+  }, [overview]);
+
+  const filteredInspections = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return projectFilter === "all"
+      ? overview.inspectionsBoard
+      : overview.inspectionsBoard.filter((item) => item.projectName === projectFilter);
+  }, [overview, projectFilter]);
+
   const selectedRisks = useMemo(
     () => overview?.risks.filter((risk) => risk.inspectionId === selectedInspection?.id) ?? [],
     [overview, selectedInspection]
   );
+
+  const filteredRisks = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    return projectFilter === "all"
+      ? overview.risks
+      : overview.risks.filter((risk) => {
+          const parent = overview.inspectionsBoard.find((item) => item.id === risk.inspectionId);
+          return parent?.projectName === projectFilter;
+        });
+  }, [overview, projectFilter]);
 
   const actionOptions = useMemo(
     () => (selectedInspection ? qualityActionOptions(selectedInspection) : []),
@@ -463,9 +497,17 @@ export default function QualityPage() {
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "quality ready"}</Badge>
+                  <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+                    <option value="all">All projects</option>
+                    {projectOptions.map((project) => (
+                      <option key={project} value={project}>
+                        {project}
+                      </option>
+                    ))}
+                  </select>
                 </FilterBar>
                 <DataTable
-                  rows={overview.inspectionsBoard}
+                  rows={filteredInspections}
                   columns={[
                     {
                       key: "inspection",
@@ -681,7 +723,7 @@ export default function QualityPage() {
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <DataTable
-                    rows={selectedRisks.length > 0 ? selectedRisks : overview.risks}
+                    rows={selectedRisks.length > 0 ? selectedRisks : filteredRisks}
                     columns={[
                       {
                         key: "risk",
