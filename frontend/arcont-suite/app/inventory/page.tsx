@@ -24,12 +24,29 @@ function stockTone(stockHealth: InventoryLocationContract["stockHealth"]) {
   }
 }
 
+function recomputeSummary(locations: InventoryLocationContract[]) {
+  const accuracy =
+    locations.length > 0
+      ? Number((locations.reduce((sum, item) => sum + item.accuracy, 0) / locations.length).toFixed(1))
+      : 0;
+
+  return {
+    trackedSkus: locations.reduce((sum, item) => sum + item.trackedSkus, 0),
+    accuracy,
+    openVariances: locations.reduce((sum, item) => sum + item.openVariances, 0),
+    urgentReplenishments: locations.reduce((sum, item) => sum + item.urgentReplenishments, 0)
+  };
+}
+
 export default function InventoryPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const [overview, setOverview] = useState<InventoryOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [healthFilter, setHealthFilter] = useState<"all" | InventoryLocationContract["stockHealth"]>("all");
+  const [locationTypeFilter, setLocationTypeFilter] = useState<"all" | InventoryLocationContract["locationType"]>("all");
+  const [searchFilter, setSearchFilter] = useState("");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -73,9 +90,30 @@ export default function InventoryPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, session.authenticated]);
 
+  const filteredLocations = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+
+    const normalizedSearch = searchFilter.trim().toLowerCase();
+    return overview.locations.filter((location) => {
+      const matchesHealth = healthFilter === "all" || location.stockHealth === healthFilter;
+      const matchesType = locationTypeFilter === "all" || location.locationType === locationTypeFilter;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        location.locationName.toLowerCase().includes(normalizedSearch) ||
+        location.code.toLowerCase().includes(normalizedSearch) ||
+        location.nextAction.toLowerCase().includes(normalizedSearch);
+
+      return matchesHealth && matchesType && matchesSearch;
+    });
+  }, [healthFilter, locationTypeFilter, overview, searchFilter]);
+
+  const filteredSummary = useMemo(() => recomputeSummary(filteredLocations), [filteredLocations]);
+
   const selectedLocation = useMemo(
-    () => overview?.locations.find((item) => item.id === selectedLocationId) ?? overview?.focusLocation ?? null,
-    [overview, selectedLocationId]
+    () => filteredLocations.find((item) => item.id === selectedLocationId) ?? filteredLocations[0] ?? null,
+    [filteredLocations, selectedLocationId]
   );
 
   const selectedRisks = useMemo(
@@ -120,6 +158,22 @@ export default function InventoryPage() {
         ];
     }
   }, [selectedLocation]);
+
+  useEffect(() => {
+    if (!overview) {
+      return;
+    }
+
+    if (filteredLocations.length === 0) {
+      setSelectedLocationId(null);
+      return;
+    }
+
+    const isSelectedVisible = filteredLocations.some((location) => location.id === selectedLocationId);
+    if (!isSelectedVisible) {
+      setSelectedLocationId(filteredLocations[0]?.id ?? null);
+    }
+  }, [filteredLocations, overview, selectedLocationId]);
 
   useEffect(() => {
     setNextActionDraft(selectedLocation?.nextAction ?? "");
@@ -170,10 +224,6 @@ export default function InventoryPage() {
       }
 
       const locations = current.locations.map((item) => (item.id === response.data?.id ? response.data : item));
-      const accuracy =
-        locations.length > 0
-          ? Number((locations.reduce((sum, item) => sum + item.accuracy, 0) / locations.length).toFixed(1))
-          : 0;
       const focusLocation =
         locations
           .slice()
@@ -191,12 +241,7 @@ export default function InventoryPage() {
 
       return {
         ...current,
-        summary: {
-          trackedSkus: locations.reduce((sum, item) => sum + item.trackedSkus, 0),
-          accuracy,
-          openVariances: locations.reduce((sum, item) => sum + item.openVariances, 0),
-          urgentReplenishments: locations.reduce((sum, item) => sum + item.urgentReplenishments, 0)
-        },
+        summary: recomputeSummary(locations),
         locations,
         focusLocation
       };
@@ -219,36 +264,75 @@ export default function InventoryPage() {
             <section className="grid cols4">
               <KpiCard
                 label="Tracked SKUs"
-                value={overview.summary.trackedSkus.toLocaleString()}
-                footnote="Active SKU visibility across warehouse, yard and field locations."
+                value={filteredSummary.trackedSkus.toLocaleString()}
+                footnote="Visible SKU coverage across the filtered warehouse network."
               />
               <KpiCard
                 label="Accuracy"
-                value={`${overview.summary.accuracy}%`}
-                footnote="Average stock accuracy across the active tenant network."
+                value={`${filteredSummary.accuracy}%`}
+                footnote="Average stock accuracy across the visible location subset."
               />
               <KpiCard
                 label="Open variances"
-                value={String(overview.summary.openVariances)}
-                footnote="Variance signals that still need reconciliation."
+                value={String(filteredSummary.openVariances)}
+                footnote="Visible variance signals that still need reconciliation."
               />
               <KpiCard
                 label="Urgent replenishments"
-                value={String(overview.summary.urgentReplenishments)}
-                footnote="Locations that need supply action before execution stops."
+                value={String(filteredSummary.urgentReplenishments)}
+                footnote="Visible locations that need supply action before execution stops."
               />
             </section>
 
             <section className="grid cols2">
               <Card title="Warehouse health" description="Live stock, accuracy and replenishment posture by location.">
-                <FilterBar summary={`${overview.locations.length} inventory nodes in the active tenant`}>
+                <FilterBar summary={`${filteredLocations.length} inventory nodes match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Health
+                    <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
+                      <option value="all">All</option>
+                      <option value="critical">Critical</option>
+                      <option value="watch">Watch</option>
+                      <option value="healthy">Healthy</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    Type
+                    <select
+                      className="field"
+                      value={locationTypeFilter}
+                      onChange={(event) => setLocationTypeFilter(event.target.value as typeof locationTypeFilter)}
+                    >
+                      <option value="all">All</option>
+                      <option value="warehouse">Warehouse</option>
+                      <option value="yard">Yard</option>
+                      <option value="jobsite">Jobsite</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Location, code or next action"
+                    />
+                  </label>
                   <Badge tone={session.authenticated ? "success" : "warning"}>
                     {session.authenticated ? "live backend" : source}
                   </Badge>
                   <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "inventory ready"}</Badge>
+                  <Badge tone={filteredSummary.openVariances > 0 ? "danger" : filteredSummary.urgentReplenishments > 0 ? "warning" : "success"}>
+                    {filteredSummary.openVariances > 0
+                      ? `${filteredSummary.openVariances} variances`
+                      : filteredSummary.urgentReplenishments > 0
+                        ? `${filteredSummary.urgentReplenishments} urgent`
+                        : "visible subset controlled"}
+                  </Badge>
                 </FilterBar>
                 <DataTable
-                  rows={overview.locations}
+                  rows={filteredLocations}
                   columns={[
                     {
                       key: "location",
