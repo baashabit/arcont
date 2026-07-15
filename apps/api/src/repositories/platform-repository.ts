@@ -73,6 +73,45 @@ type CreateProjectPortfolioItemInput = {
   nextMilestone: string;
 };
 
+export type ProjectScheduleActivityRecord = {
+  id: string;
+  companyId: string;
+  projectId: string;
+  code: string;
+  name: string;
+  phase: string;
+  status: "not_started" | "in_progress" | "blocked" | "completed";
+  plannedStart: string;
+  plannedFinish: string;
+  actualStart: string | null;
+  actualFinish: string | null;
+  progressPercent: number;
+  predecessorIds: string[];
+  owner: string;
+  nextAction: string;
+  updatedAt: string;
+};
+
+export type CreateProjectScheduleActivityInput = Omit<
+  ProjectScheduleActivityRecord,
+  "id" | "status" | "actualStart" | "actualFinish" | "progressPercent" | "updatedAt"
+>;
+
+export type UpdateProjectScheduleActivityInput = Pick<
+  ProjectScheduleActivityRecord,
+  | "companyId"
+  | "projectId"
+  | "status"
+  | "progressPercent"
+  | "plannedStart"
+  | "plannedFinish"
+  | "actualStart"
+  | "actualFinish"
+  | "predecessorIds"
+  | "owner"
+  | "nextAction"
+> & { activityId: string };
+
 type DailyLogEntryRecord = {
   id: string;
   companyId: string;
@@ -1009,6 +1048,7 @@ export type PlatformRepository = {
   listRoles(): Promise<typeof defaultRoles>;
   listUsers(companyId?: string): Promise<UserRecord[]>;
   listProjects(companyId: string): Promise<ProjectPortfolioItemRecord[]>;
+  listProjectScheduleActivities(companyId: string, projectId: string): Promise<ProjectScheduleActivityRecord[]>;
   listProjectRisks(companyId: string): Promise<ProjectRiskRecord[]>;
   listDailyLogEntries(companyId: string): Promise<DailyLogEntryRecord[]>;
   listDailyLogRisks(companyId: string): Promise<DailyLogRiskRecord[]>;
@@ -1100,6 +1140,8 @@ export type PlatformRepository = {
   updateUserStatus(input: UpdatePlatformUserStatusInput): Promise<UserRecord>;
   createProjectPortfolioItem(input: CreateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
   updateProjectPortfolioItem(input: UpdateProjectPortfolioItemInput): Promise<ProjectPortfolioItemRecord>;
+  createProjectScheduleActivity(input: CreateProjectScheduleActivityInput): Promise<ProjectScheduleActivityRecord>;
+  updateProjectScheduleActivity(input: UpdateProjectScheduleActivityInput): Promise<ProjectScheduleActivityRecord>;
   updateDailyLogEntry(input: UpdateDailyLogEntryInput): Promise<DailyLogEntryRecord>;
   updateProcurementRequisition(input: UpdateProcurementRequisitionInput): Promise<ProcurementRequisitionRecord>;
   updateProcurementPurchaseOrder(input: UpdateProcurementPurchaseOrderInput): Promise<ProcurementPurchaseOrderRecord>;
@@ -1265,6 +1307,99 @@ function createSeedState() {
       activeFronts: 1,
       updatedAt: "2026-07-11T15:30:00.000Z",
       nextMilestone: "Land release and mobilization"
+    }
+  ];
+
+  const projectScheduleActivities: ProjectScheduleActivityRecord[] = [
+    {
+      id: "sch_torre_b_structure",
+      companyId: "cmp_arcont_demo",
+      projectId: "prj_torre_b",
+      code: "TB-STR-010",
+      name: "Nucleo y losa nivel 12",
+      phase: "Estructura",
+      status: "in_progress",
+      plannedStart: "2026-07-01",
+      plannedFinish: "2026-07-18",
+      actualStart: "2026-07-02",
+      actualFinish: null,
+      progressPercent: 82,
+      predecessorIds: [],
+      owner: "Superintendencia de obra",
+      nextAction: "Cerrar acero de nucleo y confirmar ventana de colado con laboratorio.",
+      updatedAt: "2026-07-11T18:20:00.000Z"
+    },
+    {
+      id: "sch_torre_b_facade",
+      companyId: "cmp_arcont_demo",
+      projectId: "prj_torre_b",
+      code: "TB-FAC-020",
+      name: "Fachada nivel 10 a 12",
+      phase: "Envolvente",
+      status: "not_started",
+      plannedStart: "2026-07-19",
+      plannedFinish: "2026-08-08",
+      actualStart: null,
+      actualFinish: null,
+      progressPercent: 0,
+      predecessorIds: ["sch_torre_b_structure"],
+      owner: "Coordinacion de acabados",
+      nextAction: "Validar liberacion estructural y asegurar muestra de sellado antes de movilizar cuadrilla.",
+      updatedAt: "2026-07-11T18:20:00.000Z"
+    },
+    {
+      id: "sch_etapa_2_permits",
+      companyId: "cmp_arcont_demo",
+      projectId: "prj_etapa_2",
+      code: "ET2-PER-010",
+      name: "Liberacion de servicios municipales",
+      phase: "Permisos",
+      status: "blocked",
+      plannedStart: "2026-06-24",
+      plannedFinish: "2026-07-14",
+      actualStart: "2026-06-24",
+      actualFinish: null,
+      progressPercent: 55,
+      predecessorIds: [],
+      owner: "Gerencia de permisos",
+      nextAction: "Escalar oficio de liberacion y confirmar fecha formal de respuesta del municipio.",
+      updatedAt: "2026-07-11T17:10:00.000Z"
+    },
+    {
+      id: "sch_etapa_2_mobilization",
+      companyId: "cmp_arcont_demo",
+      projectId: "prj_etapa_2",
+      code: "ET2-MOB-020",
+      name: "Movilizacion de urbanizacion",
+      phase: "Movilizacion",
+      status: "not_started",
+      plannedStart: "2026-07-15",
+      plannedFinish: "2026-07-25",
+      actualStart: null,
+      actualFinish: null,
+      progressPercent: 0,
+      predecessorIds: ["sch_etapa_2_permits"],
+      owner: "Jefatura de obra",
+      nextAction: "Preparar frente, equipo y requisiciones para iniciar al liberar permisos.",
+      updatedAt: "2026-07-11T17:10:00.000Z"
+    },
+    {
+      id: "sch_cobalto_audit",
+      companyId: "cmp_bienestar_gov",
+      projectId: "prj_cobalto",
+      code: "GOV-AUD-030",
+      name: "Tercera supervision de avance",
+      phase: "Control gubernamental",
+      status: "in_progress",
+      plannedStart: "2026-07-08",
+      plannedFinish: "2026-07-22",
+      actualStart: "2026-07-08",
+      actualFinish: null,
+      progressPercent: 73,
+      predecessorIds: [],
+      owner: "Control tecnico",
+      nextAction: "Consolidar evidencia de calidad y estimacion para la siguiente supervision.",
+      updatedAt: "2026-07-11T16:45:00.000Z"
     }
   ];
 
@@ -3199,6 +3334,7 @@ function createSeedState() {
       companies,
       users,
       projects,
+      projectScheduleActivities,
       projectRisks,
       dailyLogEntries,
       dailyLogRisks,
@@ -3261,6 +3397,11 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
     },
     async listProjects(companyId: string) {
       return state.projects.filter((project) => project.companyId === companyId);
+    },
+    async listProjectScheduleActivities(companyId: string, projectId: string) {
+      return state.projectScheduleActivities.filter(
+        (activity) => activity.companyId === companyId && activity.projectId === projectId
+      );
     },
     async listProjectRisks(companyId: string) {
       const projectIds = new Set(
@@ -4073,6 +4214,49 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       state.projects.unshift(item);
       return item;
     },
+    async createProjectScheduleActivity(input) {
+      const item: ProjectScheduleActivityRecord = {
+        id: createPrefixedId("sch"),
+        companyId: input.companyId,
+        projectId: input.projectId,
+        code: input.code,
+        name: input.name,
+        phase: input.phase,
+        status: "not_started",
+        plannedStart: input.plannedStart,
+        plannedFinish: input.plannedFinish,
+        actualStart: null,
+        actualFinish: null,
+        progressPercent: 0,
+        predecessorIds: input.predecessorIds,
+        owner: input.owner,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.projectScheduleActivities.unshift(item);
+      return item;
+    },
+    async updateProjectScheduleActivity(input) {
+      const item = state.projectScheduleActivities.find(
+        (candidate) => candidate.id === input.activityId && candidate.companyId === input.companyId && candidate.projectId === input.projectId
+      );
+      if (!item) {
+        throw new Error("Project schedule activity not found in repository");
+      }
+
+      item.status = input.status;
+      item.progressPercent = input.progressPercent;
+      item.plannedStart = input.plannedStart;
+      item.plannedFinish = input.plannedFinish;
+      item.actualStart = input.actualStart;
+      item.actualFinish = input.actualFinish;
+      item.predecessorIds = input.predecessorIds;
+      item.owner = input.owner;
+      item.nextAction = input.nextAction;
+      item.updatedAt = new Date().toISOString();
+      return item;
+    },
     async updateDailyLogEntry(input) {
       const entry = state.dailyLogEntries.find((candidate) => candidate.id === input.entryId);
       if (!entry) {
@@ -4720,6 +4904,31 @@ function mapDailyLogEntryRow(row: Record<string, unknown>): DailyLogEntryRecord 
   };
 }
 
+function mapProjectScheduleActivityRow(row: Record<string, unknown>): ProjectScheduleActivityRecord {
+  const predecessorIds = Array.isArray(row.predecessor_ids)
+    ? row.predecessor_ids.map((value) => String(value))
+    : JSON.parse(String(row.predecessor_ids ?? "[]")) as string[];
+
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    projectId: String(row.project_id),
+    code: String(row.code),
+    name: String(row.name),
+    phase: String(row.phase),
+    status: row.status as ProjectScheduleActivityRecord["status"],
+    plannedStart: String(row.planned_start).slice(0, 10),
+    plannedFinish: String(row.planned_finish).slice(0, 10),
+    actualStart: row.actual_start ? String(row.actual_start).slice(0, 10) : null,
+    actualFinish: row.actual_finish ? String(row.actual_finish).slice(0, 10) : null,
+    progressPercent: Number(row.progress_percent),
+    predecessorIds,
+    owner: String(row.owner_name),
+    nextAction: String(row.next_action),
+    updatedAt: String(row.updated_at)
+  };
+}
+
 function mapDailyLogRiskRow(row: Record<string, unknown>): DailyLogRiskRecord {
   return {
     id: String(row.id),
@@ -5075,6 +5284,35 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
         updatedAt: String(row.updated_at),
         nextMilestone: String(row.next_milestone)
       }));
+    },
+    async listProjectScheduleActivities(companyId: string, projectId: string) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            company_id,
+            project_id,
+            code,
+            name,
+            phase,
+            status,
+            planned_start,
+            planned_finish,
+            actual_start,
+            actual_finish,
+            progress_percent,
+            predecessor_ids,
+            owner_name,
+            next_action,
+            updated_at
+          from project_schedule_activities
+          where company_id = $1 and project_id = $2
+          order by planned_start, code
+        `,
+        [companyId, projectId]
+      );
+
+      return result.rows.map(mapProjectScheduleActivityRow);
     },
     async listProjectRisks(companyId: string) {
       const result = await pool.query(
@@ -7014,6 +7252,89 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
         updatedAt: String(row.updated_at),
         nextMilestone: String(row.next_milestone)
       };
+    },
+    async createProjectScheduleActivity(input) {
+      const result = await pool.query(
+        `
+          insert into project_schedule_activities (
+            id,
+            company_id,
+            project_id,
+            code,
+            name,
+            phase,
+            status,
+            planned_start,
+            planned_finish,
+            actual_start,
+            actual_finish,
+            progress_percent,
+            predecessor_ids,
+            owner_name,
+            next_action
+          )
+          values ($1, $2, $3, $4, $5, $6, 'not_started', $7, $8, null, null, 0, $9::jsonb, $10, $11)
+          returning id, company_id, project_id, code, name, phase, status, planned_start, planned_finish, actual_start, actual_finish, progress_percent, predecessor_ids, owner_name, next_action, updated_at
+        `,
+        [
+          createPrefixedId("sch"),
+          input.companyId,
+          input.projectId,
+          input.code,
+          input.name,
+          input.phase,
+          input.plannedStart,
+          input.plannedFinish,
+          JSON.stringify(input.predecessorIds),
+          input.owner,
+          input.nextAction
+        ]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Project schedule activity could not be created");
+      }
+
+      return mapProjectScheduleActivityRow(result.rows[0]);
+    },
+    async updateProjectScheduleActivity(input) {
+      const result = await pool.query(
+        `
+          update project_schedule_activities
+          set status = $4,
+              progress_percent = $5,
+              planned_start = $6,
+              planned_finish = $7,
+              actual_start = $8,
+              actual_finish = $9,
+              predecessor_ids = $10::jsonb,
+              owner_name = $11,
+              next_action = $12,
+              updated_at = now()
+          where id = $1 and company_id = $2 and project_id = $3
+          returning id, company_id, project_id, code, name, phase, status, planned_start, planned_finish, actual_start, actual_finish, progress_percent, predecessor_ids, owner_name, next_action, updated_at
+        `,
+        [
+          input.activityId,
+          input.companyId,
+          input.projectId,
+          input.status,
+          input.progressPercent,
+          input.plannedStart,
+          input.plannedFinish,
+          input.actualStart,
+          input.actualFinish,
+          JSON.stringify(input.predecessorIds),
+          input.owner,
+          input.nextAction
+        ]
+      );
+
+      if (!result.rows[0]) {
+        throw new Error("Project schedule activity was not found for this company and project");
+      }
+
+      return mapProjectScheduleActivityRow(result.rows[0]);
     },
     async updateDailyLogEntry(input) {
       const result = await pool.query(

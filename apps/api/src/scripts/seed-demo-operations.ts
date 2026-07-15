@@ -42,6 +42,10 @@ async function main() {
       "select count(*)::text as total from project_portfolio where company_id = $1",
       [company.id]
     );
+    const existingProjectScheduleActivities = await client.query<{ total: string }>(
+      "select count(*)::text as total from project_schedule_activities where company_id = $1",
+      [company.id]
+    );
 
     if (Number(existingProjects.rows[0]?.total ?? 0) === 0) {
       await client.query(
@@ -64,6 +68,20 @@ async function main() {
             ('prr_demo_equipment', 'prj_demo_torre', 'La grua mantiene una restriccion mecánica que presiona la secuencia', 'Equipment', 'critical', 'Operations lead', 'Maintenance release pending')
           on conflict (id) do nothing
         `
+      );
+    }
+
+    if (Number(existingProjectScheduleActivities.rows[0]?.total ?? 0) === 0) {
+      await client.query(
+        `
+          insert into project_schedule_activities
+            (id, company_id, project_id, code, name, phase, status, planned_start, planned_finish, actual_start, actual_finish, progress_percent, predecessor_ids, owner_name, next_action, updated_at)
+          values
+            ('sch_demo_structure', $1, 'prj_demo_torre', 'EST-010', 'Liberar frente estructural', 'Estructura', 'in_progress', '2026-07-01', '2026-07-18', '2026-07-02', null, 68, '[]'::jsonb, 'Superintendencia de obra', 'Confirmar liberacion de acero y ventana de colado.', now()),
+            ('sch_demo_envelope', $1, 'prj_demo_torre', 'ENV-020', 'Preparar siguiente frente de envolvente', 'Envolvente', 'not_started', '2026-07-19', '2026-08-08', null, null, 0, '["sch_demo_structure"]'::jsonb, 'Coordinacion de acabados', 'Validar liberacion estructural antes de movilizar cuadrilla.', now())
+          on conflict (id) do nothing
+        `,
+        [company.id]
       );
     }
 

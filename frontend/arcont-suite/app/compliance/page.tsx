@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -98,6 +99,111 @@ type ComplianceBridgeContext = {
   postSale: NonNullable<Awaited<ReturnType<typeof fetchPostSaleOverview>>>;
   documents: NonNullable<Awaited<ReturnType<typeof fetchDocumentControlOverview>>>;
 } | null;
+
+type CompliancePreloadSource = "document-control" | "post-sale";
+
+type CompliancePreloadContext = {
+  source: CompliancePreloadSource;
+  projectName: string;
+  subject: string;
+  owner: string;
+  nextAction: string;
+  assetLabel: string;
+  customerName: string;
+  signature: string;
+};
+
+type CompliancePreloadState = {
+  context: CompliancePreloadContext;
+  matchedCaseId: string | null;
+  matchedExactly: boolean;
+  badgeLabel: string;
+  detailLabel: string;
+  summary: string;
+};
+
+function normalizeValue(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function buildPreloadSignature(source: CompliancePreloadSource, values: Omit<CompliancePreloadContext, "source" | "signature">) {
+  return JSON.stringify({ source, ...values });
+}
+
+function parseCompliancePreload(searchParams: ReturnType<typeof useSearchParams>): CompliancePreloadContext | null {
+  const source = searchParams.get("source");
+  if (source !== "document-control" && source !== "post-sale") {
+    return null;
+  }
+
+  const values = {
+    projectName: searchParams.get("projectName")?.trim() ?? "",
+    subject: searchParams.get("subject")?.trim() ?? "",
+    owner: searchParams.get("owner")?.trim() ?? "",
+    nextAction: searchParams.get("nextAction")?.trim() ?? "",
+    assetLabel: searchParams.get("assetLabel")?.trim() ?? "",
+    customerName: searchParams.get("customerName")?.trim() ?? ""
+  };
+
+  const hasUsableContext = Object.values(values).some((value) => value.length > 0);
+  if (!hasUsableContext) {
+    return null;
+  }
+
+  return {
+    source,
+    ...values,
+    signature: buildPreloadSignature(source, values)
+  };
+}
+
+function scoreComplianceCaseMatch(complianceCase: ComplianceCaseContract, context: CompliancePreloadContext) {
+  const exactChecks = [
+    [context.subject, complianceCase.subject],
+    [context.projectName, complianceCase.unitOrContract],
+    [context.assetLabel, complianceCase.unitOrContract],
+    [context.owner, complianceCase.owner]
+  ] as const;
+
+  const exactMatches = exactChecks.filter(
+    ([left, right]) => normalizeValue(left).length > 0 && normalizeValue(left) === normalizeValue(right)
+  ).length;
+
+  const fields = [complianceCase.subject, complianceCase.queueName, complianceCase.unitOrContract, complianceCase.owner, complianceCase.code];
+  const candidateText = fields.map((value) => normalizeValue(value)).join(" ");
+
+  let partialScore = 0;
+  for (const value of [context.projectName, context.subject, context.owner, context.nextAction, context.assetLabel, context.customerName]) {
+    const normalized = normalizeValue(value);
+    if (!normalized) {
+      continue;
+    }
+
+    if (candidateText.includes(normalized)) {
+      partialScore += normalized.length > 10 ? 3 : 2;
+    } else if (normalized.split(/\s+/).some((token) => token.length > 3 && candidateText.includes(token))) {
+      partialScore += 1;
+    }
+  }
+
+  return {
+    exactMatches,
+    score: exactMatches * 10 + partialScore
+  };
+}
+
+function describeCompliancePreload(context: CompliancePreloadContext) {
+  const details = [
+    context.projectName,
+    context.subject,
+    context.owner,
+    context.assetLabel,
+    context.customerName,
+    context.nextAction
+  ].filter((value) => value.length > 0);
+
+  return details.length > 0 ? details.join(" · ") : "Operational continuity context received from another module.";
+}
 
 function buildComplianceBridge(complianceCase: ComplianceCaseContract | null, bridge: ComplianceBridgeContext) {
   if (!complianceCase) {
@@ -284,6 +390,7 @@ function buildComplianceOperationalLinks(complianceCase: ComplianceCaseContract 
 
 export default function CompliancePage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const searchParams = useSearchParams();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<ComplianceOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<ComplianceBridgeContext>(null);
@@ -297,6 +404,10 @@ export default function CompliancePage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [preloadState, setPreloadState] = useState<CompliancePreloadState | null>(null);
+  const preloadSignatureRef = useRef<string | null>(null);
+
+  const incomingPreload = useMemo(() => parseCompliancePreload(searchParams), [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -416,10 +527,60 @@ export default function CompliancePage() {
   }, [filteredCases, overview, selectedCaseId]);
 
   useEffect(() => {
-    setNextActionDraft(selectedCase?.nextAction ?? "");
+    const shouldUsePreloadedAction =
+      preloadState?.matchedCaseId === selectedCase?.id && preloadState.context.nextAction.length > 0;
+    setNextActionDraft(shouldUsePreloadedAction ? preloadState.context.nextAction : selectedCase?.nextAction ?? "");
     setActionError(null);
     setActionMessage(null);
-  }, [selectedCaseId, selectedCase?.id, selectedCase?.nextAction]);
+  }, [preloadState, selectedCaseId, selectedCase?.id, selectedCase?.nextAction]);
+
+  useEffect(() => {
+    if (!overview || !incomingPreload) {
+      return;
+    }
+
+    if (preloadSignatureRef.current === incomingPreload.signature) {
+      return;
+    }
+
+    let bestMatch: ComplianceCaseContract | null = null;
+    let bestScore = 0;
+    let bestExactMatches = 0;
+
+    for (const complianceCase of overview.cases) {
+      const result = scoreComplianceCaseMatch(complianceCase, incomingPreload);
+      if (
+        result.score > bestScore ||
+        (result.score === bestScore && result.exactMatches > bestExactMatches)
+      ) {
+        bestMatch = complianceCase;
+        bestScore = result.score;
+        bestExactMatches = result.exactMatches;
+      }
+    }
+
+    const matchedExactly = bestExactMatches > 0;
+    const matchedCaseId = bestMatch && bestScore > 0 ? bestMatch.id : null;
+    if (matchedCaseId) {
+      setSelectedCaseId(matchedCaseId);
+    }
+
+    setPreloadState({
+      context: incomingPreload,
+      matchedCaseId,
+      matchedExactly,
+      badgeLabel:
+        incomingPreload.source === "document-control"
+          ? "Precargado desde control documental / Preloaded from document control"
+          : "Precargado desde postventa / Preloaded from post-sale",
+      detailLabel:
+        incomingPreload.source === "document-control"
+          ? "Contexto documental / Document-control context"
+          : "Contexto postventa / Post-sale context",
+      summary: describeCompliancePreload(incomingPreload)
+    });
+    preloadSignatureRef.current = incomingPreload.signature;
+  }, [incomingPreload, overview]);
 
   async function handleCaseAction(status: ComplianceCaseContract["status"], suggestedNextAction: string) {
     if (!selectedCase) {
@@ -543,6 +704,22 @@ export default function CompliancePage() {
                   <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildComplianceWorkflow(selectedCase)}</div></div>
                   <div className="detailRow"><div className="detailLabel">Governance use</div><div>Use this module to decide whether the next move belongs to documents, post-sale, close control or project closeout.</div></div>
                   <div className="detailRow"><div className="detailLabel">Expected jump</div><div>After reading the folder posture, jump into the dependency that is really preventing clean closure.</div></div>
+                  {preloadState ? (
+                    <div className="detailRow">
+                      <div className="detailLabel">{preloadState.detailLabel}</div>
+                      <div className="tableCellStack">
+                        <Badge tone="info">{preloadState.badgeLabel}</Badge>
+                        <span className="tableCellMuted">
+                          {preloadState.matchedCaseId
+                            ? preloadState.matchedExactly
+                              ? "Exact related case selected using incoming context."
+                              : "Related case prioritized using incoming context."
+                            : "No exact case was found; this context remains visible for the active workflow."}
+                        </span>
+                        <span>{preloadState.summary}</span>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <Link className="button" href="/post-sale">Open post-sale</Link>
@@ -656,7 +833,14 @@ export default function CompliancePage() {
               <Card
                 title="Selected case"
                 description="Focused context for the active contract, unit, handover or warranty case."
-                aside={selectedCase ? <Badge tone={healthTone(selectedCase.health)}>{selectedCase.health}</Badge> : null}
+                aside={
+                  selectedCase ? (
+                    <div className="badgeRow">
+                      <Badge tone={healthTone(selectedCase.health)}>{selectedCase.health}</Badge>
+                      {preloadState ? <Badge tone="info">{preloadState.badgeLabel}</Badge> : null}
+                    </div>
+                  ) : null
+                }
               >
                 {selectedCase ? (
                   <div className="detailGrid">
@@ -705,6 +889,16 @@ export default function CompliancePage() {
                           onChange={(event) => setNextActionDraft(event.target.value)}
                           placeholder="Describe the next compliance, handover or post-sale move"
                         />
+                        {preloadState ? (
+                          <div className="tableCellStack" style={{ marginTop: 8 }}>
+                            <span className="tableCellMuted">
+                              {preloadState.matchedCaseId
+                                ? "Operational preload is now attached to the selected case."
+                                : "Operational preload could not map an exact case, but it remains active for this workflow."}
+                            </span>
+                            <span>{preloadState.summary}</span>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <div className="detailRow">

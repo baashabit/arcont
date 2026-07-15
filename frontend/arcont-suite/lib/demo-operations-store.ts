@@ -23,9 +23,15 @@ import type {
   FinanceLedgerItemContract,
   FinanceOverviewContract,
   FinanceRiskContract,
+  HrOverviewContract,
+  HrRiskContract,
+  HrWorkforceItemContract,
   CreateAccountsPayableInvoiceRequestContract,
   CreateTreasuryPaymentRunRequestContract,
   CreateProjectPortfolioItemRequestContract,
+  CreateProjectScheduleActivityRequestContract,
+  ImportProjectScheduleActivitiesRequestContract,
+  ImportProjectScheduleActivitiesResponseContract,
   CreateMachineItemRequestContract,
   CreateDailyLogEntryRequestContract,
   CreateFieldMaterialRequestRequestContract,
@@ -73,9 +79,14 @@ import type {
   ProjectPortfolioItemContract,
   ProjectPortfolioOverviewContract,
   ProjectRiskContract,
+  ProjectScheduleActivityContract,
+  ProjectScheduleOverviewContract,
   QualityInspectionContract,
   QualityOverviewContract,
   QualityRiskContract,
+  SubcontractLineContract,
+  SubcontractOverviewContract,
+  SubcontractRiskContract,
   SupplierControlLineContract,
   SupplierControlOverviewContract,
   SupplierControlRiskContract,
@@ -96,6 +107,7 @@ import type {
   UpdateCrmLeadBucketRequestContract,
   UpdateEstimationCollectionLineRequestContract,
   UpdateFinanceLedgerItemRequestContract,
+  UpdateHrWorkforceItemRequestContract,
   UpdatePostSaleCaseRequestContract,
   UpdateTreasuryPaymentRunRequestContract,
   UpdateDailyLogEntryRequestContract,
@@ -108,11 +120,14 @@ import type {
   UpdateQualityInspectionRequestContract,
   UpdateSupplierControlLineRequestContract,
   UpdateSupplierMasterProfileRequestContract,
-  UpdateProjectPortfolioItemRequestContract
+  UpdateSubcontractLineRequestContract,
+  UpdateProjectPortfolioItemRequestContract,
+  UpdateProjectScheduleActivityRequestContract
 } from "@/lib/contracts";
 
 const projectStoragePrefix = "arcont.demo.projects";
 const projectRiskStoragePrefix = "arcont.demo.project-risks";
+const projectScheduleStoragePrefix = "arcont.demo.project-schedules";
 const equipmentStoragePrefix = "arcont.demo.equipment";
 const equipmentRiskStoragePrefix = "arcont.demo.equipment-risks";
 const dailyLogStoragePrefix = "arcont.demo.daily-logs";
@@ -123,6 +138,10 @@ const documentControlStoragePrefix = "arcont.demo.document-control";
 const documentControlRiskStoragePrefix = "arcont.demo.document-control-risks";
 const qualityStoragePrefix = "arcont.demo.quality";
 const qualityRiskStoragePrefix = "arcont.demo.quality-risks";
+const hrStoragePrefix = "arcont.demo.hr-workforces";
+const hrRiskStoragePrefix = "arcont.demo.hr-risks";
+const subcontractStoragePrefix = "arcont.demo.subcontracts";
+const subcontractRiskStoragePrefix = "arcont.demo.subcontract-risks";
 const supplierControlStoragePrefix = "arcont.demo.supplier-control";
 const supplierControlRiskStoragePrefix = "arcont.demo.supplier-control-risks";
 const supplierMasterStoragePrefix = "arcont.demo.supplier-master";
@@ -168,6 +187,10 @@ function getProjectRiskStorageKey(companyId: string) {
   return `${projectRiskStoragePrefix}.${companyId}`;
 }
 
+function getProjectScheduleStorageKey(companyId: string, projectId: string) {
+  return `${projectScheduleStoragePrefix}.${companyId}.${projectId}`;
+}
+
 function getEquipmentStorageKey(companyId: string) {
   return `${equipmentStoragePrefix}.${companyId}`;
 }
@@ -206,6 +229,22 @@ function getQualityStorageKey(companyId: string) {
 
 function getQualityRiskStorageKey(companyId: string) {
   return `${qualityRiskStoragePrefix}.${companyId}`;
+}
+
+function getHrStorageKey(companyId: string) {
+  return `${hrStoragePrefix}.${companyId}`;
+}
+
+function getHrRiskStorageKey(companyId: string) {
+  return `${hrRiskStoragePrefix}.${companyId}`;
+}
+
+function getSubcontractStorageKey(companyId: string) {
+  return `${subcontractStoragePrefix}.${companyId}`;
+}
+
+function getSubcontractRiskStorageKey(companyId: string) {
+  return `${subcontractRiskStoragePrefix}.${companyId}`;
 }
 
 function getSupplierControlStorageKey(companyId: string) {
@@ -443,6 +482,47 @@ function createProjectRiskSeed(companyId: string): ProjectRiskContract[] {
   ];
 }
 
+function createProjectScheduleSeed(companyId: string, projectId: string): ProjectScheduleActivityContract[] {
+  return [
+    {
+      id: `sch_structure_${projectId}`,
+      companyId,
+      projectId,
+      code: "EST-010",
+      name: "Liberar frente estructural",
+      phase: "Estructura",
+      status: "in_progress",
+      plannedStart: "2026-07-01",
+      plannedFinish: "2026-07-18",
+      actualStart: "2026-07-02",
+      actualFinish: null,
+      progressPercent: 68,
+      predecessorIds: [],
+      owner: "Superintendencia de obra",
+      nextAction: "Confirmar liberacion de acero y ventana de colado.",
+      updatedAt: nowIso()
+    },
+    {
+      id: `sch_envelope_${projectId}`,
+      companyId,
+      projectId,
+      code: "ENV-020",
+      name: "Preparar siguiente frente de envolvente",
+      phase: "Envolvente",
+      status: "not_started",
+      plannedStart: "2026-07-19",
+      plannedFinish: "2026-08-08",
+      actualStart: null,
+      actualFinish: null,
+      progressPercent: 0,
+      predecessorIds: [`sch_structure_${projectId}`],
+      owner: "Coordinacion de acabados",
+      nextAction: "Validar liberacion estructural antes de movilizar cuadrilla.",
+      updatedAt: nowIso()
+    }
+  ];
+}
+
 function createEquipmentSeed(companyId: string): MachineItemContract[] {
   return [
     {
@@ -587,6 +667,73 @@ function createDailyLogRiskSeed(companyId: string): DailyLogRiskContract[] {
       severity: "warning",
       owner: "Field supervisor",
       status: "Pending updated evidence pack"
+    }
+  ];
+}
+
+function createHrSeed(companyId: string): HrWorkforceItemContract[] {
+  return [
+    {
+      id: `hr_demo_structure_${companyId}`,
+      companyId,
+      code: "WF-301",
+      contractorName: "Estructuras del Sureste",
+      frontName: "Frente Cimentacion",
+      activeHeadcount: 24,
+      attendanceRate: 94,
+      productivityRate: 91,
+      complianceExpirations: 0,
+      incidentCount: 0,
+      safetyStatus: "controlled",
+      nextAction: "Mantener disciplina de acceso, seguridad y vaciado para sostener el frente estable.",
+      updatedAt: nowIso()
+    },
+    {
+      id: `hr_demo_finishes_${companyId}`,
+      companyId,
+      code: "WF-302",
+      contractorName: "Acabados Integrales",
+      frontName: "Jobsite B",
+      activeHeadcount: 18,
+      attendanceRate: 78,
+      productivityRate: 68,
+      complianceExpirations: 2,
+      incidentCount: 1,
+      safetyStatus: "critical",
+      nextAction: "Recuperar asistencia, cerrar cumplimiento vencido y contener el frente antes del siguiente corte.",
+      updatedAt: nowIso()
+    }
+  ];
+}
+
+function createHrRiskSeed(companyId: string): HrRiskContract[] {
+  return [
+    {
+      id: `hrr_demo_finishes_attendance_${companyId}`,
+      workforceId: `hr_demo_finishes_${companyId}`,
+      title: "La cuadrilla de acabados ya cayo por debajo del umbral de asistencia operativo.",
+      category: "Attendance",
+      severity: "critical",
+      owner: "Workforce coordinator",
+      status: "Recovery plan required today"
+    },
+    {
+      id: `hrr_demo_finishes_compliance_${companyId}`,
+      workforceId: `hr_demo_finishes_${companyId}`,
+      title: "Persisten vencimientos de cumplimiento que ponen en riesgo la continuidad del contratista.",
+      category: "Compliance",
+      severity: "warning",
+      owner: "Safety lead",
+      status: "Document refresh pending"
+    },
+    {
+      id: `hrr_demo_structure_followup_${companyId}`,
+      workforceId: `hr_demo_structure_${companyId}`,
+      title: "La cuadrilla estructural esta estable pero depende de mantener control preventivo de acceso y maniobras.",
+      category: "Preventive control",
+      severity: "info",
+      owner: "Resident engineer",
+      status: "Monitor next pour window"
     }
   ];
 }
@@ -789,6 +936,101 @@ function createQualityRiskSeed(companyId: string): QualityRiskContract[] {
       severity: "warning",
       owner: "Resident engineer",
       status: "Final walkthrough pending"
+    }
+  ];
+}
+
+function createSubcontractSeed(companyId: string): SubcontractLineContract[] {
+  return [
+    {
+      id: `sub_demo_structure_${companyId}`,
+      workforceId: `wf_demo_structure_${companyId}`,
+      companyId,
+      projectId: `prj_demo_torre_${companyId}`,
+      code: "SUB-EST-01",
+      contractorName: "Estructuras del Sureste",
+      frontName: "Frente Cimentacion",
+      projectName: "Torre Demo",
+      projectStatus: "active",
+      subcontractHealth: "controlled",
+      latestDailyLogStatus: "submitted",
+      qualityReleaseReadiness: 84,
+      contractAmount: 1850000,
+      earnedAmount: 777000,
+      invoicedAmount: 710000,
+      paidAmount: 710000,
+      retentionAmount: 71000,
+      pendingDestajo: 0,
+      productivityRate: 91,
+      attendanceRate: 94,
+      complianceExpirations: 0,
+      incidentCount: 0,
+      activeHeadcount: 24,
+      progressPercent: 42,
+      progressGap: 3,
+      nextAction: "Liberar acero y confirmar vaciado de cimentacion con supervision.",
+      updatedAt: nowIso()
+    },
+    {
+      id: `sub_demo_finishes_${companyId}`,
+      workforceId: `wf_demo_finishes_${companyId}`,
+      companyId,
+      projectId: `prj_demo_acabados_${companyId}`,
+      code: "SUB-ACA-02",
+      contractorName: "Acabados Integrales",
+      frontName: "Jobsite B",
+      projectName: "Torre Demo Acabados",
+      projectStatus: "at_risk",
+      subcontractHealth: "critical",
+      latestDailyLogStatus: "flagged",
+      qualityReleaseReadiness: 62,
+      contractAmount: 2150000,
+      earnedAmount: 1462000,
+      invoicedAmount: 1335000,
+      paidAmount: 1150000,
+      retentionAmount: 95000,
+      pendingDestajo: 185000,
+      productivityRate: 68,
+      attendanceRate: 78,
+      complianceExpirations: 2,
+      incidentCount: 1,
+      activeHeadcount: 18,
+      progressPercent: 68,
+      progressGap: 12,
+      nextAction: "Contener diferencia de destajo, recuperar asistencia y revalidar liberacion de calidad.",
+      updatedAt: nowIso()
+    }
+  ];
+}
+
+function createSubcontractRiskSeed(companyId: string): SubcontractRiskContract[] {
+  return [
+    {
+      id: `subr_demo_finishes_destajo_${companyId}`,
+      lineId: `sub_demo_finishes_${companyId}`,
+      title: "El destajo pendiente ya esta afectando continuidad y confianza de pago al contratista.",
+      category: "Destajo / payment timing",
+      severity: "critical",
+      owner: "Project controls",
+      status: "Same-day containment pending"
+    },
+    {
+      id: `subr_demo_finishes_quality_${companyId}`,
+      lineId: `sub_demo_finishes_${companyId}`,
+      title: "La liberacion de calidad sigue insuficiente para sostener el frente sin retrabajo.",
+      category: "Quality release",
+      severity: "warning",
+      owner: "Quality lead",
+      status: "Field recheck required"
+    },
+    {
+      id: `subr_demo_structure_followup_${companyId}`,
+      lineId: `sub_demo_structure_${companyId}`,
+      title: "El frente estructural esta estable pero depende de mantener disciplina de liberacion y vaciado.",
+      category: "Execution follow-up",
+      severity: "info",
+      owner: "Resident engineer",
+      status: "Monitor next pour window"
     }
   ];
 }
@@ -2175,6 +2417,64 @@ function buildProjectsOverview(
   };
 }
 
+function calculatePlannedScheduleProgress(activity: ProjectScheduleActivityContract, now = new Date()) {
+  const start = new Date(`${activity.plannedStart}T00:00:00Z`).getTime();
+  const finish = new Date(`${activity.plannedFinish}T23:59:59Z`).getTime();
+  const current = now.getTime();
+
+  if (finish <= start) {
+    return current >= finish ? 100 : 0;
+  }
+
+  return Math.max(0, Math.min(100, ((current - start) / (finish - start)) * 100));
+}
+
+function buildProjectScheduleOverview(
+  project: ProjectPortfolioItemContract,
+  activities: ProjectScheduleActivityContract[]
+): ProjectScheduleOverviewContract {
+  const sortedActivities = activities
+    .slice()
+    .sort((left, right) => left.plannedStart.localeCompare(right.plannedStart) || left.code.localeCompare(right.code));
+  const baselineStart = sortedActivities[0]?.plannedStart ?? null;
+  const baselineFinish = sortedActivities.reduce<string | null>(
+    (latest, activity) => (!latest || activity.plannedFinish > latest ? activity.plannedFinish : latest),
+    null
+  );
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const scheduleVarianceDays = sortedActivities.reduce((largestDelay, activity) => {
+    if (activity.status === "completed" || activity.progressPercent >= 100) {
+      return largestDelay;
+    }
+
+    const plannedFinish = new Date(`${activity.plannedFinish}T00:00:00Z`).getTime();
+    return Math.max(largestDelay, Math.max(0, Math.ceil((today - plannedFinish) / (24 * 60 * 60 * 1000))));
+  }, 0);
+
+  return {
+    project,
+    summary: {
+      totalActivities: sortedActivities.length,
+      completedActivities: sortedActivities.filter((activity) => activity.status === "completed").length,
+      blockedActivities: sortedActivities.filter((activity) => activity.status === "blocked").length,
+      plannedProgress: Number(
+        (
+          sortedActivities.reduce((sum, activity) => sum + calculatePlannedScheduleProgress(activity, now), 0) /
+          Math.max(sortedActivities.length, 1)
+        ).toFixed(1)
+      ),
+      actualProgress: Number(
+        (sortedActivities.reduce((sum, activity) => sum + activity.progressPercent, 0) / Math.max(sortedActivities.length, 1)).toFixed(1)
+      ),
+      scheduleVarianceDays,
+      baselineStart,
+      baselineFinish
+    },
+    activities: sortedActivities
+  };
+}
+
 function buildEquipmentOverview(
   machines: MachineItemContract[],
   risks: MachineRiskContract[]
@@ -2992,6 +3292,180 @@ export function updateDemoProjectPortfolioItem(
   return updated;
 }
 
+export function getDemoProjectScheduleOverview(
+  companyId: string,
+  projectId: string
+): ProjectScheduleOverviewContract | null {
+  const projects = readStorage(getProjectStorageKey(companyId), () => createProjectSeed(companyId));
+  const project = projects.find((candidate) => candidate.id === projectId);
+  if (!project) {
+    return null;
+  }
+
+  const activities = readStorage(getProjectScheduleStorageKey(companyId, projectId), () =>
+    createProjectScheduleSeed(companyId, projectId)
+  );
+  return buildProjectScheduleOverview(project, activities);
+}
+
+export function createDemoProjectScheduleActivity(
+  companyId: string,
+  projectId: string,
+  input: CreateProjectScheduleActivityRequestContract
+): ProjectScheduleActivityContract | null {
+  const overview = getDemoProjectScheduleOverview(companyId, projectId);
+  if (!overview) {
+    return null;
+  }
+
+  const activitiesKey = getProjectScheduleStorageKey(companyId, projectId);
+  const activities = readStorage(activitiesKey, () => createProjectScheduleSeed(companyId, projectId));
+  const created: ProjectScheduleActivityContract = {
+    id: `sch_${crypto.randomUUID()}`,
+    companyId,
+    projectId,
+    code: input.code.trim().toUpperCase(),
+    name: input.name.trim(),
+    phase: input.phase.trim(),
+    status: "not_started",
+    plannedStart: input.plannedStart,
+    plannedFinish: input.plannedFinish,
+    actualStart: null,
+    actualFinish: null,
+    progressPercent: 0,
+    predecessorIds: [...new Set(input.predecessorIds)],
+    owner: input.owner.trim(),
+    nextAction: input.nextAction.trim(),
+    updatedAt: nowIso()
+  };
+
+  writeStorage(activitiesKey, [created, ...activities]);
+  return created;
+}
+
+export function importDemoProjectScheduleActivities(
+  companyId: string,
+  projectId: string,
+  input: ImportProjectScheduleActivitiesRequestContract
+): ImportProjectScheduleActivitiesResponseContract | null {
+  const overview = getDemoProjectScheduleOverview(companyId, projectId);
+  if (!overview) {
+    return null;
+  }
+
+  const existingActivities = overview.activities;
+  const existingCodeMap = new Map(existingActivities.map((activity) => [activity.code.toUpperCase(), activity]));
+  const importedCodeSet = new Set<string>();
+  const createdCodes: string[] = [];
+  let linkedToExistingCount = 0;
+  let linkedWithinImportCount = 0;
+
+  input.activities.forEach((activity) => {
+    const normalizedCode = activity.code.trim().toUpperCase();
+    if (existingCodeMap.has(normalizedCode) || importedCodeSet.has(normalizedCode)) {
+      throw new Error(`Duplicate schedule code in demo import: ${normalizedCode}`);
+    }
+
+    importedCodeSet.add(normalizedCode);
+  });
+
+  const createdByCode = new Map<string, ProjectScheduleActivityContract>();
+  const pending = input.activities.map((activity) => ({
+    ...activity,
+    code: activity.code.trim().toUpperCase(),
+    predecessorCodes: [...new Set(activity.predecessorCodes.map((code) => code.trim().toUpperCase()).filter(Boolean))]
+  }));
+
+  while (pending.length > 0) {
+    const ready = pending.filter((activity) =>
+      activity.predecessorCodes.every((code) => existingCodeMap.has(code) || createdByCode.has(code))
+    );
+
+    if (ready.length === 0) {
+      throw new Error("Demo project schedule import has unresolved or circular dependencies.");
+    }
+
+    ready.forEach((activity) => {
+      const predecessorIds = activity.predecessorCodes.flatMap((code) => {
+        const existing = existingCodeMap.get(code);
+        if (existing) {
+          linkedToExistingCount += 1;
+          return [existing.id];
+        }
+
+        const created = createdByCode.get(code);
+        if (created) {
+          linkedWithinImportCount += 1;
+          return [created.id];
+        }
+
+        return [];
+      });
+
+      const created = createDemoProjectScheduleActivity(companyId, projectId, {
+        code: activity.code,
+        name: activity.name,
+        phase: activity.phase,
+        plannedStart: activity.plannedStart,
+        plannedFinish: activity.plannedFinish,
+        predecessorIds,
+        owner: activity.owner,
+        nextAction: activity.nextAction
+      });
+
+      if (!created) {
+        throw new Error(`Demo project schedule activity could not be created: ${activity.code}`);
+      }
+
+      createdByCode.set(activity.code, created);
+      createdCodes.push(activity.code);
+    });
+
+    const readyCodes = new Set(ready.map((activity) => activity.code));
+    for (let index = pending.length - 1; index >= 0; index -= 1) {
+      if (readyCodes.has(pending[index].code)) {
+        pending.splice(index, 1);
+      }
+    }
+  }
+
+  return {
+    createdCount: createdCodes.length,
+    linkedToExistingCount,
+    linkedWithinImportCount,
+    createdCodes
+  };
+}
+
+export function updateDemoProjectScheduleActivity(
+  companyId: string,
+  projectId: string,
+  activityId: string,
+  input: UpdateProjectScheduleActivityRequestContract
+): ProjectScheduleActivityContract | null {
+  const activitiesKey = getProjectScheduleStorageKey(companyId, projectId);
+  const activities = readStorage(activitiesKey, () => createProjectScheduleSeed(companyId, projectId));
+  const current = activities.find((activity) => activity.id === activityId);
+  if (!current) {
+    return null;
+  }
+
+  const updated: ProjectScheduleActivityContract = {
+    ...current,
+    ...input,
+    predecessorIds: [...new Set(input.predecessorIds)],
+    owner: input.owner.trim(),
+    nextAction: input.nextAction.trim(),
+    updatedAt: nowIso()
+  };
+  writeStorage(
+    activitiesKey,
+    activities.map((activity) => (activity.id === activityId ? updated : activity))
+  );
+
+  return updated;
+}
+
 export function getDemoEquipmentOverview(companyId: string): EquipmentOverviewContract {
   const machines = readStorage(getEquipmentStorageKey(companyId), () => createEquipmentSeed(companyId));
   const risks = readStorage(getEquipmentRiskStorageKey(companyId), () => createEquipmentRiskSeed(companyId));
@@ -3020,6 +3494,72 @@ export function getDemoQualityOverview(companyId: string): QualityOverviewContra
   const inspectionsBoard = readStorage(getQualityStorageKey(companyId), () => createQualitySeed(companyId));
   const risks = readStorage(getQualityRiskStorageKey(companyId), () => createQualityRiskSeed(companyId));
   return buildQualityOverview(inspectionsBoard, risks);
+}
+
+export function getDemoHrOverview(companyId: string): HrOverviewContract {
+  const workforces = readStorage(getHrStorageKey(companyId), () => createHrSeed(companyId));
+  const risks = readStorage(getHrRiskStorageKey(companyId), () => createHrRiskSeed(companyId));
+  const focusWorkforce =
+    workforces
+      .slice()
+      .sort((left, right) => {
+        if (left.safetyStatus === "critical" && right.safetyStatus !== "critical") {
+          return -1;
+        }
+        if (left.safetyStatus !== "critical" && right.safetyStatus === "critical") {
+          return 1;
+        }
+        return left.attendanceRate - right.attendanceRate;
+      })[0] ?? null;
+
+  return {
+    summary: {
+      activeHeadcount: workforces.reduce((sum, item) => sum + item.activeHeadcount, 0),
+      activeContractors: workforces.length,
+      attendanceRate:
+        workforces.length > 0
+          ? Number((workforces.reduce((sum, item) => sum + item.attendanceRate, 0) / workforces.length).toFixed(1))
+          : 0,
+      openIncidents: workforces.reduce((sum, item) => sum + item.incidentCount, 0)
+    },
+    workforces,
+    risks,
+    focusWorkforce
+  };
+}
+
+export function getDemoSubcontractOverview(companyId: string): SubcontractOverviewContract {
+  const lines = readStorage(getSubcontractStorageKey(companyId), () => createSubcontractSeed(companyId));
+  const risks = readStorage(getSubcontractRiskStorageKey(companyId), () => createSubcontractRiskSeed(companyId));
+  const focusLine =
+    lines
+      .slice()
+      .sort((left, right) => {
+        if (left.subcontractHealth === "critical" && right.subcontractHealth !== "critical") {
+          return -1;
+        }
+        if (left.subcontractHealth !== "critical" && right.subcontractHealth === "critical") {
+          return 1;
+        }
+        return right.pendingDestajo - left.pendingDestajo;
+      })[0] ?? null;
+
+  return {
+    summary: {
+      activeSubcontracts: lines.length,
+      contractedAmount: lines.reduce((sum, item) => sum + item.contractAmount, 0),
+      earnedAmount: lines.reduce((sum, item) => sum + item.earnedAmount, 0),
+      paidAmount: lines.reduce((sum, item) => sum + item.paidAmount, 0),
+      pendingDestajo: lines.reduce((sum, item) => sum + item.pendingDestajo, 0),
+      criticalSubcontracts: lines.filter((item) => item.subcontractHealth === "critical").length,
+      executionRiskSubcontracts: lines.filter(
+        (item) => item.latestDailyLogStatus === "flagged" || item.qualityReleaseReadiness < 75 || item.subcontractHealth === "critical"
+      ).length
+    },
+    lines,
+    risks,
+    focusLine
+  };
 }
 
 export function getDemoSupplierControlOverview(companyId: string): SupplierControlOverviewContract {
@@ -3356,6 +3896,60 @@ export function updateDemoQualityInspection(
   writeStorage(
     key,
     inspectionsBoard.map((item) => (item.id === inspectionId ? updated : item))
+  );
+
+  return updated;
+}
+
+export function updateDemoHrWorkforceItem(
+  companyId: string,
+  workforceId: string,
+  input: UpdateHrWorkforceItemRequestContract
+): HrWorkforceItemContract | null {
+  const key = getHrStorageKey(companyId);
+  const workforces = readStorage(key, () => createHrSeed(companyId));
+  const current = workforces.find((item) => item.id === workforceId);
+  if (!current) {
+    return null;
+  }
+
+  const updated: HrWorkforceItemContract = {
+    ...current,
+    safetyStatus: input.safetyStatus,
+    nextAction: input.nextAction.trim(),
+    updatedAt: nowIso()
+  };
+
+  writeStorage(
+    key,
+    workforces.map((item) => (item.id === workforceId ? updated : item))
+  );
+
+  return updated;
+}
+
+export function updateDemoSubcontractLine(
+  companyId: string,
+  lineId: string,
+  input: UpdateSubcontractLineRequestContract
+): SubcontractLineContract | null {
+  const key = getSubcontractStorageKey(companyId);
+  const lines = readStorage(key, () => createSubcontractSeed(companyId));
+  const current = lines.find((line) => line.id === lineId);
+  if (!current) {
+    return null;
+  }
+
+  const updated: SubcontractLineContract = {
+    ...current,
+    subcontractHealth: input.subcontractHealth,
+    nextAction: input.nextAction.trim(),
+    updatedAt: nowIso()
+  };
+
+  writeStorage(
+    key,
+    lines.map((line) => (line.id === lineId ? updated : line))
   );
 
   return updated;

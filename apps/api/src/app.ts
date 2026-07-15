@@ -30,6 +30,7 @@ import { registerProcurementRoutes } from "./routes/procurement.js";
 import { registerProcurementPurchaseOrdersRoutes } from "./routes/procurement-purchase-orders.js";
 import { registerProcurementRequisitionsRoutes } from "./routes/procurement-requisitions.js";
 import { registerProjectsRoutes } from "./routes/projects.js";
+import { registerProjectSchedulesRoutes } from "./routes/project-schedules.js";
 import { registerQualityRoutes } from "./routes/quality.js";
 import { registerSupplierControlRoutes } from "./routes/supplier-control.js";
 import { registerSupplierMasterRoutes } from "./routes/supplier-master.js";
@@ -85,6 +86,7 @@ export async function buildApp() {
   await registerAccountsPayableRoutes(app);
   await registerPlatformRoutes(app);
   await registerProjectsRoutes(app);
+  await registerProjectSchedulesRoutes(app);
   await registerDailyLogRoutes(app);
   await registerFieldMaterialRequestsRoutes(app);
   await registerProcurementRoutes(app);

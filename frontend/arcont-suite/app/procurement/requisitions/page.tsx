@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -606,7 +607,130 @@ function buildCreateRequisitionHumanStep(input: {
   return "Create the requisition and continue directly into approval or sourcing without losing the intake context.";
 }
 
+type OperationsPreloadContext = {
+  source: "operations";
+  domain: string;
+  title: string;
+  owner: string;
+  dueLabel: string;
+  detail: string;
+  lane: string;
+  severity: string;
+  projectName: string;
+  frontName: string;
+  nextAction: string;
+};
+
+function normalizeOperationsText(value: string | null) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function buildOperationsPreloadContext(searchParams: ReturnType<typeof useSearchParams>): OperationsPreloadContext | null {
+  if (searchParams.get("source") !== "operations") {
+    return null;
+  }
+
+  return {
+    source: "operations",
+    domain: searchParams.get("domain")?.trim() ?? "",
+    title: searchParams.get("title")?.trim() ?? "",
+    owner: searchParams.get("owner")?.trim() ?? "",
+    dueLabel: searchParams.get("dueLabel")?.trim() ?? "",
+    detail: searchParams.get("detail")?.trim() ?? "",
+    lane: searchParams.get("lane")?.trim() ?? "",
+    severity: searchParams.get("severity")?.trim() ?? "",
+    projectName: searchParams.get("projectName")?.trim() ?? "",
+    frontName: searchParams.get("frontName")?.trim() ?? "",
+    nextAction: searchParams.get("nextAction")?.trim() ?? ""
+  };
+}
+
+function deriveOperationsUrgencyFilter(
+  severity: string
+): "all" | ProcurementRequisitionContract["urgency"] {
+  switch (normalizeOperationsText(severity)) {
+    case "critical":
+    case "high":
+      return "critical";
+    case "medium":
+    case "warning":
+      return "watch";
+    case "low":
+    case "planned":
+      return "planned";
+    default:
+      return "all";
+  }
+}
+
+function findBestOperationsMatch(
+  overview: ProcurementRequisitionsOverviewContract,
+  context: OperationsPreloadContext
+) {
+  const normalizedProject = normalizeOperationsText(context.projectName);
+  const normalizedFront = normalizeOperationsText(context.frontName);
+  const normalizedTitle = normalizeOperationsText(context.title);
+  const normalizedOwner = normalizeOperationsText(context.owner);
+  const normalizedDetail = normalizeOperationsText(context.detail);
+  const normalizedNextAction = normalizeOperationsText(context.nextAction);
+  const normalizedLane = normalizeOperationsText(context.lane);
+  const normalizedSeverity = normalizeOperationsText(context.severity);
+
+  const scored = overview.requisitions
+    .map((requisition) => {
+      let score = 0;
+
+      if (normalizedProject && normalizeOperationsText(requisition.projectName) === normalizedProject) {
+        score += 5;
+      }
+      if (normalizedFront && normalizeOperationsText(requisition.frontName) === normalizedFront) {
+        score += 4;
+      }
+      if (normalizedOwner && normalizeOperationsText(requisition.requestedBy) === normalizedOwner) {
+        score += 3;
+      }
+      if (normalizedTitle && normalizeOperationsText(requisition.category).includes(normalizedTitle)) {
+        score += 3;
+      }
+      if (normalizedDetail && normalizeOperationsText(requisition.category).includes(normalizedDetail)) {
+        score += 2;
+      }
+      if (normalizedNextAction && normalizeOperationsText(requisition.nextAction).includes(normalizedNextAction)) {
+        score += 2;
+      }
+      if (normalizedLane && normalizeOperationsText(requisition.status) === normalizedLane) {
+        score += 1;
+      }
+
+      const relatedRisks = overview.risks.filter((risk) => risk.requisitionId === requisition.id);
+      for (const risk of relatedRisks) {
+        if (normalizedTitle && normalizeOperationsText(risk.title).includes(normalizedTitle)) {
+          score += 4;
+        }
+        if (normalizedOwner && normalizeOperationsText(risk.owner) === normalizedOwner) {
+          score += 3;
+        }
+        if (normalizedDetail && normalizeOperationsText(risk.category).includes(normalizedDetail)) {
+          score += 2;
+        }
+        if (normalizedSeverity && normalizeOperationsText(risk.severity) === normalizedSeverity) {
+          score += 1;
+        }
+      }
+
+      return { requisition, score };
+    })
+    .sort((left, right) => right.score - left.score);
+
+  const top = scored[0];
+  const second = scored[1];
+  const matchedRequisition = top && top.score > 0 && (!second || top.score > second.score) ? top.requisition : null;
+
+  return { matchedRequisition };
+}
+
 export default function ProcurementRequisitionsPage() {
+  const searchParams = useSearchParams();
   const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<ProcurementRequisitionsOverviewContract | null>(null);
@@ -623,6 +747,8 @@ export default function ProcurementRequisitionsPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [operationsMatchedRequisitionId, setOperationsMatchedRequisitionId] = useState<string | null>(null);
+  const [operationsPreloadApplied, setOperationsPreloadApplied] = useState(false);
   const [createForm, setCreateForm] = useState({
     projectName: "Nueva obra",
     frontName: "Frente 1",
@@ -663,7 +789,8 @@ export default function ProcurementRequisitionsPage() {
       }),
     [createForm.nextAction, createForm.status, createForm.urgency, createFormNumbers.supplierCoverage]
   );
-  const t = (es: string, en: string) => localizeText({ es, en });
+  const t = useCallback((es: string, en: string) => localizeText({ es, en }), [localizeText]);
+  const operationsPreloadContext = useMemo(() => buildOperationsPreloadContext(searchParams), [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -705,6 +832,46 @@ export default function ProcurementRequisitionsPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
+  useEffect(() => {
+    if (!overview || !operationsPreloadContext || operationsPreloadApplied) {
+      return;
+    }
+
+    const exactProjectExists =
+      operationsPreloadContext.projectName.length > 0 &&
+      overview.requisitions.some((item) => item.projectName === operationsPreloadContext.projectName);
+    if (exactProjectExists) {
+      setProjectFilter(operationsPreloadContext.projectName);
+    }
+
+    const derivedUrgencyFilter = deriveOperationsUrgencyFilter(operationsPreloadContext.severity);
+    if (derivedUrgencyFilter !== "all") {
+      setUrgencyFilter(derivedUrgencyFilter);
+    }
+
+    const { matchedRequisition } = findBestOperationsMatch(overview, operationsPreloadContext);
+    if (matchedRequisition) {
+      setSearchFilter(matchedRequisition.code);
+      setSelectedRequisitionId(matchedRequisition.id);
+      setOperationsMatchedRequisitionId(matchedRequisition.id);
+      setWorkspaceView("control");
+    } else {
+      const searchSeed =
+        operationsPreloadContext.title ||
+        operationsPreloadContext.frontName ||
+        operationsPreloadContext.owner ||
+        operationsPreloadContext.detail ||
+        operationsPreloadContext.nextAction;
+      if (searchSeed) {
+        setSearchFilter(searchSeed);
+      }
+      setOperationsMatchedRequisitionId(null);
+      setWorkspaceView("queue");
+    }
+
+    setOperationsPreloadApplied(true);
+  }, [operationsPreloadApplied, operationsPreloadContext, overview]);
+
   const projectOptions = useMemo(() => {
     if (!overview) {
       return [];
@@ -729,7 +896,9 @@ export default function ProcurementRequisitionsPage() {
         item.code.toLowerCase().includes(normalizedSearch) ||
         item.projectName.toLowerCase().includes(normalizedSearch) ||
         item.frontName.toLowerCase().includes(normalizedSearch) ||
-        item.category.toLowerCase().includes(normalizedSearch);
+        item.category.toLowerCase().includes(normalizedSearch) ||
+        item.requestedBy.toLowerCase().includes(normalizedSearch) ||
+        item.nextAction.toLowerCase().includes(normalizedSearch);
 
       return matchesProject && matchesUrgency && matchesSearch;
     });
@@ -796,6 +965,24 @@ export default function ProcurementRequisitionsPage() {
     () => buildRequisitionContinuitySpanish(selectedRequisition, Boolean(selectedPurchaseOrder)),
     [selectedPurchaseOrder, selectedRequisition]
   );
+  const operationsContextRows = useMemo(
+    () =>
+      operationsPreloadContext
+        ? [
+            { label: t("Dominio", "Domain"), value: operationsPreloadContext.domain },
+            { label: t("Título", "Title"), value: operationsPreloadContext.title },
+            { label: t("Responsable", "Owner"), value: operationsPreloadContext.owner },
+            { label: t("Proyecto", "Project"), value: operationsPreloadContext.projectName },
+            { label: t("Frente", "Front"), value: operationsPreloadContext.frontName },
+            { label: t("Siguiente acción", "Next action"), value: operationsPreloadContext.nextAction }
+          ].filter((row) => row.value)
+        : [],
+    [operationsPreloadContext, t]
+  );
+  const hasOperationsClearMatch =
+    Boolean(operationsPreloadContext) &&
+    Boolean(selectedRequisition) &&
+    operationsMatchedRequisitionId === selectedRequisition?.id;
 
   const actionOptions = useMemo(
     () => (selectedRequisition ? requisitionActionOptions(selectedRequisition) : []),
@@ -977,6 +1164,11 @@ export default function ProcurementRequisitionsPage() {
                   {t("Solicitud en control", "Request control")}
                   <span className="mono">{t("corte de abastecimiento", "supply cut")}</span>
                 </span>
+                {operationsPreloadContext ? (
+                  <div className="row gap wrap" style={{ marginTop: 12 }}>
+                    <Badge tone="info">Precargado desde operaciones / Preloaded from operations</Badge>
+                  </div>
+                ) : null}
                 <h2>{selectedRequisition?.code ?? t("Selecciona una requisición", "Select a requisition")}</h2>
                 <p>{t("Registra la necesidad, define su siguiente acción y llévala al proveedor, a la orden o a recepción sin volver a capturar el contexto.", "Capture the need, define its next action and take it to supplier, purchase order or receiving without re-entering context.")}</p>
                 <label className="requisitionContextControl">
@@ -995,6 +1187,7 @@ export default function ProcurementRequisitionsPage() {
                 <div className="row gap wrap">
                   {selectedRequisition ? <Badge tone={statusTone(selectedRequisition.status)}>{localizeText(requisitionStatusLabel(selectedRequisition.status))}</Badge> : null}
                   {selectedRequisition ? <Badge tone={urgencyTone(selectedRequisition.urgency)}>{localizeText(requisitionUrgencyLabel(selectedRequisition.urgency))}</Badge> : null}
+                  {operationsPreloadContext ? <Badge tone="info">{hasOperationsClearMatch ? t("Contexto aplicado", "Context applied") : t("Contexto visible", "Context visible")}</Badge> : null}
                 </div>
                 <strong>{selectedRequisition?.nextAction ?? t("Sin siguiente acción", "No next action")}</strong>
                 <p>{selectedRequisition ? `${selectedRequisition.projectName} · ${selectedRequisition.frontName}` : t("Selecciona una necesidad para iniciar", "Select a need to begin")}</p>
@@ -1005,6 +1198,49 @@ export default function ProcurementRequisitionsPage() {
                 </div>
               </div>
             </section>
+
+            {operationsPreloadContext && !hasOperationsClearMatch ? (
+              <section className="grid cols1">
+                <Card
+                  title={t("Contexto recibido desde operaciones", "Context received from operations")}
+                  description={t("No hubo una coincidencia clara. Se dejaron filtros aplicados para revisar la requisición o riesgo relacionado.", "No clear match was found. Filters were applied to review the related requisition or risk.")}
+                  aside={<Badge tone="info">Precargado desde operaciones / Preloaded from operations</Badge>}
+                >
+                  <div className="detailGrid">
+                    {operationsContextRows.map((row) => (
+                      <div key={row.label} className="detailRow">
+                        <div className="detailLabel">{row.label}</div>
+                        <div>{row.value}</div>
+                      </div>
+                    ))}
+                    {operationsPreloadContext.detail ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Detalle", "Detail")}</div>
+                        <div>{operationsPreloadContext.detail}</div>
+                      </div>
+                    ) : null}
+                    {operationsPreloadContext.dueLabel ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Vencimiento", "Due")}</div>
+                        <div>{operationsPreloadContext.dueLabel}</div>
+                      </div>
+                    ) : null}
+                    {operationsPreloadContext.lane ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Carril", "Lane")}</div>
+                        <div>{operationsPreloadContext.lane}</div>
+                      </div>
+                    ) : null}
+                    {operationsPreloadContext.severity ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Severidad", "Severity")}</div>
+                        <div>{operationsPreloadContext.severity}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                </Card>
+              </section>
+            ) : null}
 
             <div className="requisitionWorkspaceTabs" role="tablist" aria-label={t("Vistas de requisiciones", "Requisition views")}>
               {([
@@ -1045,6 +1281,22 @@ export default function ProcurementRequisitionsPage() {
                   </Card>
 
                   <Card title={t("Decisión de abastecimiento", "Supply decision")} description={t(requisitionContinuityCopy.description, requisitionReleaseGate.summary)} aside={<Badge tone={requisitionReleaseGate.tone}>{t(requisitionContinuityCopy.label, requisitionReleaseGate.label)}</Badge>}>
+                    {operationsPreloadContext ? (
+                      <div className="detailGrid" style={{ marginBottom: 18 }}>
+                        <div className="detailRow">
+                          <div className="detailLabel">Operations</div>
+                          <div>
+                            <Badge tone="info">Precargado desde operaciones / Preloaded from operations</Badge>
+                          </div>
+                        </div>
+                        {operationsContextRows.map((row) => (
+                          <div key={row.label} className="detailRow">
+                            <div className="detailLabel">{row.label}</div>
+                            <div>{row.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <p className="sectionText">{t("El cambio de estado debe conservar presupuesto, urgencia y la ruta real de proveedor de esta necesidad.", "A status change must preserve budget, urgency and the real supplier route for this need.")}</p>
                     <div className="row gap wrap" style={{ marginTop: 18 }}>
                       {selectedRequisition ? actionOptions.map((option) => (

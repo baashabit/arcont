@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -47,6 +48,123 @@ type BlackboardTask = {
   domain: string;
   severity: "info" | "warning" | "critical";
 };
+
+type DailyLogPreloadContext = {
+  source: "daily-log";
+  projectName: string;
+  frontName: string;
+  owner: string;
+  nextAction: string;
+  pendingDestajo: string;
+  subcontractHealth: string;
+};
+
+type ProjectsPreloadContext = {
+  source: "projects";
+  projectName: string;
+  frontName: string;
+  owner: string;
+  summary: string;
+  nextAction: string;
+  schedulePhase: string;
+  scheduleActivityName: string;
+};
+
+function normalizePreloadValue(value: string | null) {
+  return value?.trim() ?? "";
+}
+
+function normalizePreloadMatchValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function taskMatchesPreload(task: BlackboardTask, context: DailyLogPreloadContext) {
+  const values = [context.frontName, context.projectName, context.owner]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (values.length === 0) {
+    return false;
+  }
+
+  const haystack = [task.dueLabel, task.detail, task.owner, task.title]
+    .join(" ")
+    .toLowerCase();
+
+  return values.some((value) => haystack.includes(value));
+}
+
+function pickTaskFromPreload(tasks: BlackboardTask[], context: DailyLogPreloadContext) {
+  const dailyLogMatches = tasks.filter((task) => task.domain === "Daily log" && taskMatchesPreload(task, context));
+  if (dailyLogMatches.length > 0) {
+    return dailyLogMatches[0];
+  }
+
+  const genericMatches = tasks.filter((task) => taskMatchesPreload(task, context));
+  if (genericMatches.length > 0) {
+    return genericMatches[0];
+  }
+
+  return null;
+}
+
+function scoreTaskFromProjectsPreload(task: BlackboardTask, context: ProjectsPreloadContext) {
+  const normalizedHaystack = normalizePreloadMatchValue([task.title, task.detail, task.owner, task.dueLabel, task.domain].join(" "));
+  const normalizedDomain = normalizePreloadMatchValue(task.domain);
+  let score = 0;
+
+  const includeScore = (value: string, points: number) => {
+    const normalizedValue = normalizePreloadMatchValue(value);
+    if (normalizedValue.length < 3) {
+      return;
+    }
+
+    if (normalizedHaystack.includes(normalizedValue)) {
+      score += points;
+    }
+  };
+
+  includeScore(context.projectName, 4);
+  includeScore(context.frontName, 3);
+  includeScore(context.scheduleActivityName, 4);
+  includeScore(context.nextAction, 3);
+  includeScore(context.summary, 2);
+  includeScore(context.owner, 2);
+  includeScore(context.schedulePhase, 1);
+
+  if (context.schedulePhase && normalizedDomain === "projects") {
+    score += 1;
+  }
+
+  return score;
+}
+
+function resolveProjectsPreloadMatch(tasks: BlackboardTask[], context: ProjectsPreloadContext) {
+  const scoredMatches = tasks
+    .map((task) => ({ task, score: scoreTaskFromProjectsPreload(task, context) }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (scoredMatches.length === 0) {
+    return {
+      matchedTask: null,
+      hasClearMatch: false
+    };
+  }
+
+  const [bestMatch, secondMatch] = scoredMatches;
+  const hasClearMatch =
+    bestMatch.score >= 4 && (!secondMatch || bestMatch.score >= secondMatch.score + 2);
+
+  return {
+    matchedTask: hasClearMatch ? bestMatch.task : null,
+    hasClearMatch
+  };
+}
 
 function severityTone(severity: BlackboardTask["severity"]) {
   switch (severity) {
@@ -384,6 +502,7 @@ function buildTaskRelatedLinks(task: BlackboardTask | null) {
 
 export default function OperationsPage() {
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const searchParams = useSearchParams();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [tasks, setTasks] = useState<BlackboardTask[]>([]);
   const [laneFilter, setLaneFilter] = useState<"all" | BlackboardTask["lane"]>("all");
@@ -392,6 +511,71 @@ export default function OperationsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [appliedDailyLogPreloadKey, setAppliedDailyLogPreloadKey] = useState<string | null>(null);
+  const [appliedProjectsPreloadKey, setAppliedProjectsPreloadKey] = useState<string | null>(null);
+
+  const dailyLogPreload = useMemo(() => {
+    if (searchParams.get("source") !== "daily-log") {
+      return null;
+    }
+
+    return {
+      source: "daily-log" as const,
+      projectName: normalizePreloadValue(searchParams.get("projectName")),
+      frontName: normalizePreloadValue(searchParams.get("frontName")),
+      owner: normalizePreloadValue(searchParams.get("owner")),
+      nextAction: normalizePreloadValue(searchParams.get("nextAction")),
+      pendingDestajo: normalizePreloadValue(searchParams.get("pendingDestajo")),
+      subcontractHealth: normalizePreloadValue(searchParams.get("subcontractHealth"))
+    };
+  }, [searchParams]);
+  const dailyLogPreloadKey = useMemo(
+    () =>
+      dailyLogPreload
+        ? [
+            dailyLogPreload.source,
+            dailyLogPreload.projectName,
+            dailyLogPreload.frontName,
+            dailyLogPreload.owner,
+            dailyLogPreload.nextAction,
+            dailyLogPreload.pendingDestajo,
+            dailyLogPreload.subcontractHealth
+          ].join("|")
+        : null,
+    [dailyLogPreload]
+  );
+  const projectsPreload = useMemo(() => {
+    if (searchParams.get("source") !== "projects") {
+      return null;
+    }
+
+    return {
+      source: "projects" as const,
+      projectName: normalizePreloadValue(searchParams.get("projectName")),
+      frontName: normalizePreloadValue(searchParams.get("frontName")),
+      owner: normalizePreloadValue(searchParams.get("owner")),
+      summary: normalizePreloadValue(searchParams.get("summary")),
+      nextAction: normalizePreloadValue(searchParams.get("nextAction")),
+      schedulePhase: normalizePreloadValue(searchParams.get("schedulePhase")),
+      scheduleActivityName: normalizePreloadValue(searchParams.get("scheduleActivityName"))
+    };
+  }, [searchParams]);
+  const projectsPreloadKey = useMemo(
+    () =>
+      projectsPreload
+        ? [
+            projectsPreload.source,
+            projectsPreload.projectName,
+            projectsPreload.frontName,
+            projectsPreload.owner,
+            projectsPreload.summary,
+            projectsPreload.nextAction,
+            projectsPreload.schedulePhase,
+            projectsPreload.scheduleActivityName
+          ].join("|")
+        : null,
+    [projectsPreload]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -1062,6 +1246,61 @@ export default function OperationsPage() {
     }
   }, [filteredTasks, selectedTaskId]);
 
+  useEffect(() => {
+    if (!dailyLogPreload || !dailyLogPreloadKey || appliedDailyLogPreloadKey === dailyLogPreloadKey || tasks.length === 0) {
+      return;
+    }
+
+    const preloadTerms = [dailyLogPreload.projectName, dailyLogPreload.frontName, dailyLogPreload.owner].filter(Boolean);
+    if (preloadTerms.length > 0) {
+      setSearchFilter(preloadTerms.join(" "));
+    }
+
+    const matchedTask = pickTaskFromPreload(tasks, dailyLogPreload);
+    if (matchedTask) {
+      setSelectedTaskId(matchedTask.id);
+    }
+
+    setAppliedDailyLogPreloadKey(dailyLogPreloadKey);
+  }, [appliedDailyLogPreloadKey, dailyLogPreload, dailyLogPreloadKey, tasks]);
+  const projectsPreloadResolution = useMemo(
+    () => (projectsPreload ? resolveProjectsPreloadMatch(tasks, projectsPreload) : null),
+    [projectsPreload, tasks]
+  );
+
+  useEffect(() => {
+    if (
+      !projectsPreload ||
+      !projectsPreloadKey ||
+      appliedProjectsPreloadKey === projectsPreloadKey ||
+      tasks.length === 0
+    ) {
+      return;
+    }
+
+    const preloadTerms = [
+      projectsPreload.projectName,
+      projectsPreload.frontName,
+      projectsPreload.owner,
+      projectsPreload.summary,
+      projectsPreload.nextAction,
+      projectsPreload.scheduleActivityName,
+      projectsPreload.schedulePhase
+    ].filter(Boolean);
+
+    setLaneFilter("all");
+    setDomainFilter("all");
+    if (preloadTerms.length > 0) {
+      setSearchFilter(preloadTerms.join(" "));
+    }
+
+    if (projectsPreloadResolution?.matchedTask) {
+      setSelectedTaskId(projectsPreloadResolution.matchedTask.id);
+    }
+
+    setAppliedProjectsPreloadKey(projectsPreloadKey);
+  }, [appliedProjectsPreloadKey, projectsPreload, projectsPreloadKey, projectsPreloadResolution, tasks.length]);
+
   const lanes = useMemo(
     () => ({
       new: filteredTasks.filter((task) => task.lane === "new"),
@@ -1092,6 +1331,13 @@ export default function OperationsPage() {
   const priorityActions = useMemo(
     () => filteredTasks.filter((task) => task.lane === "risk" || task.severity === "critical").slice(0, 4),
     [filteredTasks]
+  );
+  const showDailyLogPreloadOnSelectedCard = Boolean(dailyLogPreload && selectedTask && taskMatchesPreload(selectedTask, dailyLogPreload));
+  const showProjectsPreloadOnSelectedCard = Boolean(
+    projectsPreload &&
+      projectsPreloadResolution?.matchedTask &&
+      selectedTask &&
+      projectsPreloadResolution.matchedTask.id === selectedTask.id
   );
   const chainWalkthrough = useMemo(() => {
     const countFor = (domains: string[]) => filteredTasks.filter((task) => domains.includes(task.domain)).length;
@@ -1315,6 +1561,61 @@ export default function OperationsPage() {
                   <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildOperationsWorkflow(filteredTasks)}</div></div>
                   <div className="detailRow"><div className="detailLabel">Executive use</div><div>Use this board to decide which domain should act next without reopening every module first.</div></div>
                   <div className="detailRow"><div className="detailLabel">Expected jump</div><div>Every critical task should send the user directly to the module where the issue will actually be worked.</div></div>
+                  {projectsPreload && !showProjectsPreloadOnSelectedCard ? (
+                    <>
+                      <div className="detailRow">
+                        <div className="detailLabel">Context</div>
+                        <div><Badge tone="info">Precargado desde programa / Preloaded from schedule</Badge></div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Match status</div>
+                        <div>
+                          {projectsPreloadResolution?.hasClearMatch
+                            ? "A clear blackboard match was applied automatically."
+                            : "No clear blackboard match was found; search context stays visible and applied."}
+                        </div>
+                      </div>
+                      {projectsPreload.projectName ? (
+                        <div className="detailRow"><div className="detailLabel">Project</div><div>{projectsPreload.projectName}</div></div>
+                      ) : null}
+                      {projectsPreload.frontName ? (
+                        <div className="detailRow"><div className="detailLabel">Front</div><div>{projectsPreload.frontName}</div></div>
+                      ) : null}
+                      {projectsPreload.scheduleActivityName ? (
+                        <div className="detailRow"><div className="detailLabel">Target activity</div><div>{projectsPreload.scheduleActivityName}</div></div>
+                      ) : null}
+                      {projectsPreload.schedulePhase ? (
+                        <div className="detailRow"><div className="detailLabel">Phase</div><div>{projectsPreload.schedulePhase}</div></div>
+                      ) : null}
+                      {projectsPreload.owner ? (
+                        <div className="detailRow"><div className="detailLabel">Owner context</div><div>{projectsPreload.owner}</div></div>
+                      ) : null}
+                      {projectsPreload.summary ? (
+                        <div className="detailRow"><div className="detailLabel">Summary</div><div>{projectsPreload.summary}</div></div>
+                      ) : null}
+                      {projectsPreload.nextAction ? (
+                        <div className="detailRow"><div className="detailLabel">Next action</div><div>{projectsPreload.nextAction}</div></div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {dailyLogPreload && !showDailyLogPreloadOnSelectedCard ? (
+                    <>
+                      <div className="detailRow">
+                        <div className="detailLabel">Context</div>
+                        <div><Badge tone="warning">Precargado desde bitácora / Preloaded from daily log</Badge></div>
+                      </div>
+                      <div className="detailRow"><div className="detailLabel">Project</div><div>{dailyLogPreload.projectName || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Front</div><div>{dailyLogPreload.frontName || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Owner</div><div>{dailyLogPreload.owner || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Next action</div><div>{dailyLogPreload.nextAction || "N/A"}</div></div>
+                      {dailyLogPreload.pendingDestajo ? (
+                        <div className="detailRow"><div className="detailLabel">Pending destajo</div><div>{dailyLogPreload.pendingDestajo}</div></div>
+                      ) : null}
+                      {dailyLogPreload.subcontractHealth ? (
+                        <div className="detailRow"><div className="detailLabel">Subcontract health</div><div>{dailyLogPreload.subcontractHealth}</div></div>
+                      ) : null}
+                    </>
+                  ) : null}
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <Link className="button" href="/dashboard">Open dashboard</Link>
@@ -1453,6 +1754,43 @@ export default function OperationsPage() {
                 aside={<Badge tone={selectedTaskState.tone}>{selectedTaskState.label}</Badge>}
               >
                 <div className="detailGrid">
+                  {showProjectsPreloadOnSelectedCard ? (
+                    <>
+                      <div className="detailRow">
+                        <div className="detailLabel">Context</div>
+                        <div><Badge tone="info">Precargado desde programa / Preloaded from schedule</Badge></div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Match status</div>
+                        <div>Clear blackboard match applied automatically from schedule context.</div>
+                      </div>
+                      <div className="detailRow"><div className="detailLabel">Project</div><div>{projectsPreload?.projectName || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Front</div><div>{projectsPreload?.frontName || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Target activity</div><div>{projectsPreload?.scheduleActivityName || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Phase</div><div>{projectsPreload?.schedulePhase || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Owner context</div><div>{projectsPreload?.owner || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Summary</div><div>{projectsPreload?.summary || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Next action</div><div>{projectsPreload?.nextAction || "N/A"}</div></div>
+                    </>
+                  ) : null}
+                  {showDailyLogPreloadOnSelectedCard ? (
+                    <>
+                      <div className="detailRow">
+                        <div className="detailLabel">Context</div>
+                        <div><Badge tone="warning">Precargado desde bitácora / Preloaded from daily log</Badge></div>
+                      </div>
+                      <div className="detailRow"><div className="detailLabel">Project</div><div>{dailyLogPreload?.projectName || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Front</div><div>{dailyLogPreload?.frontName || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Owner context</div><div>{dailyLogPreload?.owner || "N/A"}</div></div>
+                      <div className="detailRow"><div className="detailLabel">Next action</div><div>{dailyLogPreload?.nextAction || "N/A"}</div></div>
+                      {dailyLogPreload?.pendingDestajo ? (
+                        <div className="detailRow"><div className="detailLabel">Pending destajo</div><div>{dailyLogPreload.pendingDestajo}</div></div>
+                      ) : null}
+                      {dailyLogPreload?.subcontractHealth ? (
+                        <div className="detailRow"><div className="detailLabel">Subcontract health</div><div>{dailyLogPreload.subcontractHealth}</div></div>
+                      ) : null}
+                    </>
+                  ) : null}
                   <div className="detailRow"><div className="detailLabel">Domain</div><div>{selectedTask?.domain ?? "No domain selected"}</div></div>
                   <div className="detailRow"><div className="detailLabel">Owner</div><div>{selectedTask?.owner ?? "No owner selected"}</div></div>
                   <div className="detailRow"><div className="detailLabel">Next signal</div><div>{selectedTask?.dueLabel ?? "No next signal"}</div></div>

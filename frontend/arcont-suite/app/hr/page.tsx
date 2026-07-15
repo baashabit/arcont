@@ -74,11 +74,6 @@ export default function HrPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -186,7 +181,7 @@ export default function HrPage() {
     safetyStatus: HrWorkforceItemContract["safetyStatus"],
     suggestedNextAction: string
   ) {
-    if (!selectedWorkforce || !session.accessToken) {
+    if (!selectedWorkforce) {
       return;
     }
 
@@ -480,7 +475,7 @@ export default function HrPage() {
         ) : (
           <EmptyState
             title={isLoading ? "Loading HR overview" : "HR overview not loaded yet"}
-            description="This route now expects a live backend HR response for the active tenant."
+            description="This route can load tenant HR data from the backend or available fallback data."
             primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
           />
         )}

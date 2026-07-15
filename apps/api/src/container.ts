@@ -27,6 +27,7 @@ import { createProcurementService } from "./services/procurement-service.js";
 import { createProcurementPurchaseOrdersService } from "./services/procurement-purchase-orders-service.js";
 import { createProcurementRequisitionsService } from "./services/procurement-requisitions-service.js";
 import { createProjectsService } from "./services/projects-service.js";
+import { createProjectSchedulesService } from "./services/project-schedules-service.js";
 import { createQualityService } from "./services/quality-service.js";
 import { createPlatformService } from "./services/platform-service.js";
 import { createSubcontractsService } from "./services/subcontracts-service.js";
@@ -43,6 +44,7 @@ export function createContainer() {
   const platformService = createPlatformService(platformRepository);
   const authService = createAuthService(platformRepository);
   const projectsService = createProjectsService(platformRepository);
+  const projectSchedulesService = createProjectSchedulesService(platformRepository);
   const dailyLogService = createDailyLogService(platformRepository);
   const fieldMaterialRequestsService = createFieldMaterialRequestsService(platformRepository);
   const procurementService = createProcurementService(platformRepository);
@@ -76,6 +78,7 @@ export function createContainer() {
     platformService,
     authService,
     projectsService,
+    projectSchedulesService,
     dailyLogService,
     fieldMaterialRequestsService,
     procurementService,

@@ -141,6 +141,17 @@ type ReceivingBridgeContext = {
   supplierControl: NonNullable<Awaited<ReturnType<typeof fetchSupplierControlOverview>>>;
 } | null;
 
+type ReceivingPreloadContext = {
+  source: string;
+  purchaseReference: string;
+  supplierName: string;
+  projectName: string;
+  nextAction: string;
+  matchedReceiptId: string | null;
+  hasClearMatch: boolean;
+  wasApplied: boolean;
+};
+
 function createReceivingExample(purchaseReference?: string, supplierName?: string) {
   return {
     supplierName: supplierName || "Concretos del Sureste",
@@ -332,6 +343,133 @@ function buildReceiptOperationalLinks(receipt: InventoryReceiptContract | null) 
   ];
 }
 
+function buildReceiptOperatingPlan(receipt: InventoryReceiptContract | null) {
+  if (!receipt) {
+    return {
+      immediateModule: "Receiving / Recepcion",
+      secondHop: "Warehouse follow-through / Continuidad de almacen",
+      confirmedReturn: "Return with owner, action and confirmation date / Regresar con responsable, accion y fecha confirmada",
+      cta: {
+        kind: "link" as const,
+        label: "Open purchase orders / Abrir ordenes de compra",
+        href: "/procurement/purchase-orders",
+        tone: "secondary" as const,
+        summary: "Use the selected receipt to define the next operating owner / Usa la recepcion seleccionada para definir al siguiente responsable."
+      }
+    };
+  }
+
+  if (receipt.status === "blocked" || receipt.purchaseOrderStatus === "blocked") {
+    return {
+      immediateModule: "Supplier control + procurement / Control proveedor + compras",
+      secondHop: "Receiving destination readiness / Confirmacion de destino de recepcion",
+      confirmedReturn:
+        "Return with blocker owner, containment, resume date and unload confirmation / Regresar con responsable del bloqueo, contencion, fecha de reanudacion y descarga confirmada",
+      cta: {
+        kind: "link" as const,
+        label: "Open supplier control / Abrir control proveedor",
+        href: "/supplier-control",
+        tone: "secondary" as const,
+        summary: "Escalate the blocker before anyone treats this inbound flow as usable / Escala el bloqueo antes de que alguien trate este ingreso como utilizable."
+      }
+    };
+  }
+
+  if (receipt.invoiceMatchStatus === "risk") {
+    return {
+      immediateModule: "Accounts payable + procurement / Cuentas por pagar + compras",
+      secondHop: "Receiving closure discipline / Cierre disciplinado de recepcion",
+      confirmedReturn:
+        "Return with fiscal match, commercial approval and receipt closure path confirmed / Regresar con match fiscal, aprobacion comercial y ruta de cierre confirmada",
+      cta: {
+        kind: "link" as const,
+        label: "Open accounts payable / Abrir cuentas por pagar",
+        href: "/accounts-payable",
+        tone: "secondary" as const,
+        summary: "Do not close the receipt around an open fiscal mismatch / No cierres la recepcion alrededor de un desajuste fiscal abierto."
+      }
+    };
+  }
+
+  if (receipt.pendingEvidence > 0) {
+    return {
+      immediateModule: "Receiving evidence lane / Carril de evidencia de recepcion",
+      secondHop: "Destination owner confirmation / Confirmacion del responsable destino",
+      confirmedReturn:
+        "Return with evidence attached, unload complete and destination acceptance confirmed / Regresar con evidencia adjunta, descarga completa y aceptacion de destino confirmada",
+      cta: {
+        kind: "draft" as const,
+        label: "Complete evidence now / Completar evidencia ahora",
+        tone: "primary" as const,
+        summary: "Keep this receipt open until every pending evidence item is attached / Mantener esta recepcion abierta hasta adjuntar toda la evidencia pendiente."
+      }
+    };
+  }
+
+  if (receipt.varianceUnits !== 0 || receipt.rejectedUnits > 0) {
+    return {
+      immediateModule: "Receiving counts + procurement / Conteos de recepcion + compras",
+      secondHop: "Destination release decision / Decision de liberacion a destino",
+      confirmedReturn:
+        "Return with variance resolved, rejects dispositioned and release confirmed / Regresar con variacion resuelta, rechazo dispuesto y liberacion confirmada",
+      cta: {
+        kind: "draft" as const,
+        label: "Resolve variance first / Resolver variacion primero",
+        tone: "primary" as const,
+        summary: "Do not release material into stock or field until counts and rejects are reconciled / No liberes material a inventario o frente hasta reconciliar conteos y rechazos."
+      }
+    };
+  }
+
+  if (receipt.status === "draft") {
+    return {
+      immediateModule: "Receiving coordination / Coordinacion de recepcion",
+      secondHop: "Unload and destination readiness / Descarga y alistamiento de destino",
+      confirmedReturn:
+        "Return with unloading slot, destination owner and arrival confirmation / Regresar con slot de descarga, responsable destino y arribo confirmado",
+      cta: {
+        kind: "action" as const,
+        label: "Send in transit / Enviar en transito",
+        status: "in_transit" as const,
+        nextAction: "Release the inbound shipment and keep the receiving slot confirmed with the destination crew.",
+        tone: "primary" as const,
+        summary: "Move the receipt only when the physical arrival path is truly ready / Mueve la recepcion solo cuando la ruta fisica de arribo ya esta lista."
+      }
+    };
+  }
+
+  if (receipt.status === "in_transit") {
+    return {
+      immediateModule: "Receiving acceptance / Aceptacion de recepcion",
+      secondHop: "Movements or field handoff / Traspaso a movimientos o frente",
+      confirmedReturn:
+        "Return with unload complete, clean counts and acceptance confirmation / Regresar con descarga completa, conteos limpios y aceptacion confirmada",
+      cta: {
+        kind: "action" as const,
+        label: "Mark received / Marcar recibido",
+        status: "received" as const,
+        nextAction: "Close the receipt after evidence, counts and acceptance are fully reconciled.",
+        tone: "primary" as const,
+        summary: "Close only after evidence, counts and destination acceptance are really clean / Cierra solo cuando evidencia, conteos y aceptacion de destino esten realmente limpios."
+      }
+    };
+  }
+
+  return {
+    immediateModule: "Inventory movements / Movimientos de inventario",
+    secondHop: "Field or equipment consumption / Consumo en frente o equipo",
+    confirmedReturn:
+      "Return with downstream handoff confirmed and receipt traceability intact / Regresar con traspaso downstream confirmado y trazabilidad intacta",
+    cta: {
+      kind: "link" as const,
+      label: "Open movements / Abrir movimientos",
+      href: `/inventory/movements?purchaseReference=${encodeURIComponent(receipt.purchaseReference)}&upstreamReceiptCode=${encodeURIComponent(receipt.code)}`,
+      tone: "primary" as const,
+      summary: "The receipt is already clean enough to continue into downstream execution / La recepcion ya esta lo suficientemente limpia para continuar a la ejecucion downstream."
+    }
+  };
+}
+
 function buildReceiptAcceptanceGate(receipt: InventoryReceiptContract | null) {
   if (!receipt) {
     return {
@@ -520,6 +658,8 @@ function InventoryReceivingPageContent() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [preloadContext, setPreloadContext] = useState<ReceivingPreloadContext | null>(null);
+  const [hasAppliedPurchaseOrdersPreload, setHasAppliedPurchaseOrdersPreload] = useState(false);
   const [createForm, setCreateForm] = useState({
     supplierName: "Proveedor Estrategico",
     destinationName: "Almacen central",
@@ -541,8 +681,12 @@ function InventoryReceivingPageContent() {
     }),
     [createForm.orderedUnits, createForm.pendingEvidence, createForm.receivedUnits, createForm.rejectedUnits]
   );
+  const sourceParam = searchParams.get("source")?.trim() ?? "";
   const purchaseReferenceParam = searchParams.get("purchaseReference")?.trim() ?? "";
   const supplierNameParam = searchParams.get("supplierName")?.trim() ?? "";
+  const projectNameParam = searchParams.get("projectName")?.trim() ?? "";
+  const nextActionParam = searchParams.get("nextAction")?.trim() ?? "";
+  const isPurchaseOrdersSource = sourceParam === "purchase-orders";
 
   useEffect(() => {
     let cancelled = false;
@@ -660,6 +804,7 @@ function InventoryReceivingPageContent() {
   const receiptHumanStep = useMemo(() => buildReceiptHumanStep(selectedReceipt), [selectedReceipt]);
   const receiptRouteSummary = useMemo(() => buildReceiptRouteSummary(selectedReceipt), [selectedReceipt]);
   const receiptOperationalLinks = useMemo(() => buildReceiptOperationalLinks(selectedReceipt), [selectedReceipt]);
+  const receiptOperatingPlan = useMemo(() => buildReceiptOperatingPlan(selectedReceipt), [selectedReceipt]);
 
   useEffect(() => {
     if (!overview) {
@@ -704,9 +849,60 @@ function InventoryReceivingPageContent() {
     setCreateForm((current) => ({
       ...current,
       purchaseReference: purchaseReferenceParam || current.purchaseReference,
-      supplierName: supplierNameParam || linkedOrder?.supplierName || current.supplierName
+      supplierName: supplierNameParam || linkedOrder?.supplierName || current.supplierName,
+      nextAction: isPurchaseOrdersSource && nextActionParam ? nextActionParam : current.nextAction
     }));
-  }, [eligiblePurchaseOrders, purchaseReferenceParam, supplierNameParam]);
+  }, [eligiblePurchaseOrders, isPurchaseOrdersSource, nextActionParam, purchaseReferenceParam, supplierNameParam]);
+
+  useEffect(() => {
+    if (!overview || hasAppliedPurchaseOrdersPreload || !isPurchaseOrdersSource) {
+      return;
+    }
+
+    const contextualReceipts = overview.receipts.filter((receipt) => {
+      const matchesPurchaseReference = !purchaseReferenceParam || receipt.purchaseReference === purchaseReferenceParam;
+      const matchesSupplierName =
+        !supplierNameParam || receipt.supplierName.toLowerCase() === supplierNameParam.toLowerCase();
+
+      return matchesPurchaseReference && matchesSupplierName;
+    });
+    const matchedReceipt = contextualReceipts.length === 1 ? contextualReceipts[0] : null;
+
+    if (matchedReceipt) {
+      setSelectedReceiptId(matchedReceipt.id);
+      setNextActionDraft(nextActionParam || matchedReceipt.nextAction);
+    } else {
+      const linkedOrder = eligiblePurchaseOrders.find((item) => item.code === purchaseReferenceParam);
+      setCreateForm((current) => ({
+        ...current,
+        purchaseReference: purchaseReferenceParam || current.purchaseReference,
+        supplierName: supplierNameParam || linkedOrder?.supplierName || current.supplierName,
+        nextAction: nextActionParam || current.nextAction
+      }));
+    }
+
+    setPreloadContext({
+      source: sourceParam,
+      purchaseReference: purchaseReferenceParam,
+      supplierName: supplierNameParam,
+      projectName: projectNameParam,
+      nextAction: nextActionParam,
+      matchedReceiptId: matchedReceipt?.id ?? null,
+      hasClearMatch: Boolean(matchedReceipt),
+      wasApplied: true
+    });
+    setHasAppliedPurchaseOrdersPreload(true);
+  }, [
+    eligiblePurchaseOrders,
+    hasAppliedPurchaseOrdersPreload,
+    isPurchaseOrdersSource,
+    nextActionParam,
+    overview,
+    projectNameParam,
+    purchaseReferenceParam,
+    sourceParam,
+    supplierNameParam
+  ]);
 
   async function handleAction(status: InventoryReceiptContract["status"], suggestedNextAction: string) {
     if (!selectedReceipt) {
@@ -999,11 +1195,65 @@ function InventoryReceivingPageContent() {
               </Card>
             </section>
 
+            {preloadContext ? (
+              <section className="grid cols1">
+                <Card
+                  title={preloadContext.hasClearMatch ? "Purchase-order receiving context" : "Purchase-order receiving preload"}
+                  description={
+                    preloadContext.hasClearMatch
+                      ? "Receiving selected a single related receipt from the purchase-order context."
+                      : "Receiving kept the purchase-order context visible and prepared the form without forcing an ambiguous receipt selection."
+                  }
+                  aside={<Badge tone="info">Precargado desde órdenes de compra / Preloaded from purchase orders</Badge>}
+                >
+                  <div className="detailGrid">
+                    {preloadContext.purchaseReference ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Purchase reference</div>
+                        <div>{preloadContext.purchaseReference}</div>
+                      </div>
+                    ) : null}
+                    {preloadContext.supplierName ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Supplier</div>
+                        <div>{preloadContext.supplierName}</div>
+                      </div>
+                    ) : null}
+                    {preloadContext.projectName ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Project</div>
+                        <div>{preloadContext.projectName}</div>
+                      </div>
+                    ) : null}
+                    {preloadContext.nextAction ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Next action</div>
+                        <div>{preloadContext.nextAction}</div>
+                      </div>
+                    ) : null}
+                    <div className="detailRow">
+                      <div className="detailLabel">Match status</div>
+                      <div>
+                        {preloadContext.hasClearMatch
+                          ? "A single related receipt was selected."
+                          : "No clear receipt match was selected. The create form stays ready with the received context."}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </section>
+            ) : null}
+
             <section className="grid cols2">
               <Card title="Inbound board" description="Receipt posture by supplier, destination and current warehouse acceptance state.">
                 <FilterBar summary={`${filteredReceipts.length} inbound receipts in the active tenant`}>
+                  {isPurchaseOrdersSource ? (
+                    <Badge tone="info">Precargado desde órdenes de compra / Preloaded from purchase orders</Badge>
+                  ) : null}
                   {purchaseReferenceParam ? <Badge tone="info">{purchaseReferenceParam}</Badge> : null}
                   {supplierNameParam ? <Badge tone="info">{supplierNameParam}</Badge> : null}
+                  {projectNameParam ? <Badge tone="info">{projectNameParam}</Badge> : null}
+                  {nextActionParam ? <Badge tone="info">next action</Badge> : null}
                   {purchaseReferenceParam || supplierNameParam ? (
                     <Link className="buttonGhost" href="/inventory/receiving">
                       Clear context
@@ -1137,6 +1387,18 @@ function InventoryReceivingPageContent() {
                         </div>
                       </div>
                       <div className="detailRow">
+                        <div className="detailLabel">Immediate owner module</div>
+                        <div>{receiptOperatingPlan.immediateModule}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Second operating hop</div>
+                        <div>{receiptOperatingPlan.secondHop}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">Return confirmed with</div>
+                        <div>{receiptOperatingPlan.confirmedReturn}</div>
+                      </div>
+                      <div className="detailRow">
                         <div className="detailLabel">Why now</div>
                         <div>{receiptWhyNow}</div>
                       </div>
@@ -1157,6 +1419,47 @@ function InventoryReceivingPageContent() {
                         <div>{receiptReportBack}</div>
                       </div>
                     </div>
+
+                    <Card
+                      title="Recommended operating CTA"
+                      description="Primary next move for this selected receipt, based on blockers, evidence, quantity variance and current status."
+                    >
+                      <div className="stack">
+                        <div className="row gap wrap">
+                          <Badge tone={receiptOperatingPlan.cta.tone === "primary" ? "info" : "warning"}>
+                            {receiptOperatingPlan.cta.label}
+                          </Badge>
+                        </div>
+                        <p className="sectionText">{receiptOperatingPlan.cta.summary}</p>
+                        {receiptOperatingPlan.cta.kind === "action" ? (
+                          <button
+                            type="button"
+                            className="button"
+                            onClick={() => {
+                              const action = receiptOperatingPlan.cta;
+                              void handleAction(
+                                action.status as Extract<InventoryReceiptContract["status"], "received" | "in_transit">,
+                                action.nextAction as string
+                              );
+                            }}
+                            disabled={isSaving}
+                          >
+                            {receiptOperatingPlan.cta.label}
+                          </button>
+                        ) : receiptOperatingPlan.cta.kind === "link" ? (
+                          <Link className={receiptOperatingPlan.cta.tone === "primary" ? "button" : "button secondary"} href={receiptOperatingPlan.cta.href}>
+                            {receiptOperatingPlan.cta.label}
+                          </Link>
+                        ) : (
+                          <div className="tableCellStack">
+                            <span className="tableCellMuted">{nextActionDraft}</span>
+                            <span className="tableCellMuted">
+                              Keep the next action explicit before moving this receipt / Mantener la siguiente accion explicita antes de mover esta recepcion.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
 
                     <div className="row gap wrap">
                       {receiptOperationalLinks.map((link, index) => (

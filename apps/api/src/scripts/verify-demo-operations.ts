@@ -6,6 +6,7 @@ type CountRow = {
 
 const tables = [
   "project_portfolio",
+  "project_schedule_activities",
   "field_material_requests",
   "procurement_requisitions",
   "procurement_purchase_orders",

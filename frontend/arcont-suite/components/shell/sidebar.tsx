@@ -93,6 +93,22 @@ function itemIcon(item: NavigationItem): SidebarIconName {
   return domainIcon(item.domain);
 }
 
+function compactToken(value: string) {
+  const parts = value
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return parts
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+  }
+
+  return value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 3).toUpperCase();
+}
+
 function SidebarIcon({ name }: { name: SidebarIconName }) {
   const paths = (() => {
     switch (name) {
@@ -161,11 +177,18 @@ export function Sidebar({
       isRouteVisible({ moduleKeys: item.moduleKeys, requiredPermissions: item.requiredPermissions })
     );
   const activeDomain = navigationItems.find((item) => item.href === pathname)?.domain ?? null;
+  const activeItem = navigationItems.find((item) => item.href === pathname) ?? null;
   const [expandedDomain, setExpandedDomain] = useState<string | null>(activeDomain);
 
   useEffect(() => {
     setExpandedDomain(activeDomain);
   }, [activeDomain]);
+
+  useEffect(() => {
+    if (isOpen) {
+      onClose();
+    }
+  }, [isOpen, onClose, pathname]);
 
   const visibleGroups = navigationGroups
     .map((group) => ({
@@ -179,13 +202,24 @@ export function Sidebar({
       )
     }))
     .filter((group) => group.items.length > 0);
+  const activeGroup = visibleGroups.find((group) => group.key === activeDomain) ?? null;
+  const activeItemLabel = activeItem ? localizeText(activeItem.label) : localizeText({ es: "Vista actual", en: "Current view" });
+  const activeItemDescription = activeItem ? localizeText(activeItem.description) : pathname;
+  const activeGroupLabel = activeGroup ? localizeText(activeGroup.label) : localizeText({ es: "General", en: "General" });
+  const activeCompanyToken = compactToken(activeCompany.tradeName);
+
+  const brandTitle = `${localizeText({ es: "ARCONT SUITE", en: "ARCONT SUITE" })} · ${localizeText("Enterprise operating system")}`;
+  const collapseLabel = isCollapsed
+    ? localizeText({ es: "Expandir navegación", en: "Expand navigation" })
+    : localizeText({ es: "Colapsar navegación", en: "Collapse navigation" });
+  const closeLabel = localizeText({ es: "Cerrar navegación", en: "Close navigation" });
 
   return (
     <div className={`sidebarWrap ${isOpen ? "sidebarWrapOpen" : ""} ${isCollapsed ? "sidebarWrapCollapsed" : ""}`}>
-      <aside className="sidebar">
+      <aside className="sidebar" aria-label={localizeText({ es: "Navegación principal", en: "Primary navigation" })}>
         <div className="brandBlock">
           <div className="sidebarBrandRow">
-            <div className="brandCard">
+            <div className="brandCard" title={brandTitle}>
               <LogoMark />
               <div className="brandMeta">
                 <strong>ARCONT SUITE</strong>
@@ -196,8 +230,8 @@ export function Sidebar({
               className={`sidebarCollapseButton ${isCollapsed ? "sidebarCollapseButtonCollapsed" : ""}`}
               type="button"
               onClick={onToggleCollapse}
-              aria-label={isCollapsed ? localizeText({ es: "Expandir navegación", en: "Expand navigation" }) : localizeText({ es: "Colapsar navegación", en: "Collapse navigation" })}
-              title={isCollapsed ? localizeText({ es: "Expandir navegación", en: "Expand navigation" }) : localizeText({ es: "Colapsar navegación", en: "Collapse navigation" })}
+              aria-label={collapseLabel}
+              title={collapseLabel}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 7-5 5 5 5" /></svg>
             </button>
@@ -205,7 +239,8 @@ export function Sidebar({
               className="mobileSidebarCloseButton"
               type="button"
               onClick={onClose}
-              aria-label={localizeText({ es: "Cerrar navegación", en: "Close navigation" })}
+              aria-label={closeLabel}
+              title={closeLabel}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
             </button>
@@ -240,10 +275,35 @@ export function Sidebar({
               </button>
             </div>
           </div>
+
+          <div
+            className="sidebarContextCard"
+            aria-label={localizeText({ es: "Contexto actual", en: "Current context" })}
+            title={`${activeGroupLabel} · ${activeItemLabel}`}
+          >
+            <span className="sidebarContextIcon" aria-hidden="true">
+              <SidebarIcon name={activeItem ? itemIcon(activeItem) : "dashboard"} />
+            </span>
+            <div className="sidebarContextMeta">
+              <span>{activeGroupLabel}</span>
+              <strong>{activeItemLabel}</strong>
+              <small>{activeItemDescription}</small>
+            </div>
+          </div>
+
+          <div
+            className="sidebarCompactTenantCard"
+            aria-label={localizeText({ es: "Compania activa", en: "Active company" })}
+            title={`${activeCompany.tradeName} · ${activeCompany.countryCode} · ${activeCompany.enabledModules.length} ${localizeText({ es: "modulos", en: "modules" })}`}
+          >
+            <strong>{activeCompanyToken}</strong>
+            <span>{activeCompany.countryCode}</span>
+          </div>
         </div>
 
         <div className="navGroup">
           <h2 className="navHeading">{localizeText("Start here")}</h2>
+          <span className="navHeadingCompact" aria-hidden="true">{compactToken(localizeText("Start here"))}</span>
           <div className="navStack">
             {quickLaunchItems.map((item) => {
               const active = pathname === item.href;
@@ -255,8 +315,9 @@ export function Sidebar({
                   href={item.href}
                   onClick={onClose}
                   className={`navLink ${active ? "navLinkActive" : ""}`}
+                  aria-current={active ? "page" : undefined}
                   aria-label={label}
-                  title={isCollapsed ? `${label} · ${description}` : undefined}
+                  title={`${label} · ${description}`}
                 >
                   <span className="navIcon"><SidebarIcon name={itemIcon(item)} /></span>
                   <span className="navLabel">
@@ -274,6 +335,7 @@ export function Sidebar({
 
         <div className="navGroup">
           <h2 className="navHeading">{localizeText("Setup and AI")}</h2>
+          <span className="navHeadingCompact" aria-hidden="true">{compactToken(localizeText("Setup and AI"))}</span>
           <div className="navStack">
             {setupLaunchItems.map((item) => {
               const active = pathname === item.href;
@@ -285,8 +347,9 @@ export function Sidebar({
                   href={item.href}
                   onClick={onClose}
                   className={`navLink ${active ? "navLinkActive" : ""}`}
+                  aria-current={active ? "page" : undefined}
                   aria-label={label}
-                  title={isCollapsed ? `${label} · ${description}` : undefined}
+                  title={`${label} · ${description}`}
                 >
                   <span className="navIcon"><SidebarIcon name={itemIcon(item)} /></span>
                   <span className="navLabel">
@@ -304,12 +367,13 @@ export function Sidebar({
 
         {visibleGroups.map((group) => (
           <div className="navGroup" key={group.key}>
+            <span className="navHeadingCompact" aria-hidden="true">{compactToken(localizeText(group.label))}</span>
             <button
               type="button"
               className={`navGroupToggle ${expandedDomain === group.key ? "navGroupToggleOpen" : ""}`}
               aria-expanded={expandedDomain === group.key}
               aria-label={localizeText(group.label)}
-              title={isCollapsed ? localizeText(group.label) : undefined}
+              title={`${localizeText(group.label)} · ${group.items.length}`}
               onClick={() => setExpandedDomain((current) => (current === group.key ? null : group.key))}
             >
               <span className="navGroupLabel">
@@ -332,8 +396,9 @@ export function Sidebar({
                         href={item.href}
                         onClick={onClose}
                         className={`navLink navLinkCompact ${active ? "navLinkActive" : ""}`}
+                        aria-current={active ? "page" : undefined}
                         aria-label={label}
-                        title={isCollapsed ? label : undefined}
+                        title={label}
                       >
                         <span className="navIcon"><SidebarIcon name={itemIcon(item)} /></span>
                         <span className="navLabel">

@@ -59,6 +59,20 @@ type FieldCaptureForm = {
   posture: FieldSignal["posture"];
 };
 
+type MovementFieldContext = {
+  purchaseReference: string;
+  upstreamReceiptCode: string;
+  destinationName: string;
+  requestedBy: string;
+  projectName: string;
+  nextAction: string;
+};
+
+type MovementFieldMatch =
+  | { kind: "signal"; signal: FieldSignal }
+  | { kind: "request"; request: FieldMaterialRequestContract }
+  | null;
+
 function postureTone(posture: FieldSignal["posture"]) {
   switch (posture) {
     case "healthy":
@@ -179,6 +193,16 @@ function captureDestinationSpanish(mode: FieldCaptureMode) {
 }
 
 function routeSpanishLabel(href: string) {
+  if (href.startsWith("/projects")) {
+    return "Abrir programa";
+  }
+  if (href.startsWith("/hr")) {
+    return "Abrir RH";
+  }
+  if (href.startsWith("/integrations")) {
+    return "Abrir integraciones";
+  }
+
   switch (href) {
     case "/quality":
       return "Abrir calidad";
@@ -537,6 +561,13 @@ function buildSignalDestination(signal: FieldSignal | null) {
   }
 
   switch (signal.area) {
+    case "Project anchor":
+    case "Project progress":
+      return {
+        label: "Open project schedule",
+        href: signal.projectName ? `/projects?projectName=${encodeURIComponent(signal.projectName)}` : "/projects",
+        description: "This signal should continue in project scheduling before field keeps pushing the same front."
+      };
     case "Material request":
     case "Materials":
       return {
@@ -569,6 +600,18 @@ function buildSignalDestination(signal: FieldSignal | null) {
         label: "Open daily log",
         href: "/daily-log",
         description: "This field signal should be formalized in daily log so supervision can act on it."
+      };
+    case "Workforce":
+      return {
+        label: "Open HR",
+        href: "/hr",
+        description: "This signal should continue through workforce coverage and attendance control."
+      };
+    case "Connectivity":
+      return {
+        label: "Open integrations",
+        href: "/integrations",
+        description: "This signal should continue through connectivity control before field assumes sync is stable."
       };
     default:
       return {
@@ -771,6 +814,267 @@ function buildSignalReadiness(signal: FieldSignal | null) {
   };
 }
 
+function resolveCaptureModeFromSignal(signal: FieldSignal): FieldCaptureMode {
+  switch (signal.area) {
+    case "Quality":
+    case "Quality incident":
+      return "quality_incident";
+    case "Material request":
+    case "Materials":
+      return "material_request";
+    case "Documentation":
+    case "Document control":
+      return "document_control";
+    case "Equipment":
+      return "equipment_issue";
+    default:
+      return "daily_log";
+  }
+}
+
+function buildCaptureFromSignal(signal: FieldSignal): FieldCaptureForm {
+  const mode = resolveCaptureModeFromSignal(signal);
+  const base = createCaptureForm(mode);
+  const progressMatch = signal.detail.match(/(\d{1,3})%/);
+  const countMatch = signal.detail.match(/\b(\d+)\b/);
+
+  return {
+    ...base,
+    projectName: signal.projectName?.trim() || base.projectName,
+    frontName: signal.title.trim(),
+    owner: signal.owner.trim() || base.owner,
+    summary: signal.title,
+    detail: signal.detail,
+    metricValue:
+      mode === "daily_log"
+        ? progressMatch?.[1] ?? base.metricValue
+        : countMatch?.[1] ?? base.metricValue,
+    category:
+      mode === "material_request"
+        ? signal.area
+        : base.category,
+    nextAction: signal.nextAction,
+    posture: signal.posture
+  };
+}
+
+function normalizeMatchValue(value?: string | null) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function findClearMovementSignalMatch(signals: FieldSignal[], context: MovementFieldContext) {
+  const normalizedProjectName = normalizeMatchValue(context.projectName);
+  const normalizedDestinationName = normalizeMatchValue(context.destinationName);
+  const normalizedRequestedBy = normalizeMatchValue(context.requestedBy);
+  const normalizedNextAction = normalizeMatchValue(context.nextAction);
+
+  const scored = signals
+    .map((signal) => {
+      let score = 0;
+      const signalTitle = normalizeMatchValue(signal.title);
+      const signalDetail = normalizeMatchValue(signal.detail);
+      const signalProjectName = normalizeMatchValue(signal.projectName);
+      const signalOwner = normalizeMatchValue(signal.owner);
+      const signalNextAction = normalizeMatchValue(signal.nextAction);
+
+      if (normalizedProjectName && signalProjectName === normalizedProjectName) {
+        score += 2;
+      }
+
+      if (normalizedDestinationName) {
+        if (signalTitle === normalizedDestinationName) {
+          score += 3;
+        } else if (signalTitle.includes(normalizedDestinationName) || signalDetail.includes(normalizedDestinationName)) {
+          score += 2;
+        }
+      }
+
+      if (normalizedRequestedBy && signalOwner === normalizedRequestedBy) {
+        score += 2;
+      }
+
+      if (normalizedNextAction) {
+        if (signalNextAction === normalizedNextAction) {
+          score += 2;
+        } else if (signalNextAction.includes(normalizedNextAction) || normalizedNextAction.includes(signalNextAction)) {
+          score += 1;
+        }
+      }
+
+      return { signal, score };
+    })
+    .filter((entry) => entry.score >= 3)
+    .sort((left, right) => right.score - left.score);
+
+  if (scored.length === 1) {
+    return scored[0].signal;
+  }
+
+  const topScore = scored[0]?.score ?? 0;
+  const topMatches = scored.filter((entry) => entry.score === topScore);
+
+  return topScore >= 5 && topMatches.length === 1 ? topMatches[0].signal : null;
+}
+
+function findClearMovementRequestMatch(
+  requests: FieldMaterialRequestContract[],
+  context: MovementFieldContext
+) {
+  const normalizedProjectName = normalizeMatchValue(context.projectName);
+  const normalizedDestinationName = normalizeMatchValue(context.destinationName);
+  const normalizedRequestedBy = normalizeMatchValue(context.requestedBy);
+  const normalizedPurchaseReference = normalizeMatchValue(context.purchaseReference);
+  const normalizedNextAction = normalizeMatchValue(context.nextAction);
+
+  const scored = requests
+    .map((request) => {
+      let score = 0;
+      const requestProjectName = normalizeMatchValue(request.projectName);
+      const requestFrontName = normalizeMatchValue(request.frontName);
+      const requestOwner = normalizeMatchValue(request.requestedBy);
+      const requestSummary = normalizeMatchValue(request.summary);
+      const requestDetail = normalizeMatchValue(request.detail);
+      const requestNextAction = normalizeMatchValue(request.nextAction);
+
+      if (normalizedProjectName && requestProjectName === normalizedProjectName) {
+        score += 2;
+      }
+
+      if (normalizedDestinationName) {
+        if (requestFrontName === normalizedDestinationName) {
+          score += 3;
+        } else if (requestFrontName.includes(normalizedDestinationName)) {
+          score += 2;
+        }
+      }
+
+      if (normalizedRequestedBy && requestOwner === normalizedRequestedBy) {
+        score += 2;
+      }
+
+      if (
+        normalizedPurchaseReference &&
+        (requestSummary.includes(normalizedPurchaseReference) || requestDetail.includes(normalizedPurchaseReference))
+      ) {
+        score += 1;
+      }
+
+      if (normalizedNextAction) {
+        if (requestNextAction === normalizedNextAction) {
+          score += 2;
+        } else if (requestNextAction.includes(normalizedNextAction) || normalizedNextAction.includes(requestNextAction)) {
+          score += 1;
+        }
+      }
+
+      return { request, score };
+    })
+    .filter((entry) => entry.score >= 3)
+    .sort((left, right) => right.score - left.score);
+
+  if (scored.length === 1) {
+    return scored[0].request;
+  }
+
+  const topScore = scored[0]?.score ?? 0;
+  const topMatches = scored.filter((entry) => entry.score === topScore);
+
+  return topScore >= 5 && topMatches.length === 1 ? topMatches[0].request : null;
+}
+
+function buildCaptureFromMovementContext(context: MovementFieldContext, current: FieldCaptureForm) {
+  const base = createCaptureForm("material_request");
+  const detailParts = [
+    context.destinationName ? `Destino / Destination: ${context.destinationName}` : "",
+    context.purchaseReference ? `OC / PO: ${context.purchaseReference}` : "",
+    context.upstreamReceiptCode ? `Recibo / Receipt: ${context.upstreamReceiptCode}` : ""
+  ].filter(Boolean);
+
+  return {
+    ...base,
+    projectName: context.projectName || current.projectName || base.projectName,
+    frontName: context.destinationName || current.frontName || base.frontName,
+    owner: context.requestedBy || current.owner || base.owner,
+    summary:
+      current.summary ||
+      (context.purchaseReference
+        ? `Continuidad de material / Material continuity ${context.purchaseReference}`
+        : base.summary),
+    detail: detailParts.join(" · ") || current.detail || base.detail,
+    category:
+      context.purchaseReference
+        ? `Field materials · ${context.purchaseReference}`
+        : current.category || base.category,
+    nextAction: context.nextAction || current.nextAction || base.nextAction
+  };
+}
+
+function buildCaptureFromMovementRequest(request: FieldMaterialRequestContract) {
+  return {
+    ...createCaptureForm("material_request"),
+    projectName: request.projectName,
+    frontName: request.frontName,
+    owner: request.requestedBy,
+    summary: request.summary,
+    detail: request.detail,
+    metricValue: request.requestedVolume,
+    nextAction: request.nextAction,
+    posture:
+      request.urgency === "critical"
+        ? "critical"
+        : request.urgency === "watch"
+          ? "watch"
+          : "healthy"
+  } satisfies FieldCaptureForm;
+}
+
+function buildSchedulePhaseFromSignal(signal: FieldSignal) {
+  switch (signal.area) {
+    case "Project anchor":
+    case "Project progress":
+      return "Programación";
+    case "Quality":
+    case "Quality incident":
+      return "Calidad";
+    case "Material request":
+    case "Materials":
+      return "Abastecimiento";
+    case "Equipment":
+      return "Equipos";
+    case "Documentation":
+    case "Document control":
+      return "Ingeniería";
+    case "Workforce":
+      return "Recursos";
+    default:
+      return "Campo";
+  }
+}
+
+function buildProjectScheduleHref(signal: FieldSignal | null) {
+  if (!signal?.projectName?.trim()) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    source: "field",
+    projectName: signal.projectName,
+    frontName: signal.title,
+    owner: signal.owner,
+    summary: signal.detail,
+    nextAction: signal.nextAction,
+    scheduleActivityName: signal.title,
+    schedulePhase: buildSchedulePhaseFromSignal(signal),
+    scheduleNextAction: signal.nextAction
+  });
+
+  return `/projects?${params.toString()}`;
+}
+
 function FieldPageContent() {
   const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
@@ -790,7 +1094,15 @@ function FieldPageContent() {
   const [searchFilter, setSearchFilter] = useState("");
   const [workspaceView, setWorkspaceView] = useState<"capture" | "priorities" | "control">("capture");
   const t = (es: string, en: string) => localizeText({ es, en });
+  const sourceParam = searchParams.get("source")?.trim() ?? "";
   const projectQuery = searchParams.get("projectName")?.trim() ?? "";
+  const purchaseReferenceParam = searchParams.get("purchaseReference")?.trim() ?? "";
+  const upstreamReceiptCodeParam = searchParams.get("upstreamReceiptCode")?.trim() ?? "";
+  const destinationNameParam = searchParams.get("destinationName")?.trim() ?? "";
+  const requestedByParam = searchParams.get("requestedBy")?.trim() ?? "";
+  const nextActionParam = searchParams.get("nextAction")?.trim() ?? "";
+  const isMovementsSource = sourceParam === "movements";
+  const [movementsPreloadDone, setMovementsPreloadDone] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1013,6 +1325,29 @@ function FieldPageContent() {
   }, [projectQuery]);
 
   const combinedSignals = useMemo(() => [...customSignals, ...signals], [customSignals, signals]);
+  const movementContext = useMemo<MovementFieldContext>(() => ({
+    purchaseReference: purchaseReferenceParam,
+    upstreamReceiptCode: upstreamReceiptCodeParam,
+    destinationName: destinationNameParam,
+    requestedBy: requestedByParam,
+    projectName: projectQuery,
+    nextAction: nextActionParam
+  }), [
+    destinationNameParam,
+    nextActionParam,
+    projectQuery,
+    purchaseReferenceParam,
+    requestedByParam,
+    upstreamReceiptCodeParam
+  ]);
+  const hasMovementsContext = isMovementsSource && Boolean(
+    purchaseReferenceParam ||
+      upstreamReceiptCodeParam ||
+      destinationNameParam ||
+      requestedByParam ||
+      projectQuery ||
+      nextActionParam
+  );
   const visibleSignals = useMemo(() => {
     if (!projectQuery) {
       return combinedSignals;
@@ -1077,6 +1412,27 @@ function FieldPageContent() {
     () => prioritySignals.find((signal) => signal.area === "Equipment") ?? null,
     [prioritySignals]
   );
+  const movementMatchedSignal = useMemo(
+    () => hasMovementsContext ? findClearMovementSignalMatch(combinedSignals, movementContext) : null,
+    [combinedSignals, hasMovementsContext, movementContext]
+  );
+  const movementMatchedRequest = useMemo(
+    () => hasMovementsContext && materialOverview?.requests.length
+      ? findClearMovementRequestMatch(materialOverview.requests, movementContext)
+      : null,
+    [hasMovementsContext, materialOverview?.requests, movementContext]
+  );
+  const movementFieldMatch = useMemo<MovementFieldMatch>(() => {
+    if (movementMatchedSignal) {
+      return { kind: "signal", signal: movementMatchedSignal };
+    }
+
+    if (movementMatchedRequest) {
+      return { kind: "request", request: movementMatchedRequest };
+    }
+
+    return null;
+  }, [movementMatchedRequest, movementMatchedSignal]);
   const selectedSignal = useMemo(
     () => filteredSignals.find((signal) => signal.id === selectedSignalId) ?? prioritySignals[0] ?? filteredSignals[0] ?? null,
     [filteredSignals, prioritySignals, selectedSignalId]
@@ -1098,6 +1454,23 @@ function FieldPageContent() {
   );
   const signalReadiness = useMemo(() => buildSignalReadiness(selectedSignal), [selectedSignal]);
   const selectedDestinationSpanishLabel = useMemo(() => routeSpanishLabel(signalDestination.href), [signalDestination.href]);
+  const signalScheduleHref = useMemo(() => buildProjectScheduleHref(selectedSignal), [selectedSignal]);
+  const movementsContextStatus = hasMovementsContext
+    ? movementFieldMatch?.kind === "signal"
+      ? t(
+          "Match claro con registro de campo; selección automática aplicada.",
+          "Clear match with field record; automatic selection applied."
+        )
+      : movementFieldMatch?.kind === "request"
+        ? t(
+            "Match claro con solicitud de campo; contexto aplicado para continuar.",
+            "Clear match with field request; context applied to continue."
+          )
+        : t(
+            "Contexto aplicado o visible; sin match único todavía.",
+            "Context applied or visible; no single clear match yet."
+          )
+    : null;
 
   useEffect(() => {
     if (filteredSignals.length === 0) {
@@ -1110,6 +1483,37 @@ function FieldPageContent() {
       setSelectedSignalId(filteredSignals[0]?.id ?? null);
     }
   }, [filteredSignals, selectedSignalId]);
+
+  useEffect(() => {
+    if (!hasMovementsContext || movementsPreloadDone) {
+      return;
+    }
+
+    if (movementMatchedSignal) {
+      setSelectedSignalId(movementMatchedSignal.id);
+      setMovementsPreloadDone(true);
+      return;
+    }
+
+    if (movementMatchedRequest) {
+      setCreateForm(buildCaptureFromMovementRequest(movementMatchedRequest));
+      setSearchFilter((current) => current || movementMatchedRequest.frontName);
+      setWorkspaceView("capture");
+      setMovementsPreloadDone(true);
+      return;
+    }
+
+    setCreateForm((current) => buildCaptureFromMovementContext(movementContext, current));
+    setSearchFilter((current) => current || movementContext.destinationName);
+    setWorkspaceView("capture");
+    setMovementsPreloadDone(true);
+  }, [
+    hasMovementsContext,
+    movementContext,
+    movementMatchedRequest,
+    movementMatchedSignal,
+    movementsPreloadDone
+  ]);
 
   async function handleCreateSignal() {
     const title = createForm.summary.trim();
@@ -1544,6 +1948,90 @@ function FieldPageContent() {
               </div>
             </section>
 
+            {hasMovementsContext ? (
+              <section className="grid cols1">
+                <Card
+                  title={t("Contexto desde movimientos", "Context from movements")}
+                  description={t(
+                    "La continuidad entre movements y field queda visible sin alterar los filtros o rutas ya existentes.",
+                    "Continuity between movements and field is visible without altering existing filters or routes."
+                  )}
+                  aside={<Badge tone="info">Precargado desde movimientos / Preloaded from movements</Badge>}
+                >
+                  <div className="detailGrid">
+                    {destinationNameParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Destino / frente", "Destination / front")}</div>
+                        <div>{destinationNameParam}</div>
+                      </div>
+                    ) : null}
+                    {projectQuery ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Proyecto", "Project")}</div>
+                        <div>{projectQuery}</div>
+                      </div>
+                    ) : null}
+                    {requestedByParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Solicitado por", "Requested by")}</div>
+                        <div>{requestedByParam}</div>
+                      </div>
+                    ) : null}
+                    {purchaseReferenceParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Purchase reference</div>
+                        <div>{purchaseReferenceParam}</div>
+                      </div>
+                    ) : null}
+                    {upstreamReceiptCodeParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Recibo origen", "Upstream receipt")}</div>
+                        <div>{upstreamReceiptCodeParam}</div>
+                      </div>
+                    ) : null}
+                    {nextActionParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Siguiente acción", "Next action")}</div>
+                        <div>{nextActionParam}</div>
+                      </div>
+                    ) : null}
+                    {movementsContextStatus ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Estado", "Status")}</div>
+                        <div>{movementsContextStatus}</div>
+                      </div>
+                    ) : null}
+                    {movementFieldMatch?.kind === "signal" ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Registro vinculado", "Linked field record")}</div>
+                        <div>{movementFieldMatch.signal.title}</div>
+                      </div>
+                    ) : null}
+                    {movementFieldMatch?.kind === "request" ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Solicitud vinculada", "Linked field request")}</div>
+                        <div>{`${movementFieldMatch.request.frontName} · ${movementFieldMatch.request.summary}`}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="row gap wrap" style={{ marginTop: 16 }}>
+                    {movementFieldMatch?.kind === "signal" ? (
+                      <button type="button" className="buttonGhost" onClick={() => setWorkspaceView("priorities")}>
+                        {t("Ver registro seleccionado", "View selected record")}
+                      </button>
+                    ) : (
+                      <button type="button" className="buttonGhost" onClick={() => setWorkspaceView("capture")}>
+                        {t("Ver captura precargada", "View preloaded capture")}
+                      </button>
+                    )}
+                    <Link className="buttonGhost" href="/field">
+                      {t("Limpiar contexto", "Clear context")}
+                    </Link>
+                  </div>
+                </Card>
+              </section>
+            ) : null}
+
             <div className="fieldWorkspaceTabs" role="tablist" aria-label={t("Vistas de campo", "Field views")}>
               {([
                 ["capture", t("Registrar", "Capture")],
@@ -1701,7 +2189,27 @@ function FieldPageContent() {
                       <div className="detailRow"><div className="detailLabel">{t("Continuar en", "Continue in")}</div><div>{t(`Este pendiente debe continuar en ${selectedDestinationSpanishLabel}.`, signalDestination.description)}</div></div>
                     </div>
                   ) : <EmptyState title={t("Sin selección", "Nothing selected")} description={t("Elige un registro para continuar.", "Choose a record to continue.")} />}
-                  {selectedSignal ? <div className="row gap wrap" style={{ marginTop: 20 }}><Link className="button" href={signalDestination.href}>{t(selectedDestinationSpanishLabel, signalDestination.label)}</Link><Link className="buttonGhost" href="/operations">{t("Ver operaciones", "Open operations")}</Link></div> : null}
+                  {selectedSignal ? (
+                    <div className="row gap wrap" style={{ marginTop: 20 }}>
+                      <Link className="button" href={signalDestination.href}>{t(selectedDestinationSpanishLabel, signalDestination.label)}</Link>
+                      {signalScheduleHref ? (
+                        <Link className="buttonGhost" href={signalScheduleHref}>
+                          {t("Abrir programa contextual", "Open contextual schedule")}
+                        </Link>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="buttonGhost"
+                        onClick={() => {
+                          setCreateForm(buildCaptureFromSignal(selectedSignal));
+                          setWorkspaceView("capture");
+                        }}
+                      >
+                        {t("Usar como captura", "Use as capture")}
+                      </button>
+                      <Link className="buttonGhost" href="/operations">{t("Ver operaciones", "Open operations")}</Link>
+                    </div>
+                  ) : null}
                 </Card>
               </section>
             ) : null}
@@ -1734,106 +2242,106 @@ function FieldPageContent() {
               <div className="fieldAdvancedContent">
             <section className="grid cols4">
               <KpiCard
-                label="Captures today"
+                label={t("Capturas hoy", "Captures today")}
                 value={String(filteredMetrics.capturesToday)}
-                footnote="Directional field capture load assembled from current live site signals."
+                footnote={t("Carga direccional de capturas de campo armada con las señales activas actuales.", "Directional field capture load assembled from current live site signals.")}
               />
               <KpiCard
-                label="Offline sync"
+                label={t("Sync offline", "Offline sync")}
                 value={`${filteredMetrics.offlineSync}%`}
-                footnote="Practical connectivity posture based on current site signal health."
+                footnote={t("Postura práctica de conectividad basada en la salud actual de las señales de obra.", "Practical connectivity posture based on current site signal health.")}
               />
               <KpiCard
-                label="Photos linked"
+                label={t("Fotos ligadas", "Photos linked")}
                 value={String(filteredMetrics.photosLinked)}
-                footnote="Estimated evidence volume tied to active mobile field workflows."
+                footnote={t("Volumen estimado de evidencia ligado a los flujos móviles activos de obra.", "Estimated evidence volume tied to active mobile field workflows.")}
               />
               <KpiCard
-                label="Checklists"
+                label={t("Checklists", "Checklists")}
                 value={`${filteredMetrics.checklistDiscipline}%`}
-                footnote="Directional discipline score for current field workflows."
+                footnote={t("Puntaje direccional de disciplina para los flujos actuales de campo.", "Directional discipline score for current field workflows.")}
               />
               <KpiCard
-                label="Material chain"
+                label={t("Cadena material", "Material chain")}
                 value={String(materialOverview?.summary.linkedRequisitions ?? 0)}
-                footnote="Field material requests already linked into live procurement requisitions."
+                footnote={t("Solicitudes de material de campo ya ligadas a requisiciones vivas de compras.", "Field material requests already linked into live procurement requisitions.")}
               />
             </section>
 
             <section className="grid cols2">
               <Card
-                title="Field workflow"
-                description="Field should act as the fast capture layer for real site issues, not as an isolated dashboard."
-                aside={<Badge tone={filteredMetrics.critical > 0 ? "danger" : filteredMetrics.watch > 0 ? "warning" : "success"}>{filteredMetrics.critical > 0 ? "critical fronts" : filteredMetrics.watch > 0 ? "watch fronts" : "stable fronts"}</Badge>}
+                title={t("Flujo de campo", "Field workflow")}
+                description={t("Campo debe actuar como la capa rápida de captura para problemas reales de obra, no como un dashboard aislado.", "Field should act as the fast capture layer for real site issues, not as an isolated dashboard.")}
+                aside={<Badge tone={filteredMetrics.critical > 0 ? "danger" : filteredMetrics.watch > 0 ? "warning" : "success"}>{filteredMetrics.critical > 0 ? t("frentes críticos", "critical fronts") : filteredMetrics.watch > 0 ? t("frentes en seguimiento", "watch fronts") : t("frentes estables", "stable fronts")}</Badge>}
               >
                 <div className="detailGrid">
-                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildFieldWorkflowSummary(createForm.mode)}</div></div>
-                  <div className="detailRow"><div className="detailLabel">Capture purpose</div><div>Use field to start the issue with enough context so the downstream module does not need the user to retype the same operational story.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Expected outcome</div><div>After capture, jump immediately into the module that will actually resolve the blockage and come back only to confirm continuity.</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Ruta actual", "Current route")}</div><div>{buildFieldWorkflowSummary(createForm.mode)}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Propósito de captura", "Capture purpose")}</div><div>{t("Usa campo para iniciar el problema con suficiente contexto y que el módulo destino no te pida reescribir la misma historia operativa.", "Use field to start the issue with enough context so the downstream module does not need the user to retype the same operational story.")}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Resultado esperado", "Expected outcome")}</div><div>{t("Después de capturar, salta de inmediato al módulo que realmente resolverá el bloqueo y vuelve solo para confirmar continuidad.", "After capture, jump immediately into the module that will actually resolve the blockage and come back only to confirm continuity.")}</div></div>
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
-                  <Link className="button" href="/daily-log">Open daily log</Link>
-                  <Link className="buttonGhost" href="/quality">Open quality</Link>
-                  <Link className="buttonGhost" href="/equipment">Open equipment</Link>
-                  <Link className="buttonGhost" href="/inventory/movements">Open movements</Link>
+                  <Link className="button" href="/daily-log">{t("Abrir bitácora", "Open daily log")}</Link>
+                  <Link className="buttonGhost" href="/quality">{t("Abrir calidad", "Open quality")}</Link>
+                  <Link className="buttonGhost" href="/equipment">{t("Abrir equipos", "Open equipment")}</Link>
+                  <Link className="buttonGhost" href="/inventory/movements">{t("Abrir movimientos", "Open movements")}</Link>
                 </div>
               </Card>
             </section>
 
             <section className="grid cols3">
               <Card
-                title="Captured blocker"
-                description="What kind of operational constraint the current capture is actually describing."
-                aside={<Badge tone={constraintSummary.tone}>{constraintSummary.label}</Badge>}
+                title={t("Bloqueo capturado", "Captured blocker")}
+                description={t("Qué tipo de restricción operativa está describiendo realmente la captura actual.", "What kind of operational constraint the current capture is actually describing.")}
+                aside={<Badge tone={constraintSummary.tone}>{t(constraintSummarySpanish.label, constraintSummary.label)}</Badge>}
               >
-                <p className="sectionText">{constraintSummary.description}</p>
+                <p className="sectionText">{t(constraintSummarySpanish.description, constraintSummary.description)}</p>
               </Card>
-              <Card title="Next module" description="Where the user should continue after recording the field issue.">
-                <p className="sectionText">{nextDestination.description}</p>
+              <Card title={t("Siguiente módulo", "Next module")} description={t("A dónde debe continuar el usuario después de registrar la incidencia de campo.", "Where the user should continue after recording the field issue.")}>
+                <p className="sectionText">{t(nextDestinationSpanish.description, nextDestination.description)}</p>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <Link className="button secondary" href={nextDestination.href}>
-                    {nextDestination.label}
+                    {t(nextDestinationSpanish.label, nextDestination.label)}
                   </Link>
                 </div>
               </Card>
-              <Card title="Next human step" description="The handoff should still be clear even before any other module opens.">
-                <p className="sectionText">{humanNextStep}</p>
+              <Card title={t("Siguiente paso humano", "Next human step")} description={t("El relevo debe seguir claro incluso antes de abrir cualquier otro módulo.", "The handoff should still be clear even before any other module opens.")}>
+                <p className="sectionText">{t("Confirma responsable, ventana de respuesta y condición de liberación o continuidad del frente.", humanNextStep)}</p>
               </Card>
             </section>
 
             {isDemoMode ? (
               <Card
-                title="Operable demo mode"
-                description="Field capture stays testable even if only projects and equipment signals are currently available."
-                aside={<Badge tone="warning">partial live graph</Badge>}
+                title={t("Modo demo operable", "Operable demo mode")}
+                description={t("La captura de campo sigue siendo testeable aunque por ahora solo estén disponibles proyectos y señales de equipo.", "Field capture stays testable even if only projects and equipment signals are currently available.")}
+                aside={<Badge tone="warning">{t("grafo vivo parcial", "partial live graph")}</Badge>}
               >
                 <div className="detailGrid">
                   <div className="detailRow">
-                    <div className="detailLabel">What works</div>
-                    <div>Create local field captures, filter signals and validate the field-to-project-to-equipment story.</div>
+                    <div className="detailLabel">{t("Que ya funciona", "What works")}</div>
+                    <div>{t("Puedes crear capturas locales de campo, filtrar señales y validar la historia entre campo, proyectos y equipos.", "Create local field captures, filter signals and validate the field-to-project-to-equipment story.")}</div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Best walkthrough</div>
-                    <div>Open a project from Projects, jump into Field, add an equipment issue or daily log, then review continuity in Operations.</div>
+                    <div className="detailLabel">{t("Walkthrough recomendado", "Best walkthrough")}</div>
+                    <div>{t("Abre un proyecto desde Projects, entra a Field, agrega una falla de equipo o bitácora y luego revisa continuidad en Operations.", "Open a project from Projects, jump into Field, add an equipment issue or daily log, then review continuity in Operations.")}</div>
                   </div>
                 </div>
               </Card>
             ) : null}
 
             <section className="grid cols2">
-              <Card title="Field flows" description="The mobile layer now reflects live site pressure across execution areas.">
-                <FilterBar summary={`${filteredSignals.length} field signals match the current operating filters`}>
+              <Card title={t("Flujos de campo", "Field flows")} description={t("La capa móvil ahora refleja la presión viva de obra entre áreas de ejecución.", "The mobile layer now reflects live site pressure across execution areas.")}>
+                <FilterBar summary={localizeText({ es: `${filteredSignals.length} señales de campo coinciden con los filtros operativos actuales`, en: `${filteredSignals.length} field signals match the current operating filters` })}>
                   {projectQuery ? (
-                    <Badge tone="info">Project {projectQuery}</Badge>
+                    <Badge tone="info">{t("Proyecto", "Project")} {projectQuery}</Badge>
                   ) : null}
                   <select className="field" value={postureFilter} onChange={(event) => setPostureFilter(event.target.value as typeof postureFilter)}>
-                    <option value="all">All posture</option>
-                    <option value="critical">Critical</option>
-                    <option value="watch">Watch</option>
-                    <option value="healthy">Healthy</option>
+                    <option value="all">{t("Toda la postura", "All posture")}</option>
+                    <option value="critical">{t("Crítico", "Critical")}</option>
+                    <option value="watch">{t("En seguimiento", "Watch")}</option>
+                    <option value="healthy">{t("Sin bloqueo", "Healthy")}</option>
                   </select>
                   <select className="field" value={areaFilter} onChange={(event) => setAreaFilter(event.target.value)}>
-                    <option value="all">All areas</option>
+                    <option value="all">{t("Todas las áreas", "All areas")}</option>
                     {areaOptions.map((area) => (
                       <option key={area} value={area}>
                         {area}
@@ -1845,17 +2353,17 @@ function FieldPageContent() {
                     type="search"
                     value={searchFilter}
                     onChange={(event) => setSearchFilter(event.target.value)}
-                    placeholder="Signal, owner, detail or action"
+                    placeholder={t("Señal, responsable, detalle o acción", "Signal, owner, detail or action")}
                     style={{ minWidth: 220 }}
                   />
                   <Badge tone={filteredMetrics.critical > 0 ? "danger" : filteredMetrics.watch > 0 ? "warning" : "success"}>
                     {filteredMetrics.critical > 0
-                      ? `${filteredMetrics.critical} critical`
+                      ? localizeText({ es: `${filteredMetrics.critical} críticas`, en: `${filteredMetrics.critical} critical` })
                       : filteredMetrics.watch > 0
-                        ? `${filteredMetrics.watch} watch`
-                        : "visible subset stable"}
+                        ? localizeText({ es: `${filteredMetrics.watch} en seguimiento`, en: `${filteredMetrics.watch} watch` })
+                        : t("subset visible estable", "visible subset stable")}
                   </Badge>
-                  {projectQuery ? <Link className="buttonGhost" href="/field">Clear project</Link> : null}
+                  {projectQuery ? <Link className="buttonGhost" href="/field">{t("Limpiar proyecto", "Clear project")}</Link> : null}
                 </FilterBar>
                 <div className="list">
                   {filteredSignals.map((signal) => (

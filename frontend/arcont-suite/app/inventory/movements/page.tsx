@@ -169,6 +169,45 @@ function createMovementExample(upstreamReceiptCode?: string, purchaseReference?:
   };
 }
 
+function findClearReceivingMovementMatch(
+  movements: InventoryMovementContract[],
+  upstreamReceiptCode: string,
+  purchaseReference: string
+) {
+  const normalizedUpstreamReceiptCode = upstreamReceiptCode.trim();
+  const normalizedPurchaseReference = purchaseReference.trim();
+  const exactMatches = movements.filter((movement) => {
+    const matchesUpstream = normalizedUpstreamReceiptCode
+      ? movement.upstreamReceiptCode === normalizedUpstreamReceiptCode
+      : true;
+    const matchesPurchase = normalizedPurchaseReference
+      ? movement.purchaseReference === normalizedPurchaseReference
+      : true;
+
+    return matchesUpstream && matchesPurchase;
+  });
+
+  if (exactMatches.length === 1) {
+    return exactMatches[0];
+  }
+
+  if (normalizedUpstreamReceiptCode) {
+    const upstreamMatches = movements.filter((movement) => movement.upstreamReceiptCode === normalizedUpstreamReceiptCode);
+    if (upstreamMatches.length === 1) {
+      return upstreamMatches[0];
+    }
+  }
+
+  if (normalizedPurchaseReference) {
+    const purchaseMatches = movements.filter((movement) => movement.purchaseReference === normalizedPurchaseReference);
+    if (purchaseMatches.length === 1) {
+      return purchaseMatches[0];
+    }
+  }
+
+  return null;
+}
+
 function buildMovementStory(movement: InventoryMovementContract | null, bridge: MovementBridgeContext) {
   if (!movement) {
     return null;
@@ -396,6 +435,25 @@ function buildMovementOperationalLinks(
   ];
 }
 
+function buildFieldHrefFromMovement(movement: InventoryMovementContract) {
+  const params = new URLSearchParams({
+    source: "movements",
+    destinationName: movement.destinationName,
+    requestedBy: movement.requestedBy,
+    nextAction: movement.nextAction
+  });
+
+  if (movement.purchaseReference) {
+    params.set("purchaseReference", movement.purchaseReference);
+  }
+
+  if (movement.upstreamReceiptCode) {
+    params.set("upstreamReceiptCode", movement.upstreamReceiptCode);
+  }
+
+  return `/field?${params.toString()}`;
+}
+
 function buildCreateMovementGate(input: {
   movementType: InventoryMovementContract["movementType"];
   skuName: string;
@@ -532,8 +590,14 @@ function InventoryMovementsPageContent() {
     movedUnits: Number(createForm.movedUnits),
     pendingEvidence: Number(createForm.pendingEvidence)
   }), [createForm.movedUnits, createForm.pendingEvidence, createForm.requestedUnits]);
+  const sourceParam = searchParams.get("source")?.trim() ?? "";
   const purchaseReferenceParam = searchParams.get("purchaseReference")?.trim() ?? "";
   const upstreamReceiptCodeParam = searchParams.get("upstreamReceiptCode")?.trim() ?? "";
+  const supplierNameParam = searchParams.get("supplierName")?.trim() ?? "";
+  const projectNameParam = searchParams.get("projectName")?.trim() ?? "";
+  const nextActionParam = searchParams.get("nextAction")?.trim() ?? "";
+  const isReceivingSource = sourceParam === "receiving";
+  const [receivingPreloadDone, setReceivingPreloadDone] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -623,6 +687,27 @@ function InventoryMovementsPageContent() {
   }, [overview, purchaseReferenceParam, upstreamReceiptCodeParam]);
 
   const filteredSummary = useMemo(() => recomputeSummary(filteredMovements), [filteredMovements]);
+  const receivingMatchedMovement = useMemo(
+    () =>
+      overview && isReceivingSource
+        ? findClearReceivingMovementMatch(overview.movements, upstreamReceiptCodeParam, purchaseReferenceParam)
+        : null,
+    [isReceivingSource, overview, purchaseReferenceParam, upstreamReceiptCodeParam]
+  );
+  const hasReceivingContext =
+    isReceivingSource &&
+    Boolean(
+      purchaseReferenceParam ||
+      upstreamReceiptCodeParam ||
+      supplierNameParam ||
+      projectNameParam ||
+      nextActionParam
+    );
+  const receivingContextStatus = hasReceivingContext
+    ? receivingMatchedMovement
+      ? "Movimiento relacionado identificado y seleccionado / Related movement identified and selected"
+      : "Contexto aplicado o visible; sin match único todavía / Context applied or visible; no single clear match yet"
+    : null;
 
   const selectedMovement = useMemo(
     () => filteredMovements.find((item) => item.id === selectedMovementId) ?? filteredMovements[0] ?? null,
@@ -698,6 +783,35 @@ function InventoryMovementsPageContent() {
       purchaseReference: purchaseReferenceParam || linkedReceipt?.purchaseReference || current.purchaseReference
     }));
   }, [eligibleReceipts, purchaseReferenceParam, upstreamReceiptCodeParam]);
+
+  useEffect(() => {
+    if (!hasReceivingContext || !overview || receivingPreloadDone) {
+      return;
+    }
+
+    if (receivingMatchedMovement) {
+      setSelectedMovementId(receivingMatchedMovement.id);
+      setNextActionDraft(receivingMatchedMovement.nextAction);
+      setReceivingPreloadDone(true);
+      return;
+    }
+
+    setCreateForm((current) => ({
+      ...current,
+      upstreamReceiptCode: upstreamReceiptCodeParam || current.upstreamReceiptCode,
+      purchaseReference: purchaseReferenceParam || current.purchaseReference,
+      nextAction: nextActionParam || current.nextAction
+    }));
+    setReceivingPreloadDone(true);
+  }, [
+    hasReceivingContext,
+    nextActionParam,
+    overview,
+    purchaseReferenceParam,
+    receivingMatchedMovement,
+    receivingPreloadDone,
+    upstreamReceiptCodeParam
+  ]);
 
   useEffect(() => {
     setNextActionDraft(selectedMovement?.nextAction ?? "");
@@ -967,6 +1081,61 @@ function InventoryMovementsPageContent() {
               </Card>
             </section>
 
+            {hasReceivingContext ? (
+              <section className="grid cols1">
+                <Card
+                  title="Contexto desde recepción / Receiving context"
+                  description="Continuidad visible entre receiving y movements sin rehacer el flujo actual / Visible continuity between receiving and movements without rebuilding the current flow."
+                  aside={<Badge tone="info">Precargado desde recepción / Preloaded from receiving</Badge>}
+                >
+                  <div className="detailGrid">
+                    {purchaseReferenceParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Purchase reference</div>
+                        <div>{purchaseReferenceParam}</div>
+                      </div>
+                    ) : null}
+                    {upstreamReceiptCodeParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Upstream receipt</div>
+                        <div>{upstreamReceiptCodeParam}</div>
+                      </div>
+                    ) : null}
+                    {supplierNameParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Proveedor / Supplier</div>
+                        <div>{supplierNameParam}</div>
+                      </div>
+                    ) : null}
+                    {projectNameParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Proyecto / Project</div>
+                        <div>{projectNameParam}</div>
+                      </div>
+                    ) : null}
+                    {nextActionParam ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Siguiente acción / Next action</div>
+                        <div>{nextActionParam}</div>
+                      </div>
+                    ) : null}
+                    {receivingContextStatus ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Estado / Status</div>
+                        <div>{receivingContextStatus}</div>
+                      </div>
+                    ) : null}
+                    {receivingMatchedMovement ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Movimiento vinculado / Linked movement</div>
+                        <div>{receivingMatchedMovement.code}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                </Card>
+              </section>
+            ) : null}
+
             <section className="grid cols3">
               <Card title="Movement continuity" description="Whether the selected movement can keep moving without operational friction.">
                 <p className="sectionText">
@@ -1079,7 +1248,9 @@ function InventoryMovementsPageContent() {
                           href={
                             link.href === "/inventory/receiving"
                               ? `/inventory/receiving?purchaseReference=${encodeURIComponent(selectedMovement.purchaseReference ?? "")}&supplierName=${encodeURIComponent(selectedMovement.purchaseOrderOwner)}`
-                              : link.href
+                              : link.href === "/field"
+                                ? buildFieldHrefFromMovement(selectedMovement)
+                                : link.href
                           }
                         >
                           {link.label}

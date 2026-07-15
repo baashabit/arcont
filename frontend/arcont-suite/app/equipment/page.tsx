@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -40,6 +41,174 @@ function healthTone(health: MachineItemContract["health"]) {
       return "warning";
     default:
       return "danger";
+  }
+}
+
+function equipmentStatusLabel(status: MachineItemContract["status"]) {
+  switch (status) {
+    case "available":
+      return { es: "Disponible", en: "Available" };
+    case "maintenance":
+      return { es: "Mantenimiento", en: "Maintenance" };
+    default:
+      return { es: "Fuera de servicio", en: "Down" };
+  }
+}
+
+function equipmentHealthLabel(health: MachineItemContract["health"]) {
+  switch (health) {
+    case "healthy":
+      return { es: "Saludable", en: "Healthy" };
+    case "watch":
+      return { es: "En vigilancia", en: "Watch" };
+    default:
+      return { es: "Critico", en: "Critical" };
+  }
+}
+
+function equipmentActionLabel(label: string) {
+  switch (label) {
+    case "Move to maintenance":
+      return { es: "Mover a mantenimiento", en: "Move to maintenance" };
+    case "Take down":
+      return { es: "Sacar de servicio", en: "Take down" };
+    case "Return to available":
+      return { es: "Regresar a disponible", en: "Return to available" };
+    case "Escalate to down":
+      return { es: "Escalar a fuera de servicio", en: "Escalate to down" };
+    case "Send to maintenance":
+      return { es: "Enviar a mantenimiento", en: "Send to maintenance" };
+    case "Move to watch":
+      return { es: "Mover a vigilancia", en: "Move to watch" };
+    case "Recover healthy":
+      return { es: "Recuperar a saludable", en: "Recover healthy" };
+    case "Escalate critical":
+      return { es: "Escalar a critico", en: "Escalate critical" };
+    case "Stabilize to watch":
+      return { es: "Estabilizar a vigilancia", en: "Stabilize to watch" };
+    default:
+      return { es: label, en: label };
+  }
+}
+
+function equipmentLinkLabel(label: string) {
+  switch (label) {
+    case "Open movements":
+    case "Review movements":
+      return { es: "Abrir movimientos", en: "Open movements" };
+    case "Open receiving":
+      return { es: "Abrir recepcion", en: "Open receiving" };
+    case "Open field":
+    case "Review field":
+      return { es: "Abrir campo", en: "Open field" };
+    case "Open daily log":
+      return { es: "Abrir bitacora diaria", en: "Open daily log" };
+    case "Open quality":
+    case "Review quality":
+      return { es: "Abrir calidad", en: "Open quality" };
+    case "Review operations":
+      return { es: "Abrir operaciones", en: "Open operations" };
+    default:
+      return { es: label, en: label };
+  }
+}
+
+function normalizeEquipmentFeedbackCode(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function resolveEquipmentFeedbackCopy(message: string | null) {
+  if (!message) {
+    return null;
+  }
+
+  switch (normalizeEquipmentFeedbackCode(message)) {
+    case "EQUIPMENT_NEXT_ACTION_TOO_SHORT":
+      return {
+        es: "La siguiente accion debe ser mas especifica antes de guardar el equipo.",
+        en: "The next action must be more specific before saving the machine."
+      };
+    case "EQUIPMENT_CREATE_FIELDS_INCOMPLETE":
+      return {
+        es: "Maquina, tipo, proyecto y frente deben quedar claros antes de crear el equipo.",
+        en: "Machine, type, project and front must be clear before creating the asset."
+      };
+    case "EQUIPMENT_AVAILABILITY_INVALID":
+      return {
+        es: "La disponibilidad debe mantenerse entre 0% y 100%.",
+        en: "Availability must stay between 0% and 100%."
+      };
+    case "EQUIPMENT_UTILIZATION_INVALID":
+      return {
+        es: "La utilizacion debe mantenerse entre 0% y 100%.",
+        en: "Utilization must stay between 0% and 100%."
+      };
+    case "EQUIPMENT_HOUR_METER_INVALID":
+      return {
+        es: "El horometro debe ser cero o mayor.",
+        en: "Hour meter must be zero or greater."
+      };
+    case "EQUIPMENT_NEXT_MAINTENANCE_INVALID":
+      return {
+        es: "Las horas a siguiente mantenimiento deben ser cero o mayores.",
+        en: "Next maintenance hours must be zero or greater."
+      };
+    case "EQUIPMENT_MAINTENANCE_BACKLOG_INVALID":
+      return {
+        es: "El backlog de mantenimiento debe ser cero o mayor.",
+        en: "Maintenance backlog must be zero or greater."
+      };
+    case "EQUIPMENT_OPEN_FAILURES_INVALID":
+      return {
+        es: "Las fallas abiertas deben ser cero o mayores.",
+        en: "Open failures must be zero or greater."
+      };
+    case "EQUIPMENT_CRITICAL_FAILURES_INVALID":
+      return {
+        es: "Las fallas criticas deben ser cero o mayores.",
+        en: "Critical failures must be zero or greater."
+      };
+    case "EQUIPMENT_FAILURE_CONFLICT":
+      return {
+        es: "Las fallas abiertas no pueden ser menores que las fallas criticas.",
+        en: "Open failures cannot be lower than critical failures."
+      };
+    case "EQUIPMENT_AVAILABLE_BLOCKED_BY_CRITICAL":
+      return {
+        es: "Disponible se bloquea mientras existan fallas criticas abiertas.",
+        en: "Available status is blocked while critical failures remain open."
+      };
+    case "EQUIPMENT_HEALTHY_BLOCKED_BY_MAINTENANCE":
+      return {
+        es: "Saludable requiere cero fallas criticas y nada de presion vencida de mantenimiento.",
+        en: "Healthy status requires no critical failures and no overdue maintenance pressure."
+      };
+    case "EQUIPMENT_UPDATE_FAILED":
+      return {
+        es: "No fue posible actualizar el equipo. Revisa la conexion e intenta de nuevo.",
+        en: "The machine could not be updated. Check the connection and try again."
+      };
+    case "EQUIPMENT_CREATE_FAILED":
+      return {
+        es: "No fue posible crear el equipo. Revisa los datos e intenta de nuevo.",
+        en: "The machine could not be created. Review the details and try again."
+      };
+    case "EQUIPMENT_MACHINE_UPDATED":
+      return {
+        es: "El equipo fue actualizado correctamente en la bandeja operativa.",
+        en: "The machine was updated successfully on the operating board."
+      };
+    case "EQUIPMENT_MACHINE_CREATED":
+      return {
+        es: "El equipo se agrego correctamente a la mesa operativa.",
+        en: "The machine was added successfully to the operating workbench."
+      };
+    default:
+      return { es: message, en: message };
   }
 }
 
@@ -118,7 +287,113 @@ type EquipmentBridgeContext = {
   fieldMaterials: NonNullable<Awaited<ReturnType<typeof fetchFieldMaterialRequestsOverview>>>;
 } | null;
 
-function buildEquipmentStory(machine: MachineItemContract | null, bridge: EquipmentBridgeContext) {
+type TranslateFn = (es: string, en: string) => string;
+
+type EquipmentContextualPreload = {
+  source: "field" | "quality";
+  projectName: string;
+  frontName: string;
+  owner: string;
+  nextAction: string;
+};
+
+function normalizeFieldValue(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function buildContextualPreload(searchParams: ReturnType<typeof useSearchParams>): EquipmentContextualPreload | null {
+  const source = searchParams.get("source");
+  if (source !== "field" && source !== "quality") {
+    return null;
+  }
+
+  const projectName = searchParams.get("projectName")?.trim() ?? "";
+  const frontName =
+    source === "quality"
+      ? searchParams.get("areaName")?.trim() ?? ""
+      : searchParams.get("frontName")?.trim() ?? "";
+  const owner =
+    source === "quality"
+      ? searchParams.get("contractorName")?.trim() ?? ""
+      : searchParams.get("owner")?.trim() ?? "";
+  const nextAction = searchParams.get("nextAction")?.trim() ?? "";
+
+  if (!projectName && !frontName && !owner && !nextAction) {
+    return null;
+  }
+
+  return {
+    source,
+    projectName,
+    frontName,
+    owner,
+    nextAction
+  };
+}
+
+function findRelatedMachine(overview: EquipmentOverviewContract, preload: EquipmentContextualPreload) {
+  const projectName = normalizeFieldValue(preload.projectName);
+  const frontName = normalizeFieldValue(preload.frontName);
+
+  for (const machine of overview.machines) {
+    const machineProject = normalizeFieldValue(machine.projectName);
+    const machineFront = normalizeFieldValue(machine.frontName);
+
+    if (projectName && frontName && machineProject === projectName && machineFront === frontName) {
+      return machine;
+    }
+  }
+
+  return null;
+}
+
+function contextualPreloadBadgeLabel(preload: EquipmentContextualPreload | null) {
+  if (!preload) {
+    return null;
+  }
+
+  return preload.source === "quality"
+    ? "Precargado desde calidad / Preloaded from quality"
+    : "Precargado desde campo / Preloaded from field";
+}
+
+function contextualPreloadTitle(preload: EquipmentContextualPreload, t: TranslateFn) {
+  return preload.source === "quality"
+    ? t("Lectura desde calidad", "Quality preload")
+    : t("Lectura desde campo", "Field preload");
+}
+
+function contextualPreloadSummary(preload: EquipmentContextualPreload, t: TranslateFn) {
+  return preload.source === "quality"
+    ? t("Contexto recibido desde calidad", "Context received from quality")
+    : t("Contexto recibido desde campo", "Context received from field");
+}
+
+function contextualPreloadOperationalSummary(preload: EquipmentContextualPreload, t: TranslateFn) {
+  return preload.source === "quality"
+    ? t("Contexto operativo recibido desde calidad", "Operational context received from quality")
+    : t("Contexto operativo recibido", "Operational context received");
+}
+
+function contextualPreloadAppliedCopy(preload: EquipmentContextualPreload, t: TranslateFn) {
+  return preload.source === "quality"
+    ? t(
+        "Esta captura llego desde calidad y se aplico como precarga inicial.",
+        "This intake came from quality and was applied as the initial preload."
+      )
+    : t(
+        "Esta captura llego desde campo y se aplico como precarga inicial.",
+        "This intake came from field and was applied as the initial preload."
+      );
+}
+
+function contextualPreloadJumpCopy(preload: EquipmentContextualPreload, t: TranslateFn) {
+  return preload.source === "quality"
+    ? t("Salto operativo desde calidad", "Operational jump from quality")
+    : t("Salto operativo desde campo", "Operational jump from field");
+}
+
+function buildEquipmentStory(machine: MachineItemContract | null, bridge: EquipmentBridgeContext, t: TranslateFn) {
   if (!machine) {
     return null;
   }
@@ -133,26 +408,26 @@ function buildEquipmentStory(machine: MachineItemContract | null, bridge: Equipm
   return {
     fieldImpact:
       machine.status === "down"
-        ? `${machine.projectName} · ${machine.frontName} is directly exposed because this machine is down.`
+        ? `${machine.projectName} · ${machine.frontName} ${t("queda expuesto directamente porque esta maquina esta fuera de servicio.", "is directly exposed because this machine is down.")}`
         : machine.status === "maintenance"
-          ? `${machine.projectName} · ${machine.frontName} is running under maintenance pressure.`
-          : `${machine.projectName} · ${machine.frontName} currently has this machine available for dispatch.`,
+          ? `${machine.projectName} · ${machine.frontName} ${t("esta operando bajo presion de mantenimiento.", "is running under maintenance pressure.")}`
+          : `${machine.projectName} · ${machine.frontName} ${t("cuenta hoy con esta maquina disponible para despacho.", "currently has this machine available for dispatch.")}`,
     maintenanceSignal: isMaintenanceOverdue(machine)
-      ? `Maintenance is already overdue and this asset should not be treated as stable for field planning.`
-      : `${machine.nextMaintenanceHours} operating hours remain before the next service window.`,
+      ? t("El mantenimiento ya esta vencido y este activo no debe tratarse como estable para planeacion de campo.", "Maintenance is already overdue and this asset should not be treated as stable for field planning.")
+      : `${machine.nextMaintenanceHours} ${t("horas operativas restantes antes de la siguiente ventana de servicio.", "operating hours remain before the next service window.")}`,
     criticalAsset:
       machine.criticalOpenFailures > 0
-        ? `${machine.criticalOpenFailures} critical failures still need closure before safe release.`
-        : "No critical failure is currently open on the selected asset.",
+        ? `${machine.criticalOpenFailures} ${t("fallas criticas todavia necesitan cierre antes de liberar con seguridad.", "critical failures still need closure before safe release.")}`
+        : t("No hay una falla critica abierta en el activo seleccionado.", "No critical failure is currently open on the selected asset."),
     inventoryDependency: movementSignal
-      ? `${movementSignal.code} is the current stock-movement anchor with ${movementSignal.pendingEvidence} pending evidence items and ${movementSignal.impactLevel} impact.`
-      : "No inventory movement is currently in focus for this asset lane.",
+      ? `${movementSignal.code} ${t("es el ancla actual de movimientos con", "is the current stock-movement anchor with")} ${movementSignal.pendingEvidence} ${t("evidencias pendientes y un impacto", "pending evidence items and")} ${movementSignal.impactLevel}.`
+      : t("No hay un movimiento de inventario en foco para este carril de equipo.", "No inventory movement is currently in focus for this asset lane."),
     materialPressure: fieldMaterialSignal
-      ? `${fieldMaterialSignal.summary} remains ${fieldMaterialSignal.status} with ${fieldMaterialSignal.requestedVolume} pending for this front.`
-      : "No direct field material request is currently attached to this asset lane.",
+      ? `${fieldMaterialSignal.summary} ${t("sigue en estado", "remains")} ${fieldMaterialSignal.status} ${t("con", "with")} ${fieldMaterialSignal.requestedVolume} ${t("pendiente para este frente.", "pending for this front.")}`
+      : t("No hay una solicitud directa de material de campo ligada a este carril de equipo.", "No direct field material request is currently attached to this asset lane."),
     qualityConstraint: qualitySignal
-      ? `${qualitySignal.code} remains ${qualitySignal.status} with ${qualitySignal.openFindings} open findings and ${qualitySignal.releaseReadiness}% release readiness.`
-      : "No quality-release constraint is currently attached to the active equipment lane."
+      ? `${qualitySignal.code} ${t("sigue", "remains")} ${qualitySignal.status} ${t("con", "with")} ${qualitySignal.openFindings} ${t("hallazgos abiertos y", "open findings and")} ${qualitySignal.releaseReadiness}% ${t("de liberacion.", "release readiness.")}`
+      : t("No hay una restriccion de calidad o liberacion ligada al carril activo de equipo.", "No quality-release constraint is currently attached to the active equipment lane.")
   };
 }
 
@@ -168,46 +443,46 @@ function validateMachineCreateForm(input: {
   health: MachineItemContract["health"];
 }) {
   if (!Number.isFinite(input.availabilityPercent) || input.availabilityPercent < 0 || input.availabilityPercent > 100) {
-    return "Availability must stay between 0% and 100%.";
+    return "EQUIPMENT_AVAILABILITY_INVALID";
   }
 
   if (!Number.isFinite(input.utilizationPercent) || input.utilizationPercent < 0 || input.utilizationPercent > 100) {
-    return "Utilization must stay between 0% and 100%.";
+    return "EQUIPMENT_UTILIZATION_INVALID";
   }
 
   if (!Number.isFinite(input.hourMeter) || input.hourMeter < 0) {
-    return "Hour meter must be zero or greater.";
+    return "EQUIPMENT_HOUR_METER_INVALID";
   }
 
   if (!Number.isFinite(input.nextMaintenanceHours) || input.nextMaintenanceHours < 0) {
-    return "Next maintenance hours must be zero or greater.";
+    return "EQUIPMENT_NEXT_MAINTENANCE_INVALID";
   }
 
   if (!Number.isFinite(input.maintenanceBacklog) || input.maintenanceBacklog < 0) {
-    return "Maintenance backlog must be zero or greater.";
+    return "EQUIPMENT_MAINTENANCE_BACKLOG_INVALID";
   }
 
   if (!Number.isFinite(input.openFailures) || input.openFailures < 0) {
-    return "Open failures must be zero or greater.";
+    return "EQUIPMENT_OPEN_FAILURES_INVALID";
   }
 
   if (!Number.isFinite(input.criticalOpenFailures) || input.criticalOpenFailures < 0) {
-    return "Critical failures must be zero or greater.";
+    return "EQUIPMENT_CRITICAL_FAILURES_INVALID";
   }
 
   if (input.openFailures < input.criticalOpenFailures) {
-    return "Open failures cannot be lower than critical failures.";
+    return "EQUIPMENT_FAILURE_CONFLICT";
   }
 
   if (input.status === "available" && input.criticalOpenFailures > 0) {
-    return "Available status is blocked while critical failures remain open.";
+    return "EQUIPMENT_AVAILABLE_BLOCKED_BY_CRITICAL";
   }
 
   if (
     input.health === "healthy" &&
     (input.criticalOpenFailures > 0 || input.nextMaintenanceHours <= 0 || input.maintenanceBacklog > 0)
   ) {
-    return "Healthy status requires no critical failures and no overdue maintenance pressure.";
+    return "EQUIPMENT_HEALTHY_BLOCKED_BY_MAINTENANCE";
   }
 
   return null;
@@ -219,6 +494,7 @@ function createMachineExample() {
     machineType: "Retroexcavadora",
     projectName: "Villas del Mayab",
     frontName: "Frente terracerias",
+    owner: "",
     status: "maintenance" as MachineItemContract["status"],
     health: "watch" as MachineItemContract["health"],
     availabilityPercent: "74",
@@ -242,6 +518,7 @@ function createMachinePreset(
         machineType: "Excavadora",
         projectName: "Residencial Arena",
         frontName: "Frente cimentacion",
+        owner: "",
         status: "available" as MachineItemContract["status"],
         health: "healthy" as MachineItemContract["health"],
         availabilityPercent: "95",
@@ -261,6 +538,7 @@ function createMachinePreset(
         machineType: "Motoniveladora",
         projectName: "Villas del Mayab",
         frontName: "Frente vialidades",
+        owner: "",
         status: "down" as MachineItemContract["status"],
         health: "critical" as MachineItemContract["health"],
         availabilityPercent: "12",
@@ -281,6 +559,7 @@ function createMachineEmptyForm() {
     machineType: "Excavator",
     projectName: "Nuevo proyecto",
     frontName: "Frente 1",
+    owner: "",
     status: "available" as MachineItemContract["status"],
     health: "healthy" as MachineItemContract["health"],
     availabilityPercent: "92",
@@ -294,243 +573,263 @@ function createMachineEmptyForm() {
   };
 }
 
-function buildDispatchReadiness(machine: MachineItemContract | null) {
+function buildDispatchReadiness(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
     return {
       tone: "info" as const,
-      label: "Select an asset",
-      description: "Choose a machine to verify if it can really be dispatched to field."
+      label: t("Selecciona un activo", "Select an asset"),
+      description: t("Elige una maquina para verificar si realmente puede despacharse a campo.", "Choose a machine to verify if it can really be dispatched to field.")
     };
   }
 
   if (machine.status === "down" || machine.criticalOpenFailures > 0) {
     return {
       tone: "danger" as const,
-      label: "Blocked for dispatch",
-      description: "The machine should stay out of field assignment until the breakdown or critical failures are closed."
+      label: t("Bloqueado para despacho", "Blocked for dispatch"),
+      description: t("La maquina debe mantenerse fuera de asignacion a campo hasta cerrar la averia o las fallas criticas.", "The machine should stay out of field assignment until the breakdown or critical failures are closed.")
     };
   }
 
   if (isMaintenanceOverdue(machine) || machine.health !== "healthy") {
     return {
       tone: "warning" as const,
-      label: "Dispatch with caution",
-      description: "Maintenance timing or health posture still requires supervision before releasing this asset."
+      label: t("Despachar con cautela", "Dispatch with caution"),
+      description: t("El tiempo de mantenimiento o la salud del activo todavia requieren supervision antes de liberarlo.", "Maintenance timing or health posture still requires supervision before releasing this asset.")
     };
   }
 
   return {
     tone: "success" as const,
-    label: "Ready for dispatch",
-    description: "This asset can move into field planning without an obvious maintenance or failure blocker."
+    label: t("Listo para despacho", "Ready for dispatch"),
+    description: t("Este activo puede entrar a planeacion de campo sin un bloqueo evidente por mantenimiento o falla.", "This asset can move into field planning without an obvious maintenance or failure blocker.")
   };
 }
 
-function buildEquipmentDestination(machine: MachineItemContract | null) {
+function buildEquipmentDestination(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
     return {
-      label: "No active route",
-      description: "Select a machine to decide which module should take the next step.",
+      label: t("Sin ruta activa", "No active route"),
+      description: t("Selecciona una maquina para decidir que modulo debe tomar el siguiente paso.", "Select a machine to decide which module should take the next step."),
       href: "/equipment"
     };
   }
 
   if (machine.status === "down" || machine.criticalOpenFailures > 0) {
     return {
-      label: "Escalate to field",
-      description: "Production continuity is already exposed, so the front should be replanned from field execution.",
+      label: t("Escalar a campo", "Escalate to field"),
+      description: t("La continuidad productiva ya esta expuesta, asi que el frente debe replanearse desde ejecucion de campo.", "Production continuity is already exposed, so the front should be replanned from field execution."),
       href: "/field"
     };
   }
 
   if (isMaintenanceOverdue(machine) || machine.status === "maintenance") {
     return {
-      label: "Review inventory flow",
-      description: "Maintenance recovery should stay aligned with inbound material and movements for the affected front.",
+      label: t("Revisar flujo de inventario", "Review inventory flow"),
+      description: t("La recuperacion de mantenimiento debe seguir alineada con materiales y movimientos para el frente afectado.", "Maintenance recovery should stay aligned with inbound material and movements for the affected front."),
       href: "/inventory/movements"
     };
   }
 
   return {
-    label: "Validate quality release",
-    description: "If the asset is mechanically stable, confirm release posture before full field continuity.",
+    label: t("Validar liberacion de calidad", "Validate quality release"),
+    description: t("Si el activo ya es mecanicamente estable, confirma la postura de liberacion antes de la continuidad total del frente.", "If the asset is mechanically stable, confirm release posture before full field continuity."),
     href: "/quality"
   };
 }
 
-function buildFrontContinuity(machine: MachineItemContract | null) {
+function buildFrontContinuity(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
     return {
+      key: "none" as const,
       label: "Select an asset",
-      description: "Choose a machine to understand how it affects the active front before dispatch or escalation."
+      description: t("Selecciona una maquina para entender como afecta al frente activo antes de despachar o escalar.", "Choose a machine to understand how it affects the active front before dispatch or escalation.")
     };
   }
 
   if (machine.status === "down") {
     return {
+      key: "exposed" as const,
       label: "Front exposed",
-      description: `${machine.projectName} · ${machine.frontName} should be replanned immediately because this asset is already down.`
+      description: `${machine.projectName} · ${machine.frontName} ${t("debe replanearse de inmediato porque este activo ya esta fuera de servicio.", "should be replanned immediately because this asset is already down.")}`
     };
   }
 
   if (machine.status === "maintenance" || machine.health === "critical") {
     return {
+      key: "risk" as const,
       label: "Front at risk",
-      description: `${machine.projectName} · ${machine.frontName} still depends on maintenance recovery before it can run with confidence.`
+      description: `${machine.projectName} · ${machine.frontName} ${t("todavia depende de la recuperacion de mantenimiento antes de operar con confianza.", "still depends on maintenance recovery before it can run with confidence.")}`
     };
   }
 
   if (machine.health === "watch" || isMaintenanceOverdue(machine)) {
     return {
+      key: "watch" as const,
       label: "Front under watch",
-      description: `${machine.projectName} · ${machine.frontName} can continue, but dispatch should stay coordinated with field and maintenance.`
+      description: `${machine.projectName} · ${machine.frontName} ${t("puede continuar, pero el despacho debe seguir coordinado con campo y mantenimiento.", "can continue, but dispatch should stay coordinated with field and maintenance.")}`
     };
   }
 
   return {
+    key: "covered" as const,
     label: "Front covered",
-    description: `${machine.projectName} · ${machine.frontName} currently has asset support without an obvious dispatch blocker.`
+    description: `${machine.projectName} · ${machine.frontName} ${t("cuenta hoy con soporte de activo sin un bloqueo evidente de despacho.", "currently has asset support without an obvious dispatch blocker.")}`
   };
 }
 
-function buildFieldHandoff(machine: MachineItemContract | null) {
+function frontContinuityLabel(key: "none" | "exposed" | "risk" | "watch" | "covered") {
+  switch (key) {
+    case "none":
+      return { es: "Selecciona un activo", en: "Select an asset" };
+    case "exposed":
+      return { es: "Frente expuesto", en: "Front exposed" };
+    case "risk":
+      return { es: "Frente en riesgo", en: "Front at risk" };
+    case "watch":
+      return { es: "Frente en vigilancia", en: "Front under watch" };
+    default:
+      return { es: "Frente cubierto", en: "Front covered" };
+  }
+}
+
+function buildFieldHandoff(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
-    return "Select a machine to see what field teams should do next.";
+    return t("Selecciona una maquina para ver que debe hacer campo despues.", "Select a machine to see what field teams should do next.");
   }
 
   if (machine.status === "down") {
-    return "Field should protect the front, switch sequence if possible and confirm whether replacement equipment is required today.";
+    return t("Campo debe proteger el frente, resecuenciar si es posible y confirmar hoy mismo si necesita reemplazo.", "Field should protect the front, switch sequence if possible and confirm whether replacement equipment is required today.");
   }
 
   if (machine.status === "maintenance") {
-    return "Field should confirm whether work can continue around the maintenance window or whether the front must pause until release.";
+    return t("Campo debe confirmar si el trabajo puede rodear la ventana de mantenimiento o si el frente debe pausar hasta la liberacion.", "Field should confirm whether work can continue around the maintenance window or whether the front must pause until release.");
   }
 
   if (machine.health === "watch") {
-    return "Field should keep the machine operating under supervision and report any new symptom before the next shift cut-off.";
+    return t("Campo debe operar la maquina bajo supervision y reportar cualquier sintoma nuevo antes del siguiente corte.", "Field should keep the machine operating under supervision and report any new symptom before the next shift cut-off.");
   }
 
-  return "Field can continue with normal execution, but the next action should still confirm who receives and uses the asset at the front.";
+  return t("Campo puede continuar normalmente, pero la siguiente accion todavia debe confirmar quien recibe y usa el activo en el frente.", "Field can continue with normal execution, but the next action should still confirm who receives and uses the asset at the front.");
 }
 
-function buildReleaseCheckpoint(machine: MachineItemContract | null) {
+function buildReleaseCheckpoint(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
-    return "Select a machine to verify the final checkpoint before release to field.";
+    return t("Selecciona una maquina para validar el punto final antes de liberar a campo.", "Select a machine to verify the final checkpoint before release to field.");
   }
 
   if (machine.criticalOpenFailures > 0) {
-    return "Critical failures must close before the asset can be treated as releasable for any front.";
+    return t("Las fallas criticas deben cerrar antes de tratar este activo como liberable para cualquier frente.", "Critical failures must close before the asset can be treated as releasable for any front.");
   }
 
   if (isMaintenanceOverdue(machine)) {
-    return "Maintenance exposure still needs an explicit go/no-go decision before this asset returns to normal dispatch.";
+    return t("La exposicion de mantenimiento todavia necesita una decision explicita de si sale o no antes de volver al despacho normal.", "Maintenance exposure still needs an explicit go/no-go decision before this asset returns to normal dispatch.");
   }
 
   if (machine.health === "watch") {
-    return "Release can happen only with an owner, supervision window and a clear next report-back to maintenance.";
+    return t("La liberacion solo puede ocurrir con responsable, ventana de supervision y un siguiente reporte claro a mantenimiento.", "Release can happen only with an owner, supervision window and a clear next report-back to maintenance.");
   }
 
-  return "The asset can be released if the operator, receiving front and next shift handoff are already confirmed.";
+  return t("El activo puede liberarse si ya estan confirmados operador, frente receptor y relevo del siguiente turno.", "The asset can be released if the operator, receiving front and next shift handoff are already confirmed.");
 }
 
-function buildDownstreamChain(machine: MachineItemContract | null) {
+function buildDownstreamChain(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
-    return "Select a machine to visualize the next downstream chain.";
+    return t("Selecciona una maquina para visualizar la cadena aguas abajo.", "Select a machine to visualize the next downstream chain.");
   }
 
   if (machine.status === "down") {
-    return "Equipment -> Field replanning -> Daily log -> Operations follow-up";
+    return t("Equipos -> Replaneacion de campo -> Bitacora diaria -> Seguimiento de operaciones", "Equipment -> Field replanning -> Daily log -> Operations follow-up");
   }
 
   if (machine.status === "maintenance") {
-    return "Equipment -> Inventory movements -> Field confirmation -> Daily log";
+    return t("Equipos -> Movimientos de inventario -> Confirmacion de campo -> Bitacora diaria", "Equipment -> Inventory movements -> Field confirmation -> Daily log");
   }
 
   if (machine.health === "watch") {
-    return "Equipment -> Field supervision -> Quality or daily log verification";
+    return t("Equipos -> Supervision de campo -> Calidad o validacion en bitacora", "Equipment -> Field supervision -> Quality or daily log verification");
   }
 
-  return "Equipment -> Field execution -> Daily log closeout";
+  return t("Equipos -> Ejecucion de campo -> Cierre de bitacora", "Equipment -> Field execution -> Daily log closeout");
 }
 
-function buildOperatingBottleneck(machine: MachineItemContract | null) {
+function buildOperatingBottleneck(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
-    return "Select a machine to identify the main operational bottleneck.";
+    return t("Selecciona una maquina para identificar el cuello operativo principal.", "Select a machine to identify the main operational bottleneck.");
   }
 
   if (machine.criticalOpenFailures > 0) {
-    return "Critical failures are the main bottleneck and block normal dispatch.";
+    return t("Las fallas criticas son el principal cuello y bloquean el despacho normal.", "Critical failures are the main bottleneck and block normal dispatch.");
   }
 
   if (isMaintenanceOverdue(machine)) {
-    return "Overdue maintenance is the main bottleneck and still limits safe release.";
+    return t("El mantenimiento vencido es el principal cuello y todavia limita una liberacion segura.", "Overdue maintenance is the main bottleneck and still limits safe release.");
   }
 
   if (machine.health === "watch") {
-    return "Condition watch is the main bottleneck; field can continue only with closer supervision.";
+    return t("La condicion en vigilancia es el principal cuello; campo solo puede continuar con supervision mas cercana.", "Condition watch is the main bottleneck; field can continue only with closer supervision.");
   }
 
-  return "No hard bottleneck is visible; the main task is disciplined release and front handoff.";
+  return t("No se ve un cuello duro; la tarea principal es liberar con disciplina y cerrar el relevo al frente.", "No hard bottleneck is visible; the main task is disciplined release and front handoff.");
 }
 
-function buildImmediateCommand(machine: MachineItemContract | null) {
+function buildImmediateCommand(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
-    return "Select a machine to see the immediate command.";
+    return t("Selecciona una maquina para ver la instruccion inmediata.", "Select a machine to see the immediate command.");
   }
 
   if (machine.status === "down") {
-    return "Protect the front, isolate the asset and trigger replacement or resequencing now.";
+    return t("Protege el frente, aisla el activo y dispara ahora mismo reemplazo o replaneacion.", "Protect the front, isolate the asset and trigger replacement or resequencing now.");
   }
 
   if (machine.status === "maintenance") {
-    return "Close the maintenance gate, confirm release criteria and tell field whether the front pauses or continues around it.";
+    return t("Cierra la puerta de mantenimiento, confirma criterios de liberacion y avisa a campo si el frente pausa o continua.", "Close the maintenance gate, confirm release criteria and tell field whether the front pauses or continues around it.");
   }
 
   if (machine.health === "watch") {
-    return "Release only with owner, monitoring window and clear report-back to maintenance and field.";
+    return t("Libera solo con responsable, ventana de monitoreo y reporte claro a mantenimiento y campo.", "Release only with owner, monitoring window and clear report-back to maintenance and field.");
   }
 
-  return "Confirm operator, receiving front and next-shift handoff, then release the asset into execution.";
+  return t("Confirma operador, frente receptor y relevo del siguiente turno; despues libera el activo a ejecucion.", "Confirm operator, receiving front and next-shift handoff, then release the asset into execution.");
 }
 
-function buildCommandOwner(machine: MachineItemContract | null) {
+function buildCommandOwner(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
-    return "Select a machine to identify the current owner.";
+    return t("Selecciona una maquina para identificar al responsable actual.", "Select a machine to identify the current owner.");
   }
 
   if (machine.status === "down") {
-    return "Maintenance lead with field supervision";
+    return t("Lider de mantenimiento con supervision de campo", "Maintenance lead with field supervision");
   }
 
   if (machine.status === "maintenance") {
-    return "Maintenance lead and dispatch coordinator";
+    return t("Lider de mantenimiento y coordinador de despacho", "Maintenance lead and dispatch coordinator");
   }
 
   if (machine.health === "watch") {
-    return "Dispatch coordinator with resident engineer";
+    return t("Coordinador de despacho con residente de obra", "Dispatch coordinator with resident engineer");
   }
 
-  return "Dispatch coordinator and receiving front owner";
+  return t("Coordinador de despacho y responsable del frente receptor", "Dispatch coordinator and receiving front owner");
 }
 
-function buildDispatchConfirmation(machine: MachineItemContract | null) {
+function buildDispatchConfirmation(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
-    return "Select a machine to define the required confirmation.";
+    return t("Selecciona una maquina para definir la confirmacion requerida.", "Select a machine to define the required confirmation.");
   }
 
   if (machine.status === "down") {
-    return "Confirm replacement plan or resequencing before the next field cutoff.";
+    return t("Confirma el plan de reemplazo o la resecuenciacion antes del siguiente corte de campo.", "Confirm replacement plan or resequencing before the next field cutoff.");
   }
 
   if (machine.status === "maintenance") {
-    return "Confirm release criteria, operator handoff and whether the front pauses or continues around maintenance.";
+    return t("Confirma criterios de liberacion, relevo de operador y si el frente pausa o continua alrededor del mantenimiento.", "Confirm release criteria, operator handoff and whether the front pauses or continues around maintenance.");
   }
 
   if (machine.health === "watch") {
-    return "Confirm monitoring window, escalation threshold and report-back timing for the next shift.";
+    return t("Confirma la ventana de monitoreo, el umbral de escalamiento y el momento del siguiente reporte para el turno.", "Confirm monitoring window, escalation threshold and report-back timing for the next shift.");
   }
 
-  return "Confirm operator, front receiver and daily-log handoff before releasing the asset.";
+  return t("Confirma operador, frente receptor y relevo en bitacora antes de liberar el activo.", "Confirm operator, front receiver and daily-log handoff before releasing the asset.");
 }
 
 function buildReportBackWindow(machine: MachineItemContract | null) {
@@ -673,41 +972,41 @@ function buildEquipmentOperationalLinks(machine: MachineItemContract | null) {
   ];
 }
 
-function buildDispatchPacketStatus(machine: MachineItemContract | null) {
+function buildDispatchPacketStatus(machine: MachineItemContract | null, t: TranslateFn) {
   if (!machine) {
     return {
       tone: "info" as const,
-      label: "Select an asset",
-      summary: "Choose a machine to summarize dispatch status."
+      label: t("Selecciona un activo", "Select an asset"),
+      summary: t("Elige una maquina para resumir el estado de despacho.", "Choose a machine to summarize dispatch status.")
     };
   }
 
   if (machine.status === "down" || machine.criticalOpenFailures > 0) {
     return {
       tone: "danger" as const,
-      label: "Dispatch blocked",
-      summary: "The asset should not leave control until failures or replacement decisions are closed."
+      label: t("Despacho bloqueado", "Dispatch blocked"),
+      summary: t("El activo no debe salir de control hasta cerrar fallas o decisiones de reemplazo.", "The asset should not leave control until failures or replacement decisions are closed.")
     };
   }
 
   if (machine.status === "maintenance" || isMaintenanceOverdue(machine) || machine.health === "watch") {
     return {
       tone: "warning" as const,
-      label: "Dispatch under watch",
-      summary: "The asset can only move with explicit supervision, confirmation and report-back discipline."
+      label: t("Despacho en vigilancia", "Dispatch under watch"),
+      summary: t("El activo solo puede moverse con supervision explicita, confirmacion y disciplina de reporte.", "The asset can only move with explicit supervision, confirmation and report-back discipline.")
     };
   }
 
   return {
     tone: "success" as const,
-    label: "Dispatch aligned",
-    summary: "The asset is close to operational release if front, operator and handoff are confirmed."
+    label: t("Despacho alineado", "Dispatch aligned"),
+    summary: t("El activo esta cerca de la liberacion operativa si ya estan confirmados frente, operador y relevo.", "The asset is close to operational release if front, operator and handoff are confirmed.")
   };
 }
 
-function buildCrossPressureSummary(story: ReturnType<typeof buildEquipmentStory>) {
+function buildCrossPressureSummary(story: ReturnType<typeof buildEquipmentStory>, t: TranslateFn) {
   if (!story) {
-    return "Select a machine to review cross-pressure from inventory, materials and quality.";
+    return t("Selecciona una maquina para revisar la presion cruzada entre inventario, materiales y calidad.", "Select a machine to review cross-pressure from inventory, materials and quality.");
   }
 
   const signals = [
@@ -825,29 +1124,67 @@ function buildCreateMachineHumanStep(input: {
   maintenanceBacklog: number;
   criticalOpenFailures: number;
   nextAction: string;
-}) {
+}, t: TranslateFn) {
   if (input.criticalOpenFailures > 0) {
-    return "Contain the critical failure first so the machine does not open as dispatchable by mistake.";
+    return t("Conten primero la falla critica para que la maquina no se abra por error como despachable.", "Contain the critical failure first so the machine does not open as dispatchable by mistake.");
   }
 
   if (input.status === "maintenance" || input.maintenanceBacklog > 0 || input.nextMaintenanceHours <= 0) {
-    return "Create the asset only with an explicit maintenance closeout owner and release condition.";
+    return t("Crea el activo solo con un responsable explicito de cierre de mantenimiento y una condicion de liberacion.", "Create the asset only with an explicit maintenance closeout owner and release condition.");
   }
 
   if (input.health === "watch") {
-    return "Create the asset and assign same-shift supervision before sending it to the front.";
+    return t("Crea el activo y asigna supervision en el mismo turno antes de enviarlo al frente.", "Create the asset and assign same-shift supervision before sending it to the front.");
   }
 
   if (input.nextAction.trim().length < 8) {
-    return "Clarify the immediate maintenance or dispatch action before persisting the machine.";
+    return t("Aclara la accion inmediata de mantenimiento o despacho antes de persistir la maquina.", "Clarify the immediate maintenance or dispatch action before persisting the machine.");
   }
 
-  return "Create the machine and continue directly into field dispatch, movement support or quality follow-through.";
+  return t("Crea la maquina y continua directo hacia despacho de campo, soporte de movimientos o seguimiento de calidad.", "Create the machine and continue directly into field dispatch, movement support or quality follow-through.");
+}
+
+function localizeCreateMachineGateLabel(label: string) {
+  switch (label) {
+    case "Do not create yet":
+      return { es: "No crear todavia", en: "Do not create yet" };
+    case "Create with control":
+      return { es: "Crear con control", en: "Create with control" };
+    case "Ready to create":
+      return { es: "Lista para crear", en: "Ready to create" };
+    default:
+      return { es: label, en: label };
+  }
+}
+
+function localizeCreateMachineGateSummary(summary: string) {
+  switch (summary) {
+    case "This asset would open with a hard maintenance or safety blocker.":
+      return {
+        es: "Este activo abriria con un bloqueo duro de mantenimiento o seguridad.",
+        en: "This asset would open with a hard maintenance or safety blocker."
+      };
+    case "The machine can be created, but dispatch discipline still needs tightening.":
+      return {
+        es: "La maquina puede crearse, pero la disciplina de despacho todavia necesita apretarse.",
+        en: "The machine can be created, but dispatch discipline still needs tightening."
+      };
+    case "The machine has enough structure to enter equipment control cleanly.":
+      return {
+        es: "La maquina ya tiene estructura suficiente para entrar limpia al control de equipos.",
+        en: "The machine has enough structure to enter equipment control cleanly."
+      };
+    default:
+      return { es: summary, en: summary };
+  }
 }
 
 export default function EquipmentPage() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
+  const searchParams = useSearchParams();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
+  const t = (es: string, en: string) => localizeText({ es, en });
+  const contextualPreload = buildContextualPreload(searchParams);
   const [overview, setOverview] = useState<EquipmentOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<EquipmentBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -864,6 +1201,16 @@ export default function EquipmentPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState(createMachineEmptyForm);
+  const [activeContextualPreload, setActiveContextualPreload] = useState<EquipmentContextualPreload | null>(null);
+  const contextualPreloadRef = useRef<{
+    applied: boolean;
+    nextAction: string | null;
+    selectedMachineId: string | null;
+  }>({
+    applied: false,
+    nextAction: null,
+    selectedMachineId: null
+  });
   const createFormNumbers = useMemo(
     () => ({
       availabilityPercent: Number(createForm.availabilityPercent),
@@ -979,11 +1326,17 @@ export default function EquipmentPage() {
   }, [filteredMachines]);
 
   const equipmentStory = useMemo(() => {
-    return buildEquipmentStory(selectedMachine, bridgeContext);
-  }, [bridgeContext, selectedMachine]);
-  const dispatchReadiness = useMemo(() => buildDispatchReadiness(selectedMachine), [selectedMachine]);
-  const equipmentDestination = useMemo(() => buildEquipmentDestination(selectedMachine), [selectedMachine]);
-  const frontContinuity = useMemo(() => buildFrontContinuity(selectedMachine), [selectedMachine]);
+    return buildEquipmentStory(selectedMachine, bridgeContext, (es, en) => localizeText({ es, en }));
+  }, [bridgeContext, localizeText, selectedMachine]);
+  const dispatchReadiness = useMemo(
+    () => buildDispatchReadiness(selectedMachine, (es, en) => localizeText({ es, en })),
+    [localizeText, selectedMachine]
+  );
+  const equipmentDestination = useMemo(
+    () => buildEquipmentDestination(selectedMachine, (es, en) => localizeText({ es, en })),
+    [localizeText, selectedMachine]
+  );
+  const frontContinuity = useMemo(() => buildFrontContinuity(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
   const createMachineGate = useMemo(
     () =>
       buildCreateMachineGate({
@@ -1013,24 +1366,33 @@ export default function EquipmentPage() {
         maintenanceBacklog: createFormNumbers.maintenanceBacklog,
         criticalOpenFailures: createFormNumbers.criticalOpenFailures,
         nextAction: createForm.nextAction
-      }),
-    [createForm.health, createForm.nextAction, createForm.status, createFormNumbers]
+      }, (es, en) => localizeText({ es, en })),
+    [createForm.health, createForm.nextAction, createForm.status, createFormNumbers, localizeText]
   );
-  const fieldHandoff = useMemo(() => buildFieldHandoff(selectedMachine), [selectedMachine]);
-  const releaseCheckpoint = useMemo(() => buildReleaseCheckpoint(selectedMachine), [selectedMachine]);
-  const downstreamChain = useMemo(() => buildDownstreamChain(selectedMachine), [selectedMachine]);
-  const operatingBottleneck = useMemo(() => buildOperatingBottleneck(selectedMachine), [selectedMachine]);
-  const immediateCommand = useMemo(() => buildImmediateCommand(selectedMachine), [selectedMachine]);
-  const commandOwner = useMemo(() => buildCommandOwner(selectedMachine), [selectedMachine]);
-  const dispatchConfirmation = useMemo(() => buildDispatchConfirmation(selectedMachine), [selectedMachine]);
+  const fieldHandoff = useMemo(() => buildFieldHandoff(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
+  const releaseCheckpoint = useMemo(() => buildReleaseCheckpoint(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
+  const downstreamChain = useMemo(() => buildDownstreamChain(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
+  const operatingBottleneck = useMemo(() => buildOperatingBottleneck(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
+  const immediateCommand = useMemo(() => buildImmediateCommand(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
+  const commandOwner = useMemo(() => buildCommandOwner(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
+  const dispatchConfirmation = useMemo(() => buildDispatchConfirmation(selectedMachine, (es, en) => localizeText({ es, en })), [localizeText, selectedMachine]);
   const reportBackWindow = useMemo(() => buildReportBackWindow(selectedMachine), [selectedMachine]);
   const selectedWhyNow = useMemo(() => buildEquipmentWhyNow(selectedMachine), [selectedMachine]);
   const selectedDownstreamEffect = useMemo(() => buildEquipmentDownstreamEffect(selectedMachine), [selectedMachine]);
   const selectedHumanStep = useMemo(() => buildEquipmentHumanStep(selectedMachine), [selectedMachine]);
   const selectedRouteSummary = useMemo(() => buildEquipmentRouteSummary(selectedMachine), [selectedMachine]);
   const selectedOperationalLinks = useMemo(() => buildEquipmentOperationalLinks(selectedMachine), [selectedMachine]);
-  const dispatchPacketStatus = useMemo(() => buildDispatchPacketStatus(selectedMachine), [selectedMachine]);
-  const crossPressureSummary = useMemo(() => buildCrossPressureSummary(equipmentStory), [equipmentStory]);
+  const dispatchPacketStatus = useMemo(
+    () => buildDispatchPacketStatus(selectedMachine, (es, en) => localizeText({ es, en })),
+    [localizeText, selectedMachine]
+  );
+  const crossPressureSummary = useMemo(
+    () => buildCrossPressureSummary(equipmentStory, (es, en) => localizeText({ es, en })),
+    [equipmentStory, localizeText]
+  );
+  const equipmentActionFeedback = useMemo(() => resolveEquipmentFeedbackCopy(actionMessage), [actionMessage]);
+  const equipmentErrorFeedback = useMemo(() => resolveEquipmentFeedbackCopy(actionError), [actionError]);
+  const equipmentCreateFeedback = useMemo(() => resolveEquipmentFeedbackCopy(createMessage), [createMessage]);
 
   useEffect(() => {
     if (!overview) {
@@ -1047,6 +1409,36 @@ export default function EquipmentPage() {
       setSelectedMachineId(filteredMachines[0]?.id ?? null);
     }
   }, [filteredMachines, overview, selectedMachineId]);
+
+  useEffect(() => {
+    if (contextualPreloadRef.current.applied || !contextualPreload) {
+      return;
+    }
+
+    contextualPreloadRef.current.applied = true;
+    setActiveContextualPreload(contextualPreload);
+    setCreateForm((current) => ({
+      ...current,
+      projectName: contextualPreload.projectName || current.projectName,
+      frontName: contextualPreload.frontName || current.frontName,
+      owner: contextualPreload.owner || current.owner,
+      nextAction: contextualPreload.nextAction || current.nextAction
+    }));
+
+    if (!overview) {
+      return;
+    }
+
+    const relatedMachine = findRelatedMachine(overview, contextualPreload);
+
+    if (relatedMachine) {
+      contextualPreloadRef.current.selectedMachineId = relatedMachine.id;
+      setSelectedMachineId(relatedMachine.id);
+      if (contextualPreload.nextAction) {
+        contextualPreloadRef.current.nextAction = contextualPreload.nextAction;
+      }
+    }
+  }, [contextualPreload, overview]);
 
   const statusOptions = useMemo(() => {
     if (!selectedMachine) {
@@ -1139,10 +1531,27 @@ export default function EquipmentPage() {
   }, [selectedMachine]);
 
   useEffect(() => {
-    setNextActionDraft(selectedMachine?.nextAction ?? "");
+    if (
+      selectedMachine?.id &&
+      contextualPreloadRef.current.selectedMachineId === selectedMachine.id &&
+      contextualPreloadRef.current.nextAction
+    ) {
+      setNextActionDraft(contextualPreloadRef.current.nextAction);
+      contextualPreloadRef.current.selectedMachineId = null;
+      contextualPreloadRef.current.nextAction = null;
+    } else {
+      setNextActionDraft(selectedMachine?.nextAction ?? "");
+    }
     setActionError(null);
     setActionMessage(null);
   }, [selectedMachineId, selectedMachine?.id, selectedMachine?.nextAction]);
+
+  const isContextuallySelectedMachine = Boolean(
+    activeContextualPreload &&
+      selectedMachine &&
+      normalizeFieldValue(selectedMachine.projectName) === normalizeFieldValue(activeContextualPreload.projectName) &&
+      normalizeFieldValue(selectedMachine.frontName) === normalizeFieldValue(activeContextualPreload.frontName)
+  );
 
   async function handleMachineAction(
     status: MachineItemContract["status"],
@@ -1155,7 +1564,7 @@ export default function EquipmentPage() {
 
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
-      setActionError("Next action must be more specific before updating the machine.");
+      setActionError("EQUIPMENT_NEXT_ACTION_TOO_SHORT");
       return;
     }
 
@@ -1178,7 +1587,7 @@ export default function EquipmentPage() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Equipment update failed.");
+      setActionError(response.error?.code ?? response.error?.message ?? "EQUIPMENT_UPDATE_FAILED");
       setIsSaving(false);
       return;
     }
@@ -1187,7 +1596,7 @@ export default function EquipmentPage() {
 
     setOverview((current) => (current ? deriveOverview(current, updatedMachine) : current));
     setNextActionDraft(updatedMachine.nextAction);
-    setActionMessage(`Machine moved to ${updatedMachine.status} / ${updatedMachine.health}.`);
+    setActionMessage("EQUIPMENT_MACHINE_UPDATED");
     setIsSaving(false);
   }
 
@@ -1214,13 +1623,13 @@ export default function EquipmentPage() {
     };
 
     if (machineName.length < 3 || machineType.length < 3 || projectName.length < 3 || frontName.length < 3) {
-      setActionError("Machine, type, project and front must be specific before creating equipment.");
+      setActionError("EQUIPMENT_CREATE_FIELDS_INCOMPLETE");
       setCreateMessage(null);
       return;
     }
 
     if (nextAction.length < 8) {
-      setActionError("Next action must be more specific before creating the machine.");
+      setActionError("EQUIPMENT_NEXT_ACTION_TOO_SHORT");
       setCreateMessage(null);
       return;
     }
@@ -1260,7 +1669,7 @@ export default function EquipmentPage() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Equipment creation failed.");
+      setActionError(response.error?.code ?? response.error?.message ?? "EQUIPMENT_CREATE_FAILED");
       setIsCreating(false);
       return;
     }
@@ -1269,7 +1678,7 @@ export default function EquipmentPage() {
     setOverview((current) => (current ? deriveOverview(current, newMachine) : current));
     setSelectedMachineId(newMachine.id);
     setNextActionDraft(newMachine.nextAction);
-    setCreateMessage(`${newMachine.code} added to the equipment workbench.`);
+    setCreateMessage("EQUIPMENT_MACHINE_CREATED");
     setCreateForm({
       ...createMachineEmptyForm(),
       machineType: createForm.machineType,
@@ -1282,119 +1691,250 @@ export default function EquipmentPage() {
 
   return (
     <AppShell
-      title="Equipment and maintenance"
-      eyebrow="Execution domain"
-      description="Machinery availability, operating hours, failures and maintenance readiness tied to active fronts."
+      title={t("Equipos y mantenimiento", "Equipment and maintenance")}
+      eyebrow={t("Dominio de ejecucion", "Execution domain")}
+      description={t(
+        "Disponibilidad de maquinaria, horas de operacion, fallas y liberacion de mantenimiento conectadas con frentes activos.",
+        "Machinery availability, operating hours, failures and maintenance readiness tied to active fronts."
+      )}
     >
-      <ModuleGate moduleKeys={["inventory.equipment"]} requiredPermissions={["inventory:*"]} title="Equipment">
+      <ModuleGate moduleKeys={["inventory.equipment"]} requiredPermissions={["inventory:*"]} title={t("Equipos", "Equipment")}>
         {overview ? (
           <>
             <section className="grid cols4">
               <KpiCard
-                label="Tracked machines"
+                label={t("Maquinas controladas", "Tracked machines")}
                 value={filteredSummary.trackedMachines.toLocaleString()}
-                footnote="Equipment units currently controlled in the active tenant."
+                footnote={t("Unidades de equipo actualmente controladas en el tenant activo.", "Equipment units currently controlled in the active tenant.")}
               />
               <KpiCard
-                label="Available"
+                label={t("Disponibles", "Available")}
                 value={String(filteredSummary.availableMachines)}
-                footnote="Machines ready for dispatch without open blocking conditions."
+                footnote={t("Maquinas listas para despacho sin bloqueos abiertos.", "Machines ready for dispatch without open blocking conditions.")}
               />
               <KpiCard
-                label="Overdue maintenance"
+                label={t("Mantenimiento vencido", "Overdue maintenance")}
                 value={String(filteredSummary.overdueMaintenance)}
-                footnote="Units that still cannot clear maintenance exposure."
+                footnote={t("Unidades que todavia no pueden liberar su exposicion de mantenimiento.", "Units that still cannot clear maintenance exposure.")}
               />
               <KpiCard
-                label="Critical failures"
+                label={t("Fallas criticas", "Critical failures")}
                 value={String(filteredSummary.criticalOpenFailures)}
-                footnote="Open critical breakdown signals across the active fleet."
+                footnote={t("Senales criticas de averia abiertas en la flotilla activa.", "Open critical breakdown signals across the active fleet.")}
               />
               <KpiCard
-                label="Affected fronts"
+                label={t("Frentes afectados", "Affected fronts")}
                 value={String(affectedFronts)}
-                footnote="Active fronts currently exposed to equipment downtime, maintenance or degraded health."
+                footnote={t("Frentes activos hoy expuestos a paro, mantenimiento o salud degradada del equipo.", "Active fronts currently exposed to equipment downtime, maintenance or degraded health.")}
               />
             </section>
 
             {isDemoMode ? (
               <Card
-                title="Operable demo mode"
-                description="Equipment actions are persisted locally in this browser so field and maintenance flows can be tested immediately."
-                aside={<Badge tone="warning">browser-persisted</Badge>}
+                title={t("Modo demo operable", "Operable demo mode")}
+                description={t(
+                  "Las acciones sobre equipo se guardan localmente en este navegador para probar de inmediato flujos de mantenimiento y campo.",
+                  "Equipment actions are persisted locally in this browser so field and maintenance flows can be tested immediately."
+                )}
+                aside={<Badge tone="warning">{t("persistido en navegador", "browser persisted")}</Badge>}
               >
                 <div className="detailGrid">
                   <div className="detailRow">
-                    <div className="detailLabel">What works</div>
-                    <div>Teams can inspect machines, change status or health, and register new assets without waiting for production auth.</div>
+                    <div className="detailLabel">{t("Que ya funciona", "What already works")}</div>
+                    <div>{t("Los equipos pueden inspeccionarse, cambiar estado o salud y registrar nuevos activos sin esperar auth productivo.", "Teams can inspect machines, change status or health, and register new assets without waiting for production auth.")}</div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Recommended test</div>
-                    <div>Move one machine from maintenance to available, then create a new asset tied to an active project front.</div>
+                    <div className="detailLabel">{t("Prueba recomendada", "Recommended test")}</div>
+                    <div>{t("Mueve una maquina de mantenimiento a disponible y luego registra un nuevo activo ligado a un frente activo.", "Move one machine from maintenance to available, then create a new asset tied to an active project front.")}</div>
                   </div>
                 </div>
               </Card>
             ) : null}
 
-            <section className="grid cols3">
+            <section className="grid cols2">
               <Card
-                title="Equipment workflow"
-                description="Equipment should connect maintenance, inventory support and field release in one operating route."
-                aside={<Badge tone={filteredSummary.criticalOpenFailures > 0 ? "danger" : filteredSummary.overdueMaintenance > 0 ? "warning" : "success"}>{filteredSummary.criticalOpenFailures > 0 ? "critical lane" : filteredSummary.overdueMaintenance > 0 ? "maintenance watch" : "stable lane"}</Badge>}
+                title={t("Consola de despacho", "Dispatch console")}
+                description={t(
+                  "Lectura rapida para decidir si el activo sale a obra, se contiene o se manda a mantenimiento.",
+                  "Fast read to decide whether the asset goes to site, is contained, or moves into maintenance."
+                )}
+                aside={
+                  <div className="tableCellStack">
+                    <Badge tone={dispatchReadiness.tone}>{dispatchReadiness.label}</Badge>
+                  </div>
+                }
               >
-                <div className="detailGrid">
-                  <div className="detailRow"><div className="detailLabel">Asset readiness</div><div>Availability alone is not enough; maintenance and failure posture decide if a machine is truly dispatchable.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Material continuity</div><div>Equipment lanes should stay aligned with inbound material and site movements when the front depends on both.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Field release</div><div>After stabilizing the machine, operators should jump directly into field or quality follow-up instead of stopping in maintenance only.</div></div>
-                </div>
+                {selectedMachine ? (
+                  <div className="detailGrid">
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Activo", "Asset")}</div>
+                      <div className="tableCellStack">
+                        <strong>{selectedMachine.machineName}</strong>
+                        <span className="tableCellMuted">{selectedMachine.code} · {selectedMachine.machineType}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Frente actual", "Current front")}</div>
+                      <div>{selectedMachine.projectName} · {selectedMachine.frontName}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Postura", "Posture")}</div>
+                      <div className="row gap wrap">
+                        <Badge tone={statusTone(selectedMachine.status)}>{localizeText(equipmentStatusLabel(selectedMachine.status))}</Badge>
+                        <Badge tone={healthTone(selectedMachine.health)}>{localizeText(equipmentHealthLabel(selectedMachine.health))}</Badge>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Siguiente ruta", "Next route")}</div>
+                      <div className="tableCellStack">
+                        <strong>{equipmentDestination.label}</strong>
+                        <span className="tableCellMuted">{equipmentDestination.description}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Siguiente accion", "Next action")}</div>
+                      <div>{nextActionDraft || selectedMachine.nextAction}</div>
+                    </div>
+                    {activeContextualPreload ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">{contextualPreloadTitle(activeContextualPreload, t)}</div>
+                        <div className="tableCellStack">
+                          <span>
+                            {[activeContextualPreload.projectName, activeContextualPreload.frontName].filter(Boolean).join(" · ") ||
+                              contextualPreloadOperationalSummary(activeContextualPreload, t)}
+                          </span>
+                          {activeContextualPreload.owner ? (
+                            <span className="tableCellMuted">
+                              {t("Responsable sugerido", "Suggested owner")}: {activeContextualPreload.owner}
+                            </span>
+                          ) : null}
+                          {activeContextualPreload.nextAction ? (
+                            <span className="tableCellMuted">
+                              {t("Siguiente accion sugerida", "Suggested next action")}: {activeContextualPreload.nextAction}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title={t("Sin activo seleccionado", "No asset selected")}
+                    description={t("Selecciona una maquina para decidir despacho, contencion o mantenimiento.", "Select a machine to decide dispatch, containment or maintenance.")}
+                    primaryAction={{ label: t("Seguir en equipos", "Stay on equipment"), href: "/equipment" }}
+                  />
+                )}
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
-                  <Link className="button" href="/inventory/movements">Open movements</Link>
-                  <Link className="buttonGhost" href="/inventory/receiving">Open receiving</Link>
-                  <Link className="buttonGhost" href="/field">Open field</Link>
+                  <Link className="button secondary" href={equipmentDestination.href}>{equipmentDestination.label}</Link>
+                  {selectedOperationalLinks.slice(0, 2).map((link) => (
+                    <Link key={`${link.href}-${link.label}`} className="buttonGhost" href={link.href}>
+                      {localizeText(equipmentLinkLabel(link.label))}
+                    </Link>
+                  ))}
                 </div>
               </Card>
 
-              <Card title="Field execution impact" description="What the selected asset means for active production fronts.">
+              <Card
+                title={t("Alta rapida de maquinaria", "Quick machine intake")}
+                description={t(
+                  "Arranca pruebas con presets reales para despacho, mantenimiento o averia critica.",
+                  "Start walkthroughs with realistic presets for dispatch, maintenance or critical breakdown."
+                )}
+              >
+                <div className="detailGrid">
+                  {activeContextualPreload ? (
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Prelectura operativa", "Operational pre-read")}</div>
+                      <div className="tableCellStack">
+                        <strong>
+                          {[activeContextualPreload.projectName, activeContextualPreload.frontName].filter(Boolean).join(" · ") ||
+                            contextualPreloadSummary(activeContextualPreload, t)}
+                        </strong>
+                        {activeContextualPreload.owner ? <span className="tableCellMuted">{activeContextualPreload.owner}</span> : null}
+                        {activeContextualPreload.nextAction ? <span className="tableCellMuted">{activeContextualPreload.nextAction}</span> : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="detailRow">
+                    <div className="detailLabel">{t("Chequeo previo", "Pre-check")}</div>
+                    <div className="tableCellStack">
+                      <Badge tone={createMachineGate.tone}>{localizeText(localizeCreateMachineGateLabel(createMachineGate.label))}</Badge>
+                      <span className="tableCellMuted">{localizeText(localizeCreateMachineGateSummary(createMachineGate.summary))}</span>
+                    </div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">{t("Siguiente relevo", "Next handoff")}</div>
+                    <div>{createMachineHumanStep}</div>
+                  </div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachineExample())}>{t("Ejemplo demo", "Demo example")}</button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("dispatch_ready"))}>{t("Preset despacho", "Dispatch preset")}</button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("maintenance_hold"))}>{t("Preset mantenimiento", "Maintenance preset")}</button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("critical_breakdown"))}>{t("Preset averia", "Breakdown preset")}</button>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card
+                title={t("Flujo de equipo", "Equipment workflow")}
+                description={t("El equipo debe conectar mantenimiento, soporte de inventario y liberacion a campo en una sola ruta operativa.", "Equipment should connect maintenance, inventory support and field release in one operating route.")}
+                aside={<Badge tone={filteredSummary.criticalOpenFailures > 0 ? "danger" : filteredSummary.overdueMaintenance > 0 ? "warning" : "success"}>{filteredSummary.criticalOpenFailures > 0 ? t("carril critico", "critical lane") : filteredSummary.overdueMaintenance > 0 ? t("mantenimiento en vigilancia", "maintenance watch") : t("carril estable", "stable lane")}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">{t("Liberacion de activo", "Asset readiness")}</div><div>{t("La disponibilidad sola no basta; mantenimiento y fallas deciden si una maquina realmente puede despacharse.", "Availability alone is not enough; maintenance and failure posture decide if a machine is truly dispatchable.")}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Continuidad material", "Material continuity")}</div><div>{t("El carril de equipo debe seguir alineado con materiales entrantes y movimientos cuando el frente depende de ambos.", "Equipment lanes should stay aligned with inbound material and site movements when the front depends on both.")}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Liberacion a campo", "Field release")}</div><div>{t("Despues de estabilizar la maquina, el operador debe saltar directo a campo o calidad y no quedarse atorado solo en mantenimiento.", "After stabilizing the machine, operators should jump directly into field or quality follow-up instead of stopping in maintenance only.")}</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/inventory/movements">{t("Abrir movimientos", "Open movements")}</Link>
+                  <Link className="buttonGhost" href="/inventory/receiving">{t("Abrir recepcion", "Open receiving")}</Link>
+                  <Link className="buttonGhost" href="/field">{t("Abrir campo", "Open field")}</Link>
+                </div>
+              </Card>
+
+              <Card title={t("Impacto en campo", "Field execution impact")} description={t("Que significa este activo para los frentes activos de produccion.", "What the selected asset means for active production fronts.")}>
                 <p className="sectionText">
-                  {equipmentStory?.fieldImpact ?? "Choose an asset to inspect its field execution impact."}
+                  {equipmentStory?.fieldImpact ?? t("Selecciona un activo para revisar su impacto en campo.", "Choose an asset to inspect its field execution impact.")}
                 </p>
               </Card>
-              <Card title="Maintenance pressure" description="Immediate maintenance posture for the selected machine.">
+              <Card title={t("Presion de mantenimiento", "Maintenance pressure")} description={t("Postura inmediata de mantenimiento para la maquina seleccionada.", "Immediate maintenance posture for the selected machine.")}>
                 <p className="sectionText">
-                  {equipmentStory?.maintenanceSignal ?? "Choose an asset to inspect its maintenance pressure."}
+                  {equipmentStory?.maintenanceSignal ?? t("Selecciona un activo para revisar su presion de mantenimiento.", "Choose an asset to inspect its maintenance pressure.")}
                 </p>
               </Card>
-              <Card title="Critical asset for today" description="Fast read for dispatch, resident engineers and field supervisors.">
+              <Card title={t("Activo critico de hoy", "Critical asset for today")} description={t("Lectura rapida para despacho, residentes y supervision de campo.", "Fast read for dispatch, resident engineers and field supervisors.")}>
                 <p className="sectionText">
-                  {equipmentStory?.criticalAsset ?? "Choose an asset to inspect today's critical condition."}
+                  {equipmentStory?.criticalAsset ?? t("Selecciona un activo para revisar su condicion critica de hoy.", "Choose an asset to inspect today's critical condition.")}
                 </p>
               </Card>
-              <Card title="Inventory dependency" description="Warehouse and material-handling pressure attached to this asset lane.">
+              <Card title={t("Dependencia de inventario", "Inventory dependency")} description={t("Presion de almacen y maniobras ligada a este carril de equipo.", "Warehouse and material-handling pressure attached to this asset lane.")}>
                 <p className="sectionText">
-                  {equipmentStory?.inventoryDependency ?? "Choose an asset to inspect inventory dependency."}
+                  {equipmentStory?.inventoryDependency ?? t("Selecciona un activo para revisar la dependencia de inventario.", "Choose an asset to inspect inventory dependency.")}
                 </p>
               </Card>
-              <Card title="Material request pressure" description="Whether the front already carries a live supply request tied to this asset lane.">
+              <Card title={t("Presion por solicitud de material", "Material request pressure")} description={t("Si el frente ya carga una solicitud viva de suministro ligada a este carril.", "Whether the front already carries a live supply request tied to this asset lane.")}>
                 <p className="sectionText">
-                  {equipmentStory?.materialPressure ?? "Choose an asset to inspect field material pressure."}
+                  {equipmentStory?.materialPressure ?? t("Selecciona un activo para revisar la presion de material en campo.", "Choose an asset to inspect field material pressure.")}
                 </p>
               </Card>
-              <Card title="Quality constraint" description="Release and corrective-work signal around the selected machine.">
+              <Card title={t("Restriccion de calidad", "Quality constraint")} description={t("Senal de liberacion y correccion alrededor de la maquina seleccionada.", "Release and corrective-work signal around the selected machine.")}>
                 <p className="sectionText">
-                  {equipmentStory?.qualityConstraint ?? "Choose an asset to inspect quality constraints."}
+                  {equipmentStory?.qualityConstraint ?? t("Selecciona un activo para revisar sus restricciones de calidad.", "Choose an asset to inspect quality constraints.")}
                 </p>
               </Card>
             </section>
 
             <section className="grid cols3">
               <Card
-                title="Dispatch readiness"
-                description="Whether the selected machine can truly leave maintenance control and support field execution."
+                title={t("Listo para despacho", "Dispatch readiness")}
+                description={t("Si la maquina seleccionada realmente puede salir de control de mantenimiento y soportar ejecucion de campo.", "Whether the selected machine can truly leave maintenance control and support field execution.")}
                 aside={<Badge tone={dispatchReadiness.tone}>{dispatchReadiness.label}</Badge>}
               >
                 <p className="sectionText">{dispatchReadiness.description}</p>
               </Card>
-              <Card title="Next route" description="Best module to continue the machine workflow from the current blocker.">
+              <Card title={t("Siguiente ruta", "Next route")} description={t("Mejor modulo para continuar el flujo de la maquina desde el bloqueo actual.", "Best module to continue the machine workflow from the current blocker.")}>
                 <p className="sectionText">{equipmentDestination.description}</p>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <Link className="button secondary" href={equipmentDestination.href}>
@@ -1402,105 +1942,105 @@ export default function EquipmentPage() {
                   </Link>
                 </div>
               </Card>
-              <Card title="Dispatcher checklist" description="Minimum controls before releasing machinery to the front.">
+              <Card title={t("Checklist de despacho", "Dispatcher checklist")} description={t("Controles minimos antes de liberar maquinaria al frente.", "Minimum controls before releasing machinery to the front.")}>
                 <div className="detailGrid">
-                  <div className="detailRow"><div className="detailLabel">Failures</div><div>No critical failures open for a machine that will be dispatched.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Maintenance</div><div>Do not release overdue maintenance without an explicit operational decision.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Follow-up</div><div>Every machine needs a next action that tells maintenance or field what happens next.</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Fallas", "Failures")}</div><div>{t("No debe haber fallas criticas abiertas en una maquina que se va a despachar.", "No critical failures open for a machine that will be dispatched.")}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Mantenimiento", "Maintenance")}</div><div>{t("No liberes mantenimiento vencido sin una decision operativa explicita.", "Do not release overdue maintenance without an explicit operational decision.")}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Seguimiento", "Follow-up")}</div><div>{t("Toda maquina necesita una siguiente accion que indique a mantenimiento o campo que ocurre despues.", "Every machine needs a next action that tells maintenance or field what happens next.")}</div></div>
                 </div>
               </Card>
             </section>
 
             <section className="grid cols2">
               <Card
-                title="Front continuity"
-                description="How the selected asset is shaping real execution continuity at the front."
-                aside={<Badge tone={frontContinuity.label === "Front exposed" ? "danger" : frontContinuity.label === "Front at risk" || frontContinuity.label === "Front under watch" ? "warning" : "success"}>{frontContinuity.label}</Badge>}
+                title={t("Continuidad del frente", "Front continuity")}
+                description={t("Como el activo seleccionado esta moldeando la continuidad real de ejecucion en el frente.", "How the selected asset is shaping real execution continuity at the front.")}
+                aside={<Badge tone={frontContinuity.key === "exposed" ? "danger" : frontContinuity.key === "risk" || frontContinuity.key === "watch" ? "warning" : "success"}>{localizeText(frontContinuityLabel(frontContinuity.key))}</Badge>}
               >
                 <p className="sectionText">{frontContinuity.description}</p>
               </Card>
-              <Card title="Field handoff" description="What field teams should do next once equipment status is known.">
+              <Card title={t("Relevo a campo", "Field handoff")} description={t("Que debe hacer campo una vez que ya se conoce el estado del equipo.", "What field teams should do next once equipment status is known.")}>
                 <p className="sectionText">{fieldHandoff}</p>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <Link className="button secondary" href="/field">
-                    Open field
+                    {t("Abrir campo", "Open field")}
                   </Link>
                   <Link className="buttonGhost" href="/daily-log">
-                    Open daily log
+                    {t("Abrir bitacora diaria", "Open daily log")}
                   </Link>
                 </div>
               </Card>
             </section>
 
             <section className="grid cols2">
-              <Card title="Release checkpoint" description="Final gate before the machine is treated as truly usable in field.">
+              <Card title={t("Punto final de liberacion", "Release checkpoint")} description={t("Puerta final antes de tratar la maquina como realmente utilizable en campo.", "Final gate before the machine is treated as truly usable in field.")}>
                 <p className="sectionText">{releaseCheckpoint}</p>
               </Card>
-              <Card title="Downstream chain" description="What operational chain should happen after the equipment decision.">
+              <Card title={t("Cadena aguas abajo", "Downstream chain")} description={t("Que cadena operativa debe ocurrir despues de la decision sobre equipo.", "What operational chain should happen after the equipment decision.")}>
                 <p className="sectionText">{downstreamChain}</p>
               </Card>
             </section>
 
             <section className="grid cols2">
-              <Card title="Operating bottleneck" description="The main reason this asset is still pressuring execution right now.">
+              <Card title={t("Cuello operativo", "Operating bottleneck")} description={t("La razon principal por la que este activo sigue presionando la ejecucion ahora mismo.", "The main reason this asset is still pressuring execution right now.")}>
                 <p className="sectionText">{operatingBottleneck}</p>
               </Card>
-              <Card title="Immediate command" description="What dispatch, maintenance or field should do now without further interpretation.">
+              <Card title={t("Comando inmediato", "Immediate command")} description={t("Lo que despacho, mantenimiento o campo debe hacer ahora sin mas interpretacion.", "What dispatch, maintenance or field should do now without further interpretation.")}>
                 <p className="sectionText">{immediateCommand}</p>
               </Card>
             </section>
 
             <section className="grid cols2">
-              <Card title="Fleet posture" description="Availability, maintenance and utilization by machine.">
-                <FilterBar summary={`${filteredMachines.length} machines match the current operating filters`}>
+              <Card title={t("Bandeja de flotilla", "Fleet posture")} description={t("Disponibilidad, mantenimiento y utilizacion por maquina.", "Availability, maintenance and utilization by machine.")}>
+                <FilterBar summary={localizeText({ es: `${filteredMachines.length} maquinas coinciden con los filtros operativos actuales`, en: `${filteredMachines.length} machines match the current operating filters` })}>
                   <label className="fieldLabel">
-                    Status
+                    {t("Estado", "Status")}
                     <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
-                      <option value="all">All</option>
-                      <option value="available">Available</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="down">Down</option>
+                      <option value="all">{t("Todos", "All")}</option>
+                      <option value="available">{localizeText(equipmentStatusLabel("available"))}</option>
+                      <option value="maintenance">{localizeText(equipmentStatusLabel("maintenance"))}</option>
+                      <option value="down">{localizeText(equipmentStatusLabel("down"))}</option>
                     </select>
                   </label>
                   <label className="fieldLabel">
-                    Health
+                    {t("Salud", "Health")}
                     <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
-                      <option value="all">All</option>
-                      <option value="healthy">Healthy</option>
-                      <option value="watch">Watch</option>
-                      <option value="critical">Critical</option>
+                      <option value="all">{t("Todas", "All")}</option>
+                      <option value="healthy">{localizeText(equipmentHealthLabel("healthy"))}</option>
+                      <option value="watch">{localizeText(equipmentHealthLabel("watch"))}</option>
+                      <option value="critical">{localizeText(equipmentHealthLabel("critical"))}</option>
                     </select>
                   </label>
                   <label className="fieldLabel" style={{ minWidth: 220 }}>
-                    Project / front
+                    {t("Proyecto / frente", "Project / front")}
                     <input
                       className="field"
                       type="search"
                       value={projectFilter}
                       onChange={(event) => setProjectFilter(event.target.value)}
-                      placeholder="Project or front"
+                      placeholder={t("Proyecto o frente", "Project or front")}
                     />
                   </label>
                   <label className="fieldLabel" style={{ minWidth: 220 }}>
-                    Asset search
+                    {t("Busqueda de activo", "Asset search")}
                     <input
                       className="field"
                       type="search"
                       value={searchFilter}
                       onChange={(event) => setSearchFilter(event.target.value)}
-                      placeholder="Machine, type, code or action"
+                      placeholder={t("Maquina, tipo, codigo o accion", "Machine, type, code or action")}
                     />
                   </label>
                   <Badge tone={isDemoMode ? "warning" : "success"}>
-                    {isDemoMode ? "demo operable" : "live backend"}
+                    {isDemoMode ? t("demo operable", "operable demo") : t("backend activo", "live backend")}
                   </Badge>
-                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "equipment ready"}</Badge>
+                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? t("actualizando", "refreshing") : t("equipo listo", "equipment ready")}</Badge>
                   <Badge tone={filteredSummary.criticalOpenFailures > 0 ? "danger" : filteredSummary.overdueMaintenance > 0 ? "warning" : "success"}>
                     {filteredSummary.criticalOpenFailures > 0
-                      ? `${filteredSummary.criticalOpenFailures} critical failures`
+                      ? localizeText({ es: `${filteredSummary.criticalOpenFailures} fallas criticas`, en: `${filteredSummary.criticalOpenFailures} critical failures` })
                       : filteredSummary.overdueMaintenance > 0
-                        ? `${filteredSummary.overdueMaintenance} overdue`
-                        : "visible subset controlled"}
+                        ? localizeText({ es: `${filteredSummary.overdueMaintenance} vencidas`, en: `${filteredSummary.overdueMaintenance} overdue` })
+                        : t("subset visible controlado", "visible subset controlled")}
                   </Badge>
                 </FilterBar>
                 <DataTable
@@ -1508,7 +2048,7 @@ export default function EquipmentPage() {
                   columns={[
                     {
                       key: "machine",
-                      label: "Machine",
+                      label: t("Maquina", "Machine"),
                       render: (row) => (
                         <button
                           className="buttonGhost"
@@ -1525,7 +2065,7 @@ export default function EquipmentPage() {
                     },
                     {
                       key: "front",
-                      label: "Front",
+                      label: t("Frente", "Front"),
                       render: (row) => (
                         <div className="tableCellStack">
                           <strong>{row.projectName}</strong>
@@ -1535,21 +2075,21 @@ export default function EquipmentPage() {
                     },
                     {
                       key: "hours",
-                      label: "Hours",
+                      label: t("Horas", "Hours"),
                       render: (row) => (
                         <div className="tableCellStack">
                           <strong>{row.hourMeter.toLocaleString()} h</strong>
-                          <span className="tableCellMuted">{row.nextMaintenanceHours} h to next service</span>
+                          <span className="tableCellMuted">{localizeText({ es: `${row.nextMaintenanceHours} h al siguiente servicio`, en: `${row.nextMaintenanceHours} h to next service` })}</span>
                         </div>
                       )
                     },
                     {
                       key: "status",
-                      label: "Status",
+                      label: t("Estado", "Status"),
                       render: (row) => (
                         <div className="tableCellStack">
-                          <Badge tone={statusTone(row.status)}>{row.status}</Badge>
-                          <Badge tone={healthTone(row.health)}>{row.health}</Badge>
+                          <Badge tone={statusTone(row.status)}>{localizeText(equipmentStatusLabel(row.status))}</Badge>
+                          <Badge tone={healthTone(row.health)}>{localizeText(equipmentHealthLabel(row.health))}</Badge>
                         </div>
                       )
                     }
@@ -1558,13 +2098,16 @@ export default function EquipmentPage() {
               </Card>
 
               <Card
-                title="Selected machine"
-                description="Focused equipment context for dispatch, maintenance and failure control."
+                title={t("Maquina seleccionada", "Selected machine")}
+                description={t("Contexto puntual del equipo para despacho, mantenimiento y control de fallas.", "Focused equipment context for dispatch, maintenance and failure control.")}
                 aside={
                   selectedMachine ? (
                     <div className="tableCellStack">
-                      <Badge tone={statusTone(selectedMachine.status)}>{selectedMachine.status}</Badge>
-                      <Badge tone={healthTone(selectedMachine.health)}>{selectedMachine.health}</Badge>
+                      {isContextuallySelectedMachine && activeContextualPreload ? (
+                        <Badge tone="info">{contextualPreloadBadgeLabel(activeContextualPreload)}</Badge>
+                      ) : null}
+                      <Badge tone={statusTone(selectedMachine.status)}>{localizeText(equipmentStatusLabel(selectedMachine.status))}</Badge>
+                      <Badge tone={healthTone(selectedMachine.health)}>{localizeText(equipmentHealthLabel(selectedMachine.health))}</Badge>
                     </div>
                   ) : null
                 }
@@ -1572,57 +2115,57 @@ export default function EquipmentPage() {
                 {selectedMachine ? (
                   <div className="detailGrid">
                     <div className="detailRow">
-                      <div className="detailLabel">Front</div>
+                      <div className="detailLabel">{t("Frente", "Front")}</div>
                       <div>
                         {selectedMachine.projectName} · {selectedMachine.frontName}
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Availability</div>
+                      <div className="detailLabel">{t("Disponibilidad", "Availability")}</div>
                       <div>{selectedMachine.availabilityPercent}%</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Utilization</div>
+                      <div className="detailLabel">{t("Utilizacion", "Utilization")}</div>
                       <div>{selectedMachine.utilizationPercent}%</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Maintenance due</div>
+                      <div className="detailLabel">{t("Mantenimiento", "Maintenance due")}</div>
                       <div>
                         {new Date(selectedMachine.maintenanceDueDate).toLocaleString()}
-                        {isMaintenanceOverdue(selectedMachine) ? " · overdue" : ""}
+                        {isMaintenanceOverdue(selectedMachine) ? ` · ${t("vencido", "overdue")}` : ""}
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Failures</div>
+                      <div className="detailLabel">{t("Fallas", "Failures")}</div>
                       <div>
-                        {selectedMachine.openFailures} open · {selectedMachine.criticalOpenFailures} critical
+                        {localizeText({ es: `${selectedMachine.openFailures} abiertas · ${selectedMachine.criticalOpenFailures} criticas`, en: `${selectedMachine.openFailures} open · ${selectedMachine.criticalOpenFailures} critical` })}
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Why now</div>
+                      <div className="detailLabel">{t("Por que ahora", "Why now")}</div>
                       <div>{selectedWhyNow}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Downstream effect</div>
+                      <div className="detailLabel">{t("Impacto aguas abajo", "Downstream effect")}</div>
                       <div>{selectedDownstreamEffect}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Route summary</div>
+                      <div className="detailLabel">{t("Resumen de ruta", "Route summary")}</div>
                       <div>{selectedRouteSummary}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Next action</div>
+                      <div className="detailLabel">{t("Siguiente accion", "Next action")}</div>
                       <div>
                         <input
                           className="field"
                           value={nextActionDraft}
                           onChange={(event) => setNextActionDraft(event.target.value)}
-                          placeholder="Describe the next operational or maintenance action"
+                          placeholder={t("Describe la siguiente accion operativa o de mantenimiento", "Describe the next operational or maintenance action")}
                         />
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Dispatch packet</div>
+                      <div className="detailLabel">{t("Paquete de despacho", "Dispatch packet")}</div>
                       <div className="tableCellStack">
                         <Badge tone={dispatchPacketStatus.tone}>{dispatchPacketStatus.label}</Badge>
                         <strong>{operatingBottleneck}</strong>
@@ -1633,51 +2176,51 @@ export default function EquipmentPage() {
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Cross-pressure</div>
+                      <div className="detailLabel">{t("Presion cruzada", "Cross-pressure")}</div>
                       <div className="tableCellStack">
                         <span>{crossPressureSummary}</span>
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Updated</div>
+                      <div className="detailLabel">{t("Actualizado", "Updated")}</div>
                       <div>{new Date(selectedMachine.updatedAt).toLocaleString()}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Command owner</div>
+                      <div className="detailLabel">{t("Responsable", "Command owner")}</div>
                       <div>{commandOwner}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Dispatch confirmation</div>
+                      <div className="detailLabel">{t("Confirmacion de despacho", "Dispatch confirmation")}</div>
                       <div>{dispatchConfirmation}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Next human step</div>
+                      <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
                       <div>{selectedHumanStep}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Report-back window</div>
+                      <div className="detailLabel">{t("Ventana de reporte", "Report-back window")}</div>
                       <div>{reportBackWindow}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Business rules</div>
+                      <div className="detailLabel">{t("Reglas de negocio", "Business rules")}</div>
                       <div className="tableCellStack">
-                        <span className="tableCellMuted">Available is blocked while maintenance is overdue.</span>
-                        <span className="tableCellMuted">Available is blocked while critical failures remain open.</span>
-                        <span className="tableCellMuted">Healthy requires available status and no blocking conditions.</span>
+                        <span className="tableCellMuted">{t("Disponible se bloquea si el mantenimiento esta vencido.", "Available is blocked while maintenance is overdue.")}</span>
+                        <span className="tableCellMuted">{t("Disponible se bloquea mientras existan fallas criticas abiertas.", "Available is blocked while critical failures remain open.")}</span>
+                        <span className="tableCellMuted">{t("Saludable requiere estado disponible y sin bloqueos.", "Healthy requires available status and no blocking conditions.")}</span>
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Linked actions</div>
+                      <div className="detailLabel">{t("Vinculos operativos", "Linked actions")}</div>
                       <div className="row gap wrap">
                         {selectedOperationalLinks.map((link, index) => (
                           <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
-                            {link.label}
+                            {localizeText(equipmentLinkLabel(link.label))}
                           </Link>
                         ))}
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Status actions</div>
+                      <div className="detailLabel">{t("Acciones de estado", "Status actions")}</div>
                       <div className="emptyActions">
                         {statusOptions.map((option) => (
                           <button
@@ -1687,13 +2230,13 @@ export default function EquipmentPage() {
                             disabled={isSaving}
                             onClick={() => void handleMachineAction(option.status, option.health, option.nextAction)}
                           >
-                            {isSaving ? "Saving..." : option.label}
+                            {isSaving ? t("Guardando...", "Saving...") : localizeText(equipmentActionLabel(option.label))}
                           </button>
                         ))}
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Health actions</div>
+                      <div className="detailLabel">{t("Acciones de salud", "Health actions")}</div>
                       <div className="tableCellStack">
                         <div className="emptyActions">
                           {healthOptions.map((option) => (
@@ -1704,20 +2247,20 @@ export default function EquipmentPage() {
                               disabled={isSaving}
                               onClick={() => void handleMachineAction(option.status, option.health, option.nextAction)}
                             >
-                              {isSaving ? "Saving..." : option.label}
+                              {isSaving ? t("Guardando...", "Saving...") : localizeText(equipmentActionLabel(option.label))}
                             </button>
                           ))}
                         </div>
-                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
-                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                        {equipmentActionFeedback ? <span className="tableCellMuted">{localizeText(equipmentActionFeedback)}</span> : null}
+                        {equipmentErrorFeedback ? <span style={{ color: "var(--danger-700)" }}>{localizeText(equipmentErrorFeedback)}</span> : null}
                       </div>
                     </div>
                   </div>
                 ) : (
                   <EmptyState
-                    title="No machine selected"
-                    description="Choose a machine from the table to inspect availability, maintenance and open failures."
-                    primaryAction={{ label: "Stay on equipment", href: "/equipment" }}
+                    title={t("No hay maquina seleccionada", "No machine selected")}
+                    description={t("Elige una maquina de la tabla para revisar disponibilidad, mantenimiento y fallas abiertas.", "Choose a machine from the table to inspect availability, maintenance and open failures.")}
+                    primaryAction={{ label: t("Permanecer en equipos", "Stay on equipment"), href: "/equipment" }}
                   />
                 )}
               </Card>
@@ -1725,45 +2268,82 @@ export default function EquipmentPage() {
 
             <section className="grid cols2">
               <Card
-                title="Register machine"
-                description="Create a new equipment lane directly in the tenant backend and reflect it immediately on the board."
+                title={t("Registrar maquinaria", "Register machine")}
+                description={t("Crea un nuevo carril de equipo directamente en el backend del tenant y reflejalo de inmediato en la bandeja.", "Create a new equipment lane directly in the tenant backend and reflect it immediately on the board.")}
+                aside={activeContextualPreload ? <Badge tone="info">{contextualPreloadBadgeLabel(activeContextualPreload)}</Badge> : null}
               >
                 <div className="detailGrid">
+                  {activeContextualPreload ? (
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Contexto recibido", "Received context")}</div>
+                      <div className="tableCellStack">
+                        <span className="tableCellMuted">
+                          {contextualPreloadAppliedCopy(activeContextualPreload, t)}
+                        </span>
+                        <strong>
+                          {[activeContextualPreload.projectName, activeContextualPreload.frontName].filter(Boolean).join(" · ") ||
+                            contextualPreloadJumpCopy(activeContextualPreload, t)}
+                        </strong>
+                        {activeContextualPreload.owner ? (
+                          <span className="tableCellMuted">
+                            {t("Responsable sugerido", "Suggested owner")}: {activeContextualPreload.owner}
+                          </span>
+                        ) : null}
+                        {activeContextualPreload.nextAction ? (
+                          <span className="tableCellMuted">
+                            {t("Siguiente accion sugerida", "Suggested next action")}: {activeContextualPreload.nextAction}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                   <label className="detailRow">
-                    <div className="detailLabel">Machine</div>
+                    <div className="detailLabel">{t("Maquina", "Machine")}</div>
                     <input
                       className="field"
                       value={createForm.machineName}
                       onChange={(event) => setCreateForm((current) => ({ ...current, machineName: event.target.value }))}
-                      placeholder="Excavadora CAT 320"
+                      placeholder={t("Excavadora CAT 320", "CAT 320 excavator")}
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Type</div>
+                    <div className="detailLabel">{t("Tipo", "Type")}</div>
                     <input
                       className="field"
                       value={createForm.machineType}
                       onChange={(event) => setCreateForm((current) => ({ ...current, machineType: event.target.value }))}
+                      placeholder={t("Retroexcavadora, grua, minicargador...", "Backhoe, crane, skid steer...")}
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Project</div>
+                    <div className="detailLabel">{t("Proyecto", "Project")}</div>
                     <input
                       className="field"
                       value={createForm.projectName}
                       onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                      placeholder={t("Proyecto o contrato", "Project or contract")}
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Front</div>
+                    <div className="detailLabel">{t("Frente", "Front")}</div>
                     <input
                       className="field"
                       value={createForm.frontName}
                       onChange={(event) => setCreateForm((current) => ({ ...current, frontName: event.target.value }))}
+                      placeholder={t("Frente o zona de trabajo", "Front or work zone")}
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Status</div>
+                    <div className="detailLabel">{t("Responsable", "Owner")}</div>
+                    <input
+                      className="field"
+                      value={createForm.owner}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, owner: event.target.value }))}
+                      placeholder={t("Responsable operativo sugerido", "Suggested operational owner")}
+                    />
+                  </label>
+                  <label className="detailRow">
+                    <div className="detailLabel">{t("Estado", "Status")}</div>
                     <select
                       className="selectField"
                       value={createForm.status}
@@ -1774,13 +2354,13 @@ export default function EquipmentPage() {
                         }))
                       }
                     >
-                      <option value="available">available</option>
-                      <option value="maintenance">maintenance</option>
-                      <option value="down">down</option>
+                      <option value="available">{localizeText(equipmentStatusLabel("available"))}</option>
+                      <option value="maintenance">{localizeText(equipmentStatusLabel("maintenance"))}</option>
+                      <option value="down">{localizeText(equipmentStatusLabel("down"))}</option>
                     </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Health</div>
+                    <div className="detailLabel">{t("Salud", "Health")}</div>
                     <select
                       className="selectField"
                       value={createForm.health}
@@ -1791,13 +2371,13 @@ export default function EquipmentPage() {
                         }))
                       }
                     >
-                      <option value="healthy">healthy</option>
-                      <option value="watch">watch</option>
-                      <option value="critical">critical</option>
+                      <option value="healthy">{localizeText(equipmentHealthLabel("healthy"))}</option>
+                      <option value="watch">{localizeText(equipmentHealthLabel("watch"))}</option>
+                      <option value="critical">{localizeText(equipmentHealthLabel("critical"))}</option>
                     </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Availability %</div>
+                    <div className="detailLabel">{t("Disponibilidad %", "Availability %")}</div>
                     <input
                       className="field"
                       type="number"
@@ -1810,7 +2390,7 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Utilization %</div>
+                    <div className="detailLabel">{t("Utilizacion %", "Utilization %")}</div>
                     <input
                       className="field"
                       type="number"
@@ -1823,7 +2403,7 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Hour meter</div>
+                    <div className="detailLabel">{t("Horometro", "Hour meter")}</div>
                     <input
                       className="field"
                       type="number"
@@ -1833,7 +2413,7 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Next maintenance h</div>
+                    <div className="detailLabel">{t("Siguiente mantenimiento h", "Next maintenance h")}</div>
                     <input
                       className="field"
                       type="number"
@@ -1845,7 +2425,7 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Maintenance backlog</div>
+                    <div className="detailLabel">{t("Backlog mantenimiento", "Maintenance backlog")}</div>
                     <input
                       className="field"
                       type="number"
@@ -1857,7 +2437,7 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Open failures</div>
+                    <div className="detailLabel">{t("Fallas abiertas", "Open failures")}</div>
                     <input
                       className="field"
                       type="number"
@@ -1867,7 +2447,7 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Critical failures</div>
+                    <div className="detailLabel">{t("Fallas criticas", "Critical failures")}</div>
                     <input
                       className="field"
                       type="number"
@@ -1879,19 +2459,19 @@ export default function EquipmentPage() {
                     />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Next action</div>
+                    <div className="detailLabel">{t("Siguiente accion", "Next action")}</div>
                     <input
                       className="field"
                       value={createForm.nextAction}
                       onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))}
-                      placeholder="Liberar operador, revisar servicio y confirmar salida a obra"
+                      placeholder={t("Liberar operador, revisar servicio y confirmar salida a obra", "Release operator, review service and confirm dispatch to site")}
                     />
                   </label>
                 </div>
 
                 <div className="detailGrid" style={{ marginTop: 16 }}>
                   <div className="detailRow">
-                    <div className="detailLabel">Creation gate</div>
+                    <div className="detailLabel">{t("Puerta de creacion", "Creation gate")}</div>
                     <div className="tableCellStack">
                       <div className="row gap wrap" style={{ alignItems: "center" }}>
                         <Badge tone={createMachineGate.tone}>{createMachineGate.label}</Badge>
@@ -1905,45 +2485,36 @@ export default function EquipmentPage() {
                     </div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Next human step</div>
+                    <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
                     <div>{createMachineHumanStep}</div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Immediate downstream</div>
+                    <div className="detailLabel">{t("Siguiente impacto inmediato", "Immediate downstream")}</div>
                     <div>
                       {createForm.criticalOpenFailures !== "0"
-                        ? "Keep the asset out of field dispatch and movement support until failures are contained."
+                        ? t("Manten el activo fuera de despacho a campo y soporte de movimientos hasta contener las fallas.", "Keep the asset out of field dispatch and movement support until failures are contained.")
                         : createForm.status === "maintenance" || createForm.health === "watch"
-                          ? "Route the asset through controlled maintenance or supervised dispatch before treating it as clean field capacity."
-                          : "The machine can continue into field dispatch, inventory support and quality follow-through with normal supervision."}
+                          ? t("Pasa el activo por mantenimiento controlado o despacho supervisado antes de tratarlo como capacidad limpia de campo.", "Route the asset through controlled maintenance or supervised dispatch before treating it as clean field capacity.")
+                          : t("La maquina puede continuar a despacho a campo, soporte de inventario y seguimiento de calidad con supervision normal.", "The machine can continue into field dispatch, inventory support and quality follow-through with normal supervision.")}
                     </div>
                   </div>
                 </div>
 
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateMachine()}>
-                    {isCreating ? "Saving..." : "Add machine"}
+                    {isCreating ? t("Guardando...", "Saving...") : t("Agregar maquina", "Add machine")}
                   </button>
-                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachineExample())}>
-                    Load demo example
-                  </button>
-                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("dispatch_ready"))}>
-                    Dispatch-ready preset
-                  </button>
-                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("maintenance_hold"))}>
-                    Maintenance preset
-                  </button>
-                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("critical_breakdown"))}>
-                    Breakdown preset
-                  </button>
-                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachineEmptyForm())}>
-                    Reset form
-                  </button>
-                  <Link className="buttonGhost" href="/inventory/movements">Review movements</Link>
-                  <Link className="buttonGhost" href="/field">Review field</Link>
-                  <Link className="buttonGhost" href="/operations">Review operations</Link>
-                  <Link className="buttonGhost" href="/quality">Review quality</Link>
-                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachineExample())}>{t("Cargar ejemplo demo", "Load demo example")}</button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("dispatch_ready"))}>{t("Preset despacho", "Dispatch-ready preset")}</button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("maintenance_hold"))}>{t("Preset mantenimiento", "Maintenance preset")}</button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachinePreset("critical_breakdown"))}>{t("Preset averia", "Breakdown preset")}</button>
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createMachineEmptyForm())}>{t("Reiniciar formulario", "Reset form")}</button>
+                  <Link className="buttonGhost" href="/inventory/movements">{t("Abrir movimientos", "Open movements")}</Link>
+                  <Link className="buttonGhost" href="/field">{t("Abrir campo", "Open field")}</Link>
+                  <Link className="buttonGhost" href="/operations">{t("Abrir operaciones", "Open operations")}</Link>
+                  <Link className="buttonGhost" href="/quality">{t("Abrir calidad", "Open quality")}</Link>
+                  {equipmentCreateFeedback ? <Badge tone="success">{localizeText(equipmentCreateFeedback)}</Badge> : null}
+                  {equipmentErrorFeedback ? <span style={{ color: "var(--danger-700)" }}>{localizeText(equipmentErrorFeedback)}</span> : null}
                 </div>
               </Card>
 

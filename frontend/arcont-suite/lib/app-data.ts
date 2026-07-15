@@ -52,10 +52,12 @@ const mockCompanies: CompanyContract[] = [
       "platform.identity",
       "sales.crm",
       "projects.control",
+      "projects.daily-log",
       "procurement.purchasing",
       "inventory.warehouse",
       "finance.accounting",
-      "compliance.postsale"
+      "compliance.postsale",
+      "hr.workforce"
     ]
   },
   {

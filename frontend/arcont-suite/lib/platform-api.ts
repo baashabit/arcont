@@ -25,6 +25,9 @@ import {
   CompanySchema,
   CreateAccountsPayableInvoiceRequestSchema,
   CreateProjectPortfolioItemRequestSchema,
+  CreateProjectScheduleActivityRequestSchema,
+  ImportProjectScheduleActivitiesRequestSchema,
+  ImportProjectScheduleActivitiesResponseSchema,
   CreateDocumentControlItemRequestSchema,
   CreateFieldMaterialRequestRequestSchema,
   CreateFieldMaterialRequestResponseSchema,
@@ -77,6 +80,8 @@ import {
   ProcurementRequisitionsOverviewSchema,
   ProjectPortfolioItemSchema,
   ProjectPortfolioOverviewSchema,
+  ProjectScheduleActivitySchema,
+  ProjectScheduleOverviewSchema,
   QualityInspectionSchema,
   QualityOverviewSchema,
   PlatformUserDetailSchema,
@@ -100,6 +105,7 @@ import {
   UpdateMachineItemRequestSchema,
   UpdatePostSaleCaseRequestSchema,
   UpdateProjectPortfolioItemRequestSchema,
+  UpdateProjectScheduleActivityRequestSchema,
   UpdateProcurementPackageRequestSchema,
   UpdateProcurementPurchaseOrderRequestSchema,
   UpdateProcurementRequisitionRequestSchema,
@@ -118,6 +124,9 @@ import {
   type AccountsPayableInvoiceContract,
   type AccountsPayableOverviewContract,
   type CreateProjectPortfolioItemRequestContract,
+  type CreateProjectScheduleActivityRequestContract,
+  type ImportProjectScheduleActivitiesRequestContract,
+  type ImportProjectScheduleActivitiesResponseContract,
   type CreateTreasuryPaymentRunRequestContract,
   type AuditEventContract,
   type AuthLoginRequestContract,
@@ -196,6 +205,8 @@ import {
   type ProcurementRequisitionsOverviewContract,
   type ProjectPortfolioItemContract,
   type ProjectPortfolioOverviewContract,
+  type ProjectScheduleActivityContract,
+  type ProjectScheduleOverviewContract,
   type QualityInspectionContract,
   type QualityOverviewContract,
   type PlatformUserDetailContract,
@@ -222,6 +233,7 @@ import {
   type UpdateMachineItemRequestContract,
   type UpdatePostSaleCaseRequestContract,
   type UpdateProjectPortfolioItemRequestContract,
+  type UpdateProjectScheduleActivityRequestContract,
   type UpdateProcurementPackageRequestContract,
   type UpdateProcurementPurchaseOrderRequestContract,
   type UpdateProcurementRequisitionRequestContract,
@@ -252,6 +264,8 @@ import {
   createDemoProcurementPurchaseOrder,
   createDemoProcurementRequisition,
   createDemoProjectPortfolioItem,
+  createDemoProjectScheduleActivity,
+  importDemoProjectScheduleActivities,
   createDemoTreasuryPaymentRun,
   getDemoBudgetBookOverview,
   getDemoCashFlowOverview,
@@ -261,6 +275,7 @@ import {
   getDemoCrmOverview,
   getDemoEstimationCollectionOverview,
   getDemoFinanceOverview,
+  getDemoHrOverview,
   createDemoMachineItem,
   createDemoSupplierControlLine,
   createDemoSupplierMasterProfile,
@@ -274,8 +289,10 @@ import {
   getDemoProcurementPurchaseOrdersOverview,
   getDemoProcurementRequisitionsOverview,
   getDemoProjectsOverview,
+  getDemoProjectScheduleOverview,
   getDemoPostSaleOverview,
   getDemoQualityOverview,
+  getDemoSubcontractOverview,
   getDemoSupplierControlOverview,
   getDemoSupplierMasterOverview,
   getDemoTreasuryPaymentRunsOverview,
@@ -292,6 +309,7 @@ import {
   updateDemoCrmLeadBucket,
   updateDemoEstimationCollectionLine,
   updateDemoFinanceLedgerItem,
+  updateDemoHrWorkforceItem,
   updateDemoInventoryMovement,
   updateDemoInventoryReceipt,
   updateDemoProcurementPackage,
@@ -301,6 +319,8 @@ import {
   updateDemoMachineItem,
   updateDemoPostSaleCase,
   updateDemoProjectPortfolioItem,
+  updateDemoProjectScheduleActivity,
+  updateDemoSubcontractLine,
   updateDemoSupplierControlLine,
   updateDemoSupplierMasterProfile,
   updateDemoTreasuryPaymentRun
@@ -681,6 +701,159 @@ export async function createProjectPortfolioItem(
     data: ProjectPortfolioItemSchema.parse(response.data),
     error: null
   };
+}
+
+export async function fetchProjectScheduleOverview(
+  projectId: string,
+  companyId: string | undefined,
+  options: RequestOptions
+): Promise<ProjectScheduleOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoProjectScheduleOverview(companyId, projectId);
+  }
+
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestJson(`/projects/${projectId}/schedule${query}`, options);
+  if (response) {
+    return ProjectScheduleOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoProjectScheduleOverview(companyId, projectId) : null;
+}
+
+export async function createProjectScheduleActivity(
+  projectId: string,
+  companyId: string | undefined,
+  input: CreateProjectScheduleActivityRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProjectScheduleActivityContract>> {
+  const payload = CreateProjectScheduleActivityRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const created = createDemoProjectScheduleActivity(companyId, projectId, payload);
+    return {
+      data: created,
+      error: created
+        ? null
+        : {
+            code: "PROJECT_SCHEDULE_DEMO_NOT_FOUND",
+            message: "Demo project schedule was not found.",
+            details: { companyId, projectId }
+          }
+    };
+  }
+
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/projects/${projectId}/schedule/activities${query}`, options, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    const fallback = companyId ? createDemoProjectScheduleActivity(companyId, projectId, payload) : null;
+    return fallback ? { data: fallback, error: null } : { data: null, error: response.error };
+  }
+
+  return { data: ProjectScheduleActivitySchema.parse(response.data), error: null };
+}
+
+export async function importProjectScheduleActivities(
+  projectId: string,
+  companyId: string | undefined,
+  input: ImportProjectScheduleActivitiesRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ImportProjectScheduleActivitiesResponseContract>> {
+  const payload = ImportProjectScheduleActivitiesRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    try {
+      const imported = importDemoProjectScheduleActivities(companyId, projectId, payload);
+      return imported
+        ? { data: imported, error: null }
+        : {
+            data: null,
+            error: {
+              code: "PROJECT_SCHEDULE_DEMO_NOT_FOUND",
+              message: "Demo project schedule was not found.",
+              details: { companyId, projectId }
+            }
+          };
+    } catch (error) {
+      return {
+        data: null,
+        error: {
+          code: "PROJECT_SCHEDULE_IMPORT_FAILED",
+          message: error instanceof Error ? error.message : "Demo project schedule import failed."
+        }
+      };
+    }
+  }
+
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/projects/${projectId}/schedule/import${query}`, options, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    if (!companyId) {
+      return { data: null, error: response.error };
+    }
+
+    try {
+      const fallback = importDemoProjectScheduleActivities(companyId, projectId, payload);
+      return fallback ? { data: fallback, error: null } : { data: null, error: response.error };
+    } catch (error) {
+      return {
+        data: null,
+        error: {
+          code: "PROJECT_SCHEDULE_IMPORT_FAILED",
+          message: error instanceof Error ? error.message : "Demo project schedule import failed."
+        }
+      };
+    }
+  }
+
+  return { data: ImportProjectScheduleActivitiesResponseSchema.parse(response.data), error: null };
+}
+
+export async function updateProjectScheduleActivity(
+  projectId: string,
+  activityId: string,
+  companyId: string | undefined,
+  input: UpdateProjectScheduleActivityRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<ProjectScheduleActivityContract>> {
+  const payload = UpdateProjectScheduleActivityRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoProjectScheduleActivity(companyId, projectId, activityId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "PROJECT_SCHEDULE_DEMO_ACTIVITY_NOT_FOUND",
+            message: "Demo project schedule activity was not found.",
+            details: { companyId, projectId, activityId }
+          }
+    };
+  }
+
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/projects/${projectId}/schedule/activities/${activityId}${query}`, options, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    const fallback = companyId
+      ? updateDemoProjectScheduleActivity(companyId, projectId, activityId, payload)
+      : null;
+    return fallback ? { data: fallback, error: null } : { data: null, error: response.error };
+  }
+
+  return { data: ProjectScheduleActivitySchema.parse(response.data), error: null };
 }
 
 export async function fetchProcurementOverview(
@@ -3021,9 +3194,17 @@ export async function fetchHrOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<HrOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoHrOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/hr/overview${query}`, options);
-  return response ? HrOverviewSchema.parse(response) : null;
+  if (response) {
+    return HrOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoHrOverview(companyId) : null;
 }
 
 export async function updateHrWorkforceItem(
@@ -3033,6 +3214,20 @@ export async function updateHrWorkforceItem(
   options: RequestOptions
 ): Promise<ApiResult<HrWorkforceItemContract>> {
   const payload = UpdateHrWorkforceItemRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoHrWorkforceItem(companyId, workforceId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "HR_WORKFORCE_DEMO_NOT_FOUND",
+            message: "Demo workforce item not found.",
+            details: { companyId, workforceId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/hr/workforces/${workforceId}${query}`, options, {
     method: "PATCH",
@@ -3043,6 +3238,16 @@ export async function updateHrWorkforceItem(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoHrWorkforceItem(companyId, workforceId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error
@@ -3059,9 +3264,17 @@ export async function fetchSubcontractOverview(
   companyId: string | undefined,
   options: RequestOptions
 ): Promise<SubcontractOverviewContract | null> {
+  if (companyId && !options.accessToken) {
+    return getDemoSubcontractOverview(companyId);
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestJson(`/subcontracts/overview${query}`, options);
-  return response ? SubcontractOverviewSchema.parse(response) : null;
+  if (response) {
+    return SubcontractOverviewSchema.parse(response);
+  }
+
+  return companyId ? getDemoSubcontractOverview(companyId) : null;
 }
 
 export async function updateSubcontractLine(
@@ -3071,6 +3284,20 @@ export async function updateSubcontractLine(
   options: RequestOptions
 ): Promise<ApiResult<SubcontractLineContract>> {
   const payload = UpdateSubcontractLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    const updated = updateDemoSubcontractLine(companyId, lineId, payload);
+    return {
+      data: updated,
+      error: updated
+        ? null
+        : {
+            code: "SUBCONTRACT_DEMO_NOT_FOUND",
+            message: "Demo subcontract line not found.",
+            details: { companyId, lineId }
+          }
+    };
+  }
+
   const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
   const response = await requestResult(`/subcontracts/lines/${lineId}${query}`, options, {
     method: "PATCH",
@@ -3081,6 +3308,16 @@ export async function updateSubcontractLine(
   });
 
   if (!response.data) {
+    if (companyId) {
+      const fallback = updateDemoSubcontractLine(companyId, lineId, payload);
+      if (fallback) {
+        return {
+          data: fallback,
+          error: null
+        };
+      }
+    }
+
     return {
       data: null,
       error: response.error

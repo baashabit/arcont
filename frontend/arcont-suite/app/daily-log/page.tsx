@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -12,7 +13,44 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { DailyLogEntryContract, DailyLogOverviewContract } from "@/lib/contracts";
+import type { LocalizedText } from "@/lib/i18n";
 import { createDailyLogEntry, fetchDailyLogOverview, fetchEquipmentOverview, updateDailyLogEntry } from "@/lib/platform-api";
+
+type Translate = (es: string, en: string) => string;
+
+type DailyLogEquipmentBridge = {
+  equipment: NonNullable<Awaited<ReturnType<typeof fetchEquipmentOverview>>>;
+} | null;
+
+type DailyLogCreateForm = {
+  projectName: string;
+  frontName: string;
+  supervisor: string;
+  logDate: string;
+  shift: DailyLogEntryContract["shift"];
+  weather: DailyLogEntryContract["weather"];
+  status: DailyLogEntryContract["status"];
+  progressPercent: string;
+  workforceCount: string;
+  incidentsCount: string;
+  blockersCount: string;
+  evidenceCount: string;
+  concretePourM3: string;
+  projectStatus: DailyLogEntryContract["projectStatus"];
+  qualityOpenFindings: string;
+  qualityReleaseReadiness: string;
+  subcontractHealth: DailyLogEntryContract["subcontractHealth"];
+  pendingDestajo: string;
+  nextAction: string;
+};
+
+type DailyLogFieldPreload = {
+  source: "field";
+  projectName: string;
+  frontName: string;
+  owner: string;
+  nextAction: string;
+};
 
 function statusTone(status: DailyLogEntryContract["status"]) {
   switch (status) {
@@ -27,58 +65,159 @@ function statusTone(status: DailyLogEntryContract["status"]) {
   }
 }
 
-function weatherLabel(weather: DailyLogEntryContract["weather"]) {
-  switch (weather) {
-    case "clear":
-      return "Clear";
-    case "windy":
-      return "Windy";
-    case "rain":
-      return "Rain";
+function statusLabel(status: DailyLogEntryContract["status"]): LocalizedText {
+  switch (status) {
+    case "approved":
+      return { es: "Aprobada", en: "Approved" };
+    case "submitted":
+      return { es: "Enviada", en: "Submitted" };
+    case "flagged":
+      return { es: "Marcada", en: "Flagged" };
     default:
-      return "Storm";
+      return { es: "Borrador", en: "Draft" };
   }
 }
 
-function actionOptions(entry: DailyLogEntryContract) {
+function weatherLabel(weather: DailyLogEntryContract["weather"]): LocalizedText {
+  switch (weather) {
+    case "clear":
+      return { es: "Despejado", en: "Clear" };
+    case "windy":
+      return { es: "Ventoso", en: "Windy" };
+    case "rain":
+      return { es: "Lluvia", en: "Rain" };
+    default:
+      return { es: "Tormenta", en: "Storm" };
+  }
+}
+
+function shiftLabel(shift: DailyLogEntryContract["shift"]): LocalizedText {
+  switch (shift) {
+    case "night":
+      return { es: "Noche", en: "Night" };
+    case "mixed":
+      return { es: "Mixto", en: "Mixed" };
+    default:
+      return { es: "Mañana", en: "Morning" };
+  }
+}
+
+function projectStatusLabel(status: DailyLogEntryContract["projectStatus"]): LocalizedText {
+  switch (status) {
+    case "active":
+      return { es: "Activo", en: "Active" };
+    case "at_risk":
+      return { es: "En riesgo", en: "At risk" };
+    case "blocked":
+      return { es: "Bloqueado", en: "Blocked" };
+    case "planning":
+      return { es: "Planeación", en: "Planning" };
+    case "closed":
+      return { es: "Cerrado", en: "Closed" };
+    default:
+      return { es: "Desconocido", en: "Unknown" };
+  }
+}
+
+function projectStatusTone(status: DailyLogEntryContract["projectStatus"]) {
+  switch (status) {
+    case "blocked":
+      return "danger";
+    case "at_risk":
+      return "warning";
+    case "active":
+    case "planning":
+      return "info";
+    case "closed":
+      return "success";
+    default:
+      return "info";
+  }
+}
+
+function subcontractHealthLabel(status: DailyLogEntryContract["subcontractHealth"]): LocalizedText {
+  switch (status) {
+    case "controlled":
+      return { es: "Controlado", en: "Controlled" };
+    case "watch":
+      return { es: "Vigilancia", en: "Watch" };
+    case "critical":
+      return { es: "Crítico", en: "Critical" };
+    default:
+      return { es: "Desconocido", en: "Unknown" };
+  }
+}
+
+function subcontractHealthTone(status: DailyLogEntryContract["subcontractHealth"]) {
+  switch (status) {
+    case "critical":
+      return "danger";
+    case "watch":
+      return "warning";
+    case "controlled":
+      return "success";
+    default:
+      return "info";
+  }
+}
+
+function actionOptions(entry: DailyLogEntryContract, t: Translate) {
   switch (entry.status) {
     case "draft":
       return [
         {
-          label: "Submit log",
+          label: t("Enviar bitácora", "Submit log"),
           status: "submitted" as const,
-          nextAction: "Submit the field log with the current workforce and evidence package."
+          nextAction: t(
+            "Enviar la bitácora con cuadrilla y evidencia del turno actual.",
+            "Submit the log with the current shift crew and evidence."
+          )
         },
         {
-          label: "Flag issue",
+          label: t("Marcar incidencia", "Flag issue"),
           status: "flagged" as const,
-          nextAction: "Raise the blocker and keep this field log under daily operating attention."
+          nextAction: t(
+            "Escalar el bloqueo y mantener esta bitácora bajo atención operativa diaria.",
+            "Escalate the blocker and keep this log under daily operational attention."
+          )
         }
       ];
     case "submitted":
       return [
         {
-          label: "Approve log",
+          label: t("Aprobar bitácora", "Approve log"),
           status: "approved" as const,
-          nextAction: "Approve the field log and release the next execution step to the crew."
+          nextAction: t(
+            "Aprobar la bitácora y liberar el siguiente paso operativo para la cuadrilla.",
+            "Approve the log and release the next operating step for the crew."
+          )
         },
         {
-          label: "Flag issue",
+          label: t("Marcar incidencia", "Flag issue"),
           status: "flagged" as const,
-          nextAction: "Hold this log and escalate the blocker or evidence gap before approval."
+          nextAction: t(
+            "Detener esta bitácora y escalar el bloqueo o la brecha de evidencia antes de aprobar.",
+            "Hold this log and escalate the blocker or evidence gap before approval."
+          )
         }
       ];
     case "flagged":
       return [
         {
-          label: "Return to draft",
+          label: t("Volver a borrador", "Return to draft"),
           status: "draft" as const,
-          nextAction: "Rework the field log package and complete the missing capture before resubmission."
+          nextAction: t(
+            "Rehacer el paquete de bitácora y completar la captura faltante antes de reenviar.",
+            "Rework the log package and complete the missing capture before resubmitting."
+          )
         },
         {
-          label: "Resubmit log",
+          label: t("Reenviar bitácora", "Resubmit log"),
           status: "submitted" as const,
-          nextAction: "Resubmit the corrected log for review after containing the field issue."
+          nextAction: t(
+            "Reenviar la bitácora corregida después de contener el problema de campo.",
+            "Resubmit the corrected log after containing the field issue."
+          )
         }
       ];
     default:
@@ -116,33 +255,106 @@ function pickFocusEntry(entries: DailyLogEntryContract[]) {
   );
 }
 
-function createDailyLogExample() {
+function createDefaultCreateForm(): DailyLogCreateForm {
+  return {
+    projectName: "Proyecto nuevo",
+    frontName: "Frente 01",
+    supervisor: "Residente de obra",
+    logDate: new Date().toISOString().slice(0, 10),
+    shift: "morning",
+    weather: "clear",
+    status: "draft",
+    progressPercent: "0",
+    workforceCount: "18",
+    incidentsCount: "0",
+    blockersCount: "0",
+    evidenceCount: "4",
+    concretePourM3: "0",
+    projectStatus: "active",
+    qualityOpenFindings: "0",
+    qualityReleaseReadiness: "92",
+    subcontractHealth: "controlled",
+    pendingDestajo: "0",
+    nextAction: ""
+  };
+}
+
+function normalizeFieldValue(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function buildFieldPreload(searchParams: ReturnType<typeof useSearchParams>): DailyLogFieldPreload | null {
+  if (searchParams.get("source") !== "field") {
+    return null;
+  }
+
+  const projectName = searchParams.get("projectName")?.trim() ?? "";
+  const frontName = searchParams.get("frontName")?.trim() ?? "";
+  const owner = searchParams.get("owner")?.trim() ?? "";
+  const nextAction = searchParams.get("nextAction")?.trim() ?? "";
+
+  if (!projectName && !frontName && !owner && !nextAction) {
+    return null;
+  }
+
+  return {
+    source: "field",
+    projectName,
+    frontName,
+    owner,
+    nextAction
+  };
+}
+
+function findRelatedFieldEntry(entries: DailyLogEntryContract[], preload: DailyLogFieldPreload) {
+  const projectName = normalizeFieldValue(preload.projectName);
+  const frontName = normalizeFieldValue(preload.frontName);
+  const owner = normalizeFieldValue(preload.owner);
+
+  return (
+    entries.find((entry) => {
+      if (projectName && normalizeFieldValue(entry.projectName) !== projectName) {
+        return false;
+      }
+
+      if (frontName && normalizeFieldValue(entry.frontName) !== frontName) {
+        return false;
+      }
+
+      if (owner && normalizeFieldValue(entry.supervisor) !== owner) {
+        return false;
+      }
+
+      return Boolean(projectName && frontName);
+    }) ?? null
+  );
+}
+
+function createDailyLogExample(): DailyLogCreateForm {
   return {
     projectName: "Torre Demo",
     frontName: "Frente Cimentacion",
     supervisor: "Luis Operaciones",
     logDate: new Date().toISOString().slice(0, 10),
-    shift: "morning" as DailyLogEntryContract["shift"],
-    weather: "clear" as DailyLogEntryContract["weather"],
-    status: "draft" as DailyLogEntryContract["status"],
+    shift: "morning",
+    weather: "clear",
+    status: "draft",
     progressPercent: "42",
     workforceCount: "24",
     incidentsCount: "0",
     blockersCount: "1",
     evidenceCount: "6",
     concretePourM3: "18",
-    projectStatus: "at_risk" as DailyLogEntryContract["projectStatus"],
+    projectStatus: "at_risk",
     qualityOpenFindings: "2",
     qualityReleaseReadiness: "84",
-    subcontractHealth: "watch" as DailyLogEntryContract["subcontractHealth"],
+    subcontractHealth: "watch",
     pendingDestajo: "0",
     nextAction: "Cerrar evidencia del frente y liberar acero antes del siguiente vaciado."
   };
 }
 
-function createDailyLogPreset(
-  preset: "concrete_pour" | "quality_hold" | "equipment_delay"
-): ReturnType<typeof createDailyLogExample> {
+function createDailyLogPreset(preset: "concrete_pour" | "quality_hold" | "equipment_delay"): DailyLogCreateForm {
   const base = createDailyLogExample();
 
   switch (preset) {
@@ -192,11 +404,7 @@ function createDailyLogPreset(
   }
 }
 
-type DailyLogEquipmentBridge = {
-  equipment: NonNullable<Awaited<ReturnType<typeof fetchEquipmentOverview>>>;
-} | null;
-
-function buildDailyLogEquipmentStory(entry: DailyLogEntryContract | null, bridge: DailyLogEquipmentBridge) {
+function buildDailyLogEquipmentStory(entry: DailyLogEntryContract | null, bridge: DailyLogEquipmentBridge, t: Translate) {
   if (!entry) {
     return null;
   }
@@ -208,357 +416,395 @@ function buildDailyLogEquipmentStory(entry: DailyLogEntryContract | null, bridge
   return {
     equipmentSupport:
       linkedMachines.length > 0
-        ? `${linkedMachines.length} tracked machines support this front, with ${constrainedMachines.length} already degraded.`
-        : "No tracked machine is currently mapped to this front.",
+        ? t(
+            `${linkedMachines.length} equipos rastreados soportan este frente y ${constrainedMachines.length} ya operan degradados.`,
+            `${linkedMachines.length} tracked machines support this front and ${constrainedMachines.length} are already degraded.`
+          )
+        : t("No hay equipo rastreado asignado a este frente.", "No tracked machine is currently mapped to this front."),
     executionConstraint:
       constrainedMachines.length > 0
-        ? `${constrainedMachines[0]?.machineName ?? "A constrained asset"} is affecting the shift under ${constrainedMachines[0]?.status ?? "constraint"} posture.`
-        : "Equipment is not the primary execution constraint on this daily log.",
+        ? t(
+            `${constrainedMachines[0]?.machineName ?? "Un activo restringido"} está afectando el turno bajo postura ${constrainedMachines[0]?.status ?? "restringida"}.`,
+            `${constrainedMachines[0]?.machineName ?? "A constrained asset"} is affecting the shift under ${constrainedMachines[0]?.status ?? "constraint"} posture.`
+          )
+        : t("El equipo no es la restricción principal de ejecución en esta bitácora.", "Equipment is not the primary execution constraint on this daily log."),
     nextEquipmentMove:
       constrainedMachines.length > 0
-        ? constrainedMachines[0]?.nextAction ?? "Recover equipment continuity before the next field cutoff."
-        : "No immediate equipment move is currently dominating this front."
+        ? constrainedMachines[0]?.nextAction ?? t("Recuperar continuidad del equipo antes del siguiente corte operativo.", "Recover equipment continuity before the next field cutoff.")
+        : t("No hay una maniobra inmediata de equipo dominando este frente.", "No immediate equipment move is currently dominating this front.")
   };
 }
 
-function buildDailyLogWorkflow(entry: DailyLogEntryContract | null) {
-  if (!entry) {
-    return "Use daily log as the formal handoff between what happened in field and what supervision will act on next.";
-  }
-
-  if (entry.status === "flagged") {
-    return "A flagged log should jump immediately into field, equipment or quality remediation before the next shift starts.";
-  }
-
-  if (entry.status === "submitted") {
-    return "A submitted log should either clear evidence and blockers for approval, or be rerouted back into field follow-up.";
-  }
-
-  return "An approved or draft log should keep production continuity, evidence discipline and next-shift planning aligned.";
-}
-
-function buildApprovalReadiness(entry: DailyLogEntryContract | null) {
+function buildApprovalReadiness(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
     return {
       tone: "info" as const,
-      label: "Select a log",
-      description: "Choose a daily log to inspect whether it is actually ready for review or escalation."
+      label: t("Selecciona una bitácora", "Select a log"),
+      description: t(
+        "Elige una bitácora para revisar si realmente está lista para aprobación o escalamiento.",
+        "Choose a log to inspect whether it is actually ready for review or escalation."
+      )
     };
   }
 
   if (entry.blockersCount > 0) {
     return {
       tone: "danger" as const,
-      label: "Blocked for approval",
-      description: `${entry.blockersCount} blockers remain open, so supervision should route this back into field or operations before approval.`
+      label: t("Bloqueada para aprobar", "Blocked for approval"),
+      description: t(
+        `${entry.blockersCount} bloqueos siguen abiertos, así que debe volver a campo u operaciones antes de aprobar.`,
+        `${entry.blockersCount} blockers remain open, so supervision should route this back into field or operations before approval.`
+      )
     };
   }
 
   if (entry.evidenceCount < 4 || entry.qualityOpenFindings > 2) {
     return {
       tone: "warning" as const,
-      label: "Needs more support",
-      description: "Evidence volume or quality findings are still weak for a clean release of the next shift."
+      label: t("Necesita más soporte", "Needs more support"),
+      description: t(
+        "La evidencia o la postura de calidad todavía son débiles para liberar el siguiente turno sin deuda.",
+        "Evidence volume or quality findings are still weak for a clean release of the next shift."
+      )
     };
   }
 
   return {
     tone: "success" as const,
-    label: "Ready for review",
-    description: "The log already has the minimum operating posture to move through supervision without obvious gaps."
+    label: t("Lista para revisión", "Ready for review"),
+    description: t(
+      "La bitácora ya tiene la postura mínima para pasar por supervisión sin huecos obvios.",
+      "The log already has the minimum operating posture to move through supervision without obvious gaps."
+    )
   };
 }
 
-function buildEscalationDestination(entry: DailyLogEntryContract | null) {
+function buildEscalationDestination(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
     return {
-      label: "No active destination",
-      description: "Select a daily log to identify the next operating module.",
+      label: t("Sin destino activo", "No active destination"),
+      description: t("Selecciona una bitácora para identificar el siguiente módulo operativo.", "Select a daily log to identify the next operating module."),
       href: "/daily-log"
     };
   }
 
   if (entry.blockersCount > 0) {
     return {
-      label: "Escalate in field",
-      description: "Front execution still has blockers, so the crew-level follow-up should happen in field.",
+      label: t("Escalar en campo", "Escalate in field"),
+      description: t("La ejecución del frente sigue bloqueada, así que el seguimiento debe suceder en campo.", "Front execution still has blockers, so the crew-level follow-up should happen in field."),
       href: "/field"
     };
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
     return {
-      label: "Route to quality",
-      description: "Release posture is being constrained by findings or missing readiness evidence.",
+      label: t("Enviar a calidad", "Route to quality"),
+      description: t("La liberación está limitada por hallazgos o evidencia incompleta.", "Release posture is being constrained by findings or missing readiness evidence."),
       href: "/quality"
     };
   }
 
   if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
     return {
-      label: "Coordinate in operations",
-      description: "Commercial or subcontract continuity needs cross-domain attention before the next shift.",
+      label: t("Coordinar en operaciones", "Coordinate in operations"),
+      description: t("La continuidad del subcontrato requiere atención transversal antes del siguiente turno.", "Commercial or subcontract continuity needs cross-domain attention before the next shift."),
       href: "/operations"
     };
   }
 
   return {
-    label: "Check equipment",
-    description: "If the front is not blocked by quality or field, confirm asset continuity for the next move.",
+    label: t("Revisar equipo", "Check equipment"),
+    description: t("Si el frente no está bloqueado por calidad o campo, confirma la continuidad de activos.", "If the front is not blocked by quality or field, confirm asset continuity for the next move."),
     href: "/equipment"
   };
 }
 
-function buildDownstreamReadiness(entry: DailyLogEntryContract | null) {
+function buildDownstreamReadiness(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
     return {
       tone: "info" as const,
-      label: "No log selected",
-      summary: "Choose a daily log to verify whether the shift story is really ready for downstream execution.",
-      checks: ["Select an active daily log from the board."]
+      label: t("Sin bitácora seleccionada", "No log selected"),
+      summary: t("Elige una bitácora para validar si el turno ya puede bajar a la siguiente operación.", "Choose a daily log to verify whether the shift story is really ready for downstream execution."),
+      checks: [t("Selecciona una bitácora activa de la cola.", "Select an active daily log from the queue.")]
     };
   }
 
   const checks: string[] = [];
 
   if (entry.blockersCount > 0) {
-    checks.push(`${entry.blockersCount} blocker(s) still keep the front from normal continuation.`);
+    checks.push(
+      t(
+        `${entry.blockersCount} bloqueo(s) todavía impiden la continuación normal del frente.`,
+        `${entry.blockersCount} blocker(s) still keep the front from normal continuation.`
+      )
+    );
   }
 
   if (entry.evidenceCount < 4) {
-    checks.push(`Evidence is only ${entry.evidenceCount}, below the minimum operating support.`);
+    checks.push(t(`La evidencia está en ${entry.evidenceCount}, debajo del mínimo operativo.`, `Evidence is only ${entry.evidenceCount}, below the minimum operating support.`));
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
-    checks.push(`Quality posture is still weak at ${entry.qualityReleaseReadiness}% readiness with ${entry.qualityOpenFindings} open finding(s).`);
+    checks.push(
+      t(
+        `La postura de calidad sigue débil con ${entry.qualityReleaseReadiness}% de liberación y ${entry.qualityOpenFindings} hallazgo(s) abiertos.`,
+        `Quality posture is still weak at ${entry.qualityReleaseReadiness}% readiness with ${entry.qualityOpenFindings} open finding(s).`
+      )
+    );
   }
 
   if (!entry.nextAction?.trim() || entry.nextAction.trim().length < 12) {
-    checks.push("Next action is still too vague for the next team or shift.");
+    checks.push(t("La siguiente acción todavía es demasiado vaga para el siguiente equipo o turno.", "Next action is still too vague for the next team or shift."));
   }
 
   if (checks.length > 0) {
     return {
       tone: entry.blockersCount > 0 ? "danger" as const : "warning" as const,
-      label: entry.blockersCount > 0 ? "Hold before downstream" : "Needs tighter handoff",
+      label: entry.blockersCount > 0 ? t("Detener antes de bajar", "Hold before downstream") : t("Requiere mejor relevo", "Needs tighter handoff"),
       summary:
         entry.blockersCount > 0
-          ? "The shift still carries blockers that should be contained before normal continuation."
-          : "The shift can continue, but the handoff still needs more evidence or clarity.",
+          ? t("El turno todavía trae bloqueos que deben contenerse antes de continuar.", "The shift still carries blockers that should be contained before normal continuation.")
+          : t("El turno puede seguir, pero el relevo necesita más evidencia o claridad.", "The shift can continue, but the handoff still needs more evidence or clarity."),
       checks
     };
   }
 
   return {
     tone: "success" as const,
-    label: "Ready for downstream",
-    summary: "The log already has enough operating context for the next team to continue without reconstructing the shift story.",
-    checks: ["Open the destination module and execute the stated next action in the same operating cycle."]
+    label: t("Lista para continuidad", "Ready for downstream"),
+    summary: t("La bitácora ya tiene suficiente contexto para que el siguiente equipo continúe sin reconstruir la historia del turno.", "The log already has enough operating context for the next team to continue without reconstructing the shift story."),
+    checks: [t("Abre el módulo destino y ejecuta la siguiente acción en el mismo ciclo operativo.", "Open the destination module and execute the stated next action in the same operating cycle.")]
   };
 }
 
-function buildDailyLogWhyNow(entry: DailyLogEntryContract | null) {
+function buildDailyLogWhyNow(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
-    return "Select a daily log to understand why this shift needs attention right now.";
+    return t("Selecciona una bitácora para entender por qué este turno requiere atención inmediata.", "Select a daily log to understand why this shift needs attention right now.");
   }
 
   if (entry.status === "flagged" || entry.blockersCount > 0) {
-    return `${entry.frontName} already carries ${entry.blockersCount} blocker(s) under ${entry.status} posture, so the next shift can degrade immediately if supervision waits.`;
+    return t(
+      `${entry.frontName} ya trae ${entry.blockersCount} bloqueo(s) bajo postura ${entry.status}, así que el siguiente turno se puede degradar si supervisión espera.`,
+      `${entry.frontName} already carries ${entry.blockersCount} blocker(s) under ${entry.status} posture, so the next shift can degrade immediately if supervision waits.`
+    );
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
-    return `${entry.frontName} still has weak release posture, so approving or ignoring this log now would pass quality debt into the next operating cycle.`;
+    return t(
+      `${entry.frontName} todavía tiene una liberación débil, así que aprobar o ignorar esta bitácora pasaría deuda de calidad al siguiente ciclo.`,
+      `${entry.frontName} still has weak release posture, so approving or ignoring this log now would pass quality debt into the next operating cycle.`
+    );
   }
 
   if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
-    return `${entry.frontName} is still commercially exposed through subcontract or destajo pressure, so this log matters beyond simple shift reporting.`;
+    return t(
+      `${entry.frontName} sigue expuesto por presión de subcontrato o destajo, así que esta bitácora importa más allá del reporte del turno.`,
+      `${entry.frontName} is still commercially exposed through subcontract or destajo pressure, so this log matters beyond simple shift reporting.`
+    );
   }
 
-  return `${entry.frontName} is close to normal continuity, so the useful decision now is whether supervision can release the next move without rebuilding the shift story later.`;
+  return t(
+    `${entry.frontName} está cerca de continuidad normal, así que la decisión útil ahora es si supervisión puede liberar el siguiente movimiento sin reconstruir el turno después.`,
+    `${entry.frontName} is close to normal continuity, so the useful decision now is whether supervision can release the next move without rebuilding the shift story later.`
+  );
 }
 
-function buildDailyLogDownstreamEffect(entry: DailyLogEntryContract | null) {
+function buildDailyLogHumanStep(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
-    return "Select a daily log to inspect which downstream lane will absorb the impact.";
+    return t("Selecciona una bitácora para identificar el siguiente relevo humano.", "Select a daily log to identify the next human handoff.");
   }
 
   if (entry.blockersCount > 0) {
-    return "If blockers stay open, field replanning and operations follow-up will inherit the disruption before the next shift starts.";
+    return t("Di exactamente qué bloqueo se está conteniendo, quién lo resuelve y si el siguiente turno arranca o espera.", "Tell the field owner exactly which blocker is being contained, who owns it and whether the next shift starts or waits.");
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
-    return "If release posture stays weak, quality and close-control will inherit incomplete evidence and avoidable rework.";
+    return t("Di a calidad y campo quién toma la corrección y cuándo regresa la reinspección a supervisión.", "Tell quality and field who owns the corrective action and when the reinspection decision returns to supervision.");
   }
 
   if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
-    return "If subcontract pressure is not contained, operations and commercial coordination will inherit the instability next.";
+    return t("Di a operaciones quién debe estabilizar la ruta del subcontrato antes de comprometer más producción.", "Tell operations who must stabilize the subcontract lane before the next shift commits more production.");
   }
 
-  return "If this log is handled cleanly, field, equipment and operations can continue without reconstructing the same shift context.";
+  return t("Di al siguiente supervisor o residente qué se liberó y qué debe revisarse en el siguiente relevo.", "Tell the next supervisor or resident engineer exactly what was released and what must be checked at the next shift handoff.");
 }
 
-function buildDailyLogHumanStep(entry: DailyLogEntryContract | null) {
+function buildDailyLogReportBack(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
-    return "Select a daily log to identify the next human handoff.";
-  }
-
-  if (entry.blockersCount > 0) {
-    return "Tell the field owner exactly which blocker is being contained, who owns it and whether the next shift starts or waits.";
-  }
-
-  if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
-    return "Tell quality and field who owns the corrective action and when the reinspection decision returns to supervision.";
-  }
-
-  if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
-    return "Tell operations who must stabilize the subcontract lane before the next shift commits more production.";
-  }
-
-  return "Tell the next supervisor or resident engineer exactly what was released and what must be checked at the next shift handoff.";
-}
-
-function buildDailyLogReportBack(entry: DailyLogEntryContract | null) {
-  if (!entry) {
-    return "Select a daily log to define when the responsible owner should report back.";
+    return t("Selecciona una bitácora para definir cuándo debe regresar el responsable.", "Select a daily log to define when the responsible owner should report back.");
   }
 
   if (entry.status === "flagged" || entry.blockersCount > 0) {
-    return "Report back in the same operating cycle with blocker owner, containment result and go/no-go for the next shift.";
+    return t("Reporta en el mismo ciclo operativo con dueño del bloqueo, contención y decisión de arranque o espera.", "Report back in the same operating cycle with blocker owner, containment result and go/no-go for the next shift.");
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
-    return "Report back once quality evidence and release posture are explicit enough to survive approval without hidden debt.";
+    return t("Reporta cuando la evidencia de calidad y la liberación ya sean explícitas y defendibles.", "Report back once quality evidence and release posture are explicit enough to survive approval without hidden debt.");
   }
 
   if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
-    return "Report back when subcontract or destajo pressure is already assigned and operations owns the next recovery move.";
+    return t("Reporta cuando la presión de subcontrato o destajo ya tenga dueño y recuperación asignada.", "Report back when subcontract or destajo pressure is already assigned and operations owns the next recovery move.");
   }
 
-  return "Report back at the next supervision checkpoint confirming the shift handoff stayed coherent and executable.";
+  return t("Reporta en el siguiente checkpoint de supervisión confirmando que el relevo siguió ejecutable.", "Report back at the next supervision checkpoint confirming the shift handoff stayed coherent and executable.");
 }
 
-function buildDailyLogRouteSummary(entry: DailyLogEntryContract | null) {
+function buildDailyLogRouteSummary(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
-    return "Use daily log as the formal route between field capture, supervision review and the next module that owns execution continuity.";
+    return t("Usa bitácora como ruta formal entre captura en campo, revisión de supervisión y el siguiente módulo dueño de continuidad.", "Use daily log as the formal route between field capture, supervision review and the next module that owns execution continuity.");
   }
 
   if (entry.blockersCount > 0 || entry.status === "flagged") {
-    return "This log should route first through field containment and front recovery before supervision treats the shift as released.";
+    return t("Esta bitácora debe pasar primero por contención en campo y recuperación del frente antes de liberar el turno.", "This log should route first through field containment and front recovery before supervision treats the shift as released.");
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
-    return "This log should route through quality closure before the next shift inherits a weak release posture.";
+    return t("Esta bitácora debe pasar por cierre de calidad antes de heredar una liberación débil al siguiente turno.", "This log should route through quality closure before the next shift inherits a weak release posture.");
   }
 
   if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
-    return "This log should route through operations coordination before the next shift commits more production on unstable subcontract footing.";
+    return t("Esta bitácora debe pasar por coordinación operativa antes de comprometer más producción con subcontrato inestable.", "This log should route through operations coordination before the next shift commits more production on unstable subcontract footing.");
   }
 
-  return "This log can continue through equipment or normal field follow-through with the current shift story intact.";
+  return t("Esta bitácora puede seguir por equipo o seguimiento normal de campo con la historia del turno intacta.", "This log can continue through equipment or normal field follow-through with the current shift story intact.");
 }
 
-function buildDailyLogOperationalLinks(entry: DailyLogEntryContract | null) {
+function buildDailyLogOperationalLinks(entry: DailyLogEntryContract | null, t: Translate) {
   if (!entry) {
     return [
-      { label: "Open field", href: "/field" },
-      { label: "Open operations", href: "/operations" },
-      { label: "Open equipment", href: "/equipment" }
+      { label: t("Abrir campo", "Open field"), href: "/field" },
+      { label: t("Abrir operaciones", "Open operations"), href: "/operations" },
+      { label: t("Abrir equipo", "Open equipment"), href: "/equipment" }
     ];
   }
 
   if (entry.blockersCount > 0 || entry.status === "flagged") {
     return [
-      { label: "Open field", href: "/field" },
-      { label: "Open operations", href: "/operations" },
-      { label: "Open quality", href: "/quality" }
+      { label: t("Abrir campo", "Open field"), href: "/field" },
+      { label: t("Abrir operaciones", "Open operations"), href: "/operations" },
+      { label: t("Abrir calidad", "Open quality"), href: "/quality" }
     ];
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
     return [
-      { label: "Open quality", href: "/quality" },
-      { label: "Open field", href: "/field" },
-      { label: "Open operations", href: "/operations" }
+      { label: t("Abrir calidad", "Open quality"), href: "/quality" },
+      { label: t("Abrir campo", "Open field"), href: "/field" },
+      { label: t("Abrir operaciones", "Open operations"), href: "/operations" }
     ];
   }
 
   if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
     return [
-      { label: "Open operations", href: "/operations" },
-      { label: "Open field", href: "/field" },
-      { label: "Open equipment", href: "/equipment" }
+      { label: t("Abrir operaciones", "Open operations"), href: "/operations" },
+      { label: t("Abrir campo", "Open field"), href: "/field" },
+      { label: t("Abrir equipo", "Open equipment"), href: "/equipment" }
     ];
   }
 
   return [
-    { label: "Open equipment", href: "/equipment" },
-    { label: "Open field", href: "/field" },
-    { label: "Open operations", href: "/operations" }
+    { label: t("Abrir equipo", "Open equipment"), href: "/equipment" },
+    { label: t("Abrir campo", "Open field"), href: "/field" },
+    { label: t("Abrir operaciones", "Open operations"), href: "/operations" }
   ];
 }
 
-function buildCreateDailyLogGate(input: {
-  projectName: string;
-  frontName: string;
-  supervisor: string;
-  logDate: string;
-  progressPercent: number;
-  workforceCount: number;
-  blockersCount: number;
-  incidentsCount: number;
-  evidenceCount: number;
-  concretePourM3: number;
-  status: DailyLogEntryContract["status"];
-  qualityOpenFindings: number;
-  qualityReleaseReadiness: number;
-  subcontractHealth: DailyLogEntryContract["subcontractHealth"];
-  pendingDestajo: number;
-  nextAction: string;
-}) {
+function buildDailyLogSchedulePhase(entry: DailyLogEntryContract) {
+  if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
+    return "Calidad";
+  }
+
+  if (entry.blockersCount > 0 || entry.status === "flagged") {
+    return "Recuperación";
+  }
+
+  if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
+    return "Coordinación";
+  }
+
+  return "Ejecución";
+}
+
+function buildDailyLogScheduleHref(entry: DailyLogEntryContract | null, nextActionDraft: string) {
+  if (!entry?.projectName?.trim()) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    projectName: entry.projectName,
+    scheduleActivityName: entry.frontName,
+    schedulePhase: buildDailyLogSchedulePhase(entry),
+    scheduleOwner: entry.supervisor,
+    scheduleNextAction: nextActionDraft.trim() || entry.nextAction
+  });
+
+  return `/projects?${params.toString()}`;
+}
+
+function buildCreateDailyLogGate(
+  input: {
+    projectName: string;
+    frontName: string;
+    supervisor: string;
+    logDate: string;
+    progressPercent: number;
+    workforceCount: number;
+    blockersCount: number;
+    incidentsCount: number;
+    evidenceCount: number;
+    concretePourM3: number;
+    status: DailyLogEntryContract["status"];
+    qualityOpenFindings: number;
+    qualityReleaseReadiness: number;
+    pendingDestajo: number;
+    nextAction: string;
+  },
+  t: Translate
+) {
   const checks: string[] = [];
 
   if ([input.projectName, input.frontName, input.supervisor].some((value) => value.trim().length < 3)) {
-    checks.push("Project, front and supervisor still need specific capture.");
+    checks.push(t("Proyecto, frente y supervisor todavía requieren captura específica.", "Project, front and supervisor still need specific capture."));
   }
 
   if (!input.logDate) {
-    checks.push("Log date is still missing.");
+    checks.push(t("Falta la fecha de la bitácora.", "Log date is still missing."));
   }
 
   if (!Number.isFinite(input.progressPercent) || input.progressPercent < 0 || input.progressPercent > 100) {
-    checks.push("Progress must stay between 0 and 100.");
+    checks.push(t("El avance debe permanecer entre 0 y 100.", "Progress must stay between 0 and 100."));
   }
 
   if (![input.workforceCount, input.blockersCount, input.incidentsCount, input.evidenceCount].every((value) => Number.isFinite(value) && value >= 0)) {
-    checks.push("Crew, blockers, incidents and evidence must be valid non-negative numbers.");
+    checks.push(t("Cuadrilla, bloqueos, incidentes y evidencia deben ser números válidos no negativos.", "Crew, blockers, incidents and evidence must be valid non-negative numbers."));
   }
 
   if (!Number.isFinite(input.concretePourM3) || input.concretePourM3 < 0) {
-    checks.push("Concrete volume must be a valid non-negative number.");
+    checks.push(t("El volumen de concreto debe ser un número válido no negativo.", "Concrete volume must be a valid non-negative number."));
   }
 
   if (!Number.isFinite(input.qualityOpenFindings) || input.qualityOpenFindings < 0) {
-    checks.push("Quality findings must be a valid non-negative number.");
+    checks.push(t("Los hallazgos de calidad deben ser un número válido no negativo.", "Quality findings must be a valid non-negative number."));
   }
 
   if (!Number.isFinite(input.qualityReleaseReadiness) || input.qualityReleaseReadiness < 0 || input.qualityReleaseReadiness > 100) {
-    checks.push("Release readiness must stay between 0 and 100.");
+    checks.push(t("La liberación debe permanecer entre 0 y 100.", "Release readiness must stay between 0 and 100."));
   }
 
   if (!Number.isFinite(input.pendingDestajo) || input.pendingDestajo < 0) {
-    checks.push("Pending destajo must be a valid non-negative number.");
+    checks.push(t("El destajo pendiente debe ser un número válido no negativo.", "Pending destajo must be a valid non-negative number."));
   }
 
   if (input.status === "approved" && input.blockersCount > 0) {
-    checks.push("Approved status is blocked while blockers remain open.");
+    checks.push(t("No se puede crear aprobada mientras existan bloqueos abiertos.", "Approved status is blocked while blockers remain open."));
   }
 
   if (input.status === "approved" && input.evidenceCount < 4) {
-    checks.push("Approved status requires at least 4 evidence items.");
+    checks.push(t("El estado aprobado requiere al menos 4 evidencias.", "Approved status requires at least 4 evidence items."));
   }
 
   if (input.nextAction.trim().length < 8) {
-    checks.push("Next action still needs enough detail for the next shift or module.");
+    checks.push(t("La siguiente acción necesita suficiente detalle para el próximo turno o módulo.", "Next action still needs enough detail for the next shift or module."));
   }
 
   if (checks.length > 0) {
@@ -568,59 +814,77 @@ function buildCreateDailyLogGate(input: {
 
     return {
       tone: hardBlock ? "danger" as const : "warning" as const,
-      label: hardBlock ? "Do not create yet" : "Create with control",
+      label: hardBlock ? t("No crear todavía", "Do not create yet") : t("Crear con control", "Create with control"),
       summary: hardBlock
-        ? "This daily log would open with a hard supervision blocker."
-        : "The log can be created, but the shift handoff still needs tightening.",
+        ? t("Esta bitácora nacería con un bloqueo duro de supervisión.", "This daily log would open with a hard supervision blocker.")
+        : t("La bitácora puede crearse, pero el relevo del turno aún necesita ajuste.", "The log can be created, but the shift handoff still needs tightening."),
       checks
     };
   }
 
   return {
     tone: "success" as const,
-    label: "Ready to create",
-    summary: "The log has enough structure to enter daily supervision cleanly.",
+    label: t("Lista para crear", "Ready to create"),
+    summary: t("La bitácora ya tiene estructura suficiente para entrar limpia a supervisión diaria.", "The log has enough structure to enter daily supervision cleanly."),
     checks: [
-      "The created log will become the current focus entry immediately.",
-      "Keep blockers, evidence and next action explicit from the first capture."
+      t("La bitácora creada se volverá el foco actual de inmediato.", "The created log will become the current focus entry immediately."),
+      t("Mantén explícitos bloqueos, evidencia y siguiente acción desde la primera captura.", "Keep blockers, evidence and next action explicit from the first capture.")
     ]
   };
 }
 
-function buildCreateDailyLogHumanStep(input: {
-  blockersCount: number;
-  qualityOpenFindings: number;
-  qualityReleaseReadiness: number;
-  evidenceCount: number;
-  pendingDestajo: number;
-  nextAction: string;
-}) {
+function buildCreateDailyLogHumanStep(
+  input: {
+    blockersCount: number;
+    qualityOpenFindings: number;
+    qualityReleaseReadiness: number;
+    evidenceCount: number;
+    pendingDestajo: number;
+    nextAction: string;
+  },
+  t: Translate
+) {
   if (input.blockersCount > 0) {
-    return "Clarify who owns the blocker and whether the next shift is protected before saving this log.";
+    return t("Aclara quién toma el bloqueo y si el siguiente turno queda protegido antes de guardar.", "Clarify who owns the blocker and whether the next shift is protected before saving this log.");
   }
 
   if (input.qualityOpenFindings > 2 || input.qualityReleaseReadiness < 75) {
-    return "Clarify who owns corrective quality work before this shift is treated as ready for clean continuation.";
+    return t("Aclara quién toma la corrección de calidad antes de tratar este turno como continuidad limpia.", "Clarify who owns corrective quality work before this shift is treated as ready for clean continuation.");
   }
 
   if (input.evidenceCount < 4) {
-    return "Complete the minimum evidence package before expecting a clean supervision handoff.";
+    return t("Completa el paquete mínimo de evidencia antes de esperar un relevo limpio de supervisión.", "Complete the minimum evidence package before expecting a clean supervision handoff.");
   }
 
   if (input.pendingDestajo > 0) {
-    return "Tell operations how the subcontract or destajo pressure will be contained before the next shift.";
+    return t("Di a operaciones cómo se contendrá la presión de subcontrato o destajo antes del siguiente turno.", "Tell operations how the subcontract or destajo pressure will be contained before the next shift.");
   }
 
   if (input.nextAction.trim().length < 8) {
-    return "Rewrite the next action so the next supervisor can continue without asking for more context.";
+    return t("Reescribe la siguiente acción para que el siguiente supervisor continúe sin pedir contexto.", "Rewrite the next action so the next supervisor can continue without asking for more context.");
   }
 
-  return "Create the log and continue directly into review, field follow-up or operations with a clean shift story.";
+  return t("Crea la bitácora y continúa directo a revisión, campo u operaciones con una historia limpia del turno.", "Create the log and continue directly into review, field follow-up or operations with a clean shift story.");
+}
+
+function actionGuard(entry: DailyLogEntryContract, status: DailyLogEntryContract["status"], t: Translate) {
+  if (status === "approved" && entry.evidenceCount < 4) {
+    return t("Requiere al menos 4 evidencias antes de aprobar.", "Requires at least 4 evidence items before approval.");
+  }
+
+  if (status === "approved" && entry.blockersCount > 0) {
+    return t("No puede aprobarse mientras existan bloqueos abiertos.", "Cannot be approved while blockers remain open.");
+  }
+
+  return null;
 }
 
 export default function DailyLogPage() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, uiLanguage, localizeText } = useAppState();
+  const searchParams = useSearchParams();
+  const t = useCallback((es: string, en: string) => localizeText({ es, en }), [localizeText]);
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
+  const fieldPreload = useMemo(() => buildFieldPreload(searchParams), [searchParams]);
   const [overview, setOverview] = useState<DailyLogOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<DailyLogEquipmentBridge>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -637,27 +901,12 @@ export default function DailyLogPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
-  const [createForm, setCreateForm] = useState({
-    projectName: "Nuevo proyecto",
-    frontName: "Frente 1",
-    supervisor: "Resident engineer",
-    logDate: new Date().toISOString().slice(0, 10),
-    shift: "morning" as DailyLogEntryContract["shift"],
-    weather: "clear" as DailyLogEntryContract["weather"],
-    status: "draft" as DailyLogEntryContract["status"],
-    progressPercent: "0",
-    workforceCount: "18",
-    incidentsCount: "0",
-    blockersCount: "0",
-    evidenceCount: "4",
-    concretePourM3: "0",
-    projectStatus: "active" as DailyLogEntryContract["projectStatus"],
-    qualityOpenFindings: "0",
-    qualityReleaseReadiness: "92",
-    subcontractHealth: "controlled" as DailyLogEntryContract["subcontractHealth"],
-    pendingDestajo: "0",
-    nextAction: ""
-  });
+  const [workspaceView, setWorkspaceView] = useState<"control" | "capture" | "queue">("control");
+  const [createForm, setCreateForm] = useState<DailyLogCreateForm>(createDefaultCreateForm);
+  const [activeFieldPreload, setActiveFieldPreload] = useState<DailyLogFieldPreload | null>(null);
+  const preloadAppliedRef = useRef(false);
+  const preloadNextActionRef = useRef<string | null>(null);
+  const preloadSelectedEntryIdRef = useRef<string | null>(null);
   const createFormNumbers = useMemo(
     () => ({
       progressPercent: Number(createForm.progressPercent),
@@ -704,7 +953,7 @@ export default function DailyLogPage() {
         }
 
         if (!result) {
-          setError("Daily log overview is unavailable right now.");
+          setError(t("La vista de bitácora no está disponible por ahora.", "Daily log overview is unavailable right now."));
           return;
         }
 
@@ -721,7 +970,7 @@ export default function DailyLogPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeCompany.id, apiBaseUrl, session.accessToken]);
+  }, [activeCompany.id, apiBaseUrl, session.accessToken, t]);
 
   const filteredEntries = useMemo(() => {
     if (!overview) {
@@ -761,54 +1010,55 @@ export default function DailyLogPage() {
     [overview, selectedEntry]
   );
 
-  const selectedStory = useMemo(
-    () => buildDailyLogEquipmentStory(selectedEntry, bridgeContext),
-    [bridgeContext, selectedEntry]
-  );
-
-  const entryActions = useMemo(() => (selectedEntry ? actionOptions(selectedEntry) : []), [selectedEntry]);
-  const approvalReadiness = useMemo(() => buildApprovalReadiness(selectedEntry), [selectedEntry]);
-  const escalationDestination = useMemo(() => buildEscalationDestination(selectedEntry), [selectedEntry]);
-  const downstreamReadiness = useMemo(() => buildDownstreamReadiness(selectedEntry), [selectedEntry]);
-  const selectedWhyNow = useMemo(() => buildDailyLogWhyNow(selectedEntry), [selectedEntry]);
-  const selectedDownstreamEffect = useMemo(() => buildDailyLogDownstreamEffect(selectedEntry), [selectedEntry]);
-  const selectedHumanStep = useMemo(() => buildDailyLogHumanStep(selectedEntry), [selectedEntry]);
-  const selectedReportBack = useMemo(() => buildDailyLogReportBack(selectedEntry), [selectedEntry]);
-  const selectedRouteSummary = useMemo(() => buildDailyLogRouteSummary(selectedEntry), [selectedEntry]);
-  const selectedOperationalLinks = useMemo(() => buildDailyLogOperationalLinks(selectedEntry), [selectedEntry]);
+  const selectedStory = useMemo(() => buildDailyLogEquipmentStory(selectedEntry, bridgeContext, t), [bridgeContext, selectedEntry, t]);
+  const approvalReadiness = useMemo(() => buildApprovalReadiness(selectedEntry, t), [selectedEntry, t]);
+  const escalationDestination = useMemo(() => buildEscalationDestination(selectedEntry, t), [selectedEntry, t]);
+  const downstreamReadiness = useMemo(() => buildDownstreamReadiness(selectedEntry, t), [selectedEntry, t]);
+  const selectedWhyNow = useMemo(() => buildDailyLogWhyNow(selectedEntry, t), [selectedEntry, t]);
+  const selectedHumanStep = useMemo(() => buildDailyLogHumanStep(selectedEntry, t), [selectedEntry, t]);
+  const selectedReportBack = useMemo(() => buildDailyLogReportBack(selectedEntry, t), [selectedEntry, t]);
+  const selectedRouteSummary = useMemo(() => buildDailyLogRouteSummary(selectedEntry, t), [selectedEntry, t]);
+  const selectedOperationalLinks = useMemo(() => buildDailyLogOperationalLinks(selectedEntry, t), [selectedEntry, t]);
+  const selectedScheduleHref = useMemo(() => buildDailyLogScheduleHref(selectedEntry, nextActionDraft), [nextActionDraft, selectedEntry]);
+  const entryActions = useMemo(() => (selectedEntry ? actionOptions(selectedEntry, t) : []), [selectedEntry, t]);
   const createGate = useMemo(
     () =>
-      buildCreateDailyLogGate({
-        projectName: createForm.projectName,
-        frontName: createForm.frontName,
-        supervisor: createForm.supervisor,
-        logDate: createForm.logDate,
-        progressPercent: createFormNumbers.progressPercent,
-        workforceCount: createFormNumbers.workforceCount,
-        blockersCount: createFormNumbers.blockersCount,
-        incidentsCount: createFormNumbers.incidentsCount,
-        evidenceCount: createFormNumbers.evidenceCount,
-        concretePourM3: createFormNumbers.concretePourM3,
-        status: createForm.status,
-        qualityOpenFindings: createFormNumbers.qualityOpenFindings,
-        qualityReleaseReadiness: createFormNumbers.qualityReleaseReadiness,
-        subcontractHealth: createForm.subcontractHealth,
-        pendingDestajo: createFormNumbers.pendingDestajo,
-        nextAction: createForm.nextAction
-      }),
-    [createForm, createFormNumbers]
+      buildCreateDailyLogGate(
+        {
+          projectName: createForm.projectName,
+          frontName: createForm.frontName,
+          supervisor: createForm.supervisor,
+          logDate: createForm.logDate,
+          progressPercent: createFormNumbers.progressPercent,
+          workforceCount: createFormNumbers.workforceCount,
+          blockersCount: createFormNumbers.blockersCount,
+          incidentsCount: createFormNumbers.incidentsCount,
+          evidenceCount: createFormNumbers.evidenceCount,
+          concretePourM3: createFormNumbers.concretePourM3,
+          status: createForm.status,
+          qualityOpenFindings: createFormNumbers.qualityOpenFindings,
+          qualityReleaseReadiness: createFormNumbers.qualityReleaseReadiness,
+          pendingDestajo: createFormNumbers.pendingDestajo,
+          nextAction: createForm.nextAction
+        },
+        t
+      ),
+    [createForm, createFormNumbers, t]
   );
   const createHumanStep = useMemo(
     () =>
-      buildCreateDailyLogHumanStep({
-        blockersCount: createFormNumbers.blockersCount,
-        qualityOpenFindings: createFormNumbers.qualityOpenFindings,
-        qualityReleaseReadiness: createFormNumbers.qualityReleaseReadiness,
-        evidenceCount: createFormNumbers.evidenceCount,
-        pendingDestajo: createFormNumbers.pendingDestajo,
-        nextAction: createForm.nextAction
-      }),
-    [createForm.nextAction, createFormNumbers]
+      buildCreateDailyLogHumanStep(
+        {
+          blockersCount: createFormNumbers.blockersCount,
+          qualityOpenFindings: createFormNumbers.qualityOpenFindings,
+          qualityReleaseReadiness: createFormNumbers.qualityReleaseReadiness,
+          evidenceCount: createFormNumbers.evidenceCount,
+          pendingDestajo: createFormNumbers.pendingDestajo,
+          nextAction: createForm.nextAction
+        },
+        t
+      ),
+    [createForm.nextAction, createFormNumbers, t]
   );
 
   useEffect(() => {
@@ -828,7 +1078,47 @@ export default function DailyLogPage() {
   }, [filteredEntries, overview, selectedEntryId]);
 
   useEffect(() => {
-    setNextActionDraft(selectedEntry?.nextAction ?? "");
+    if (preloadAppliedRef.current || !fieldPreload) {
+      return;
+    }
+
+    setActiveFieldPreload(fieldPreload);
+    setCreateForm((current) => ({
+      ...current,
+      projectName: fieldPreload.projectName || current.projectName,
+      frontName: fieldPreload.frontName || current.frontName,
+      supervisor: fieldPreload.owner || current.supervisor,
+      nextAction: fieldPreload.nextAction || current.nextAction
+    }));
+
+    if (!overview) {
+      return;
+    }
+
+    preloadAppliedRef.current = true;
+    const relatedEntry = findRelatedFieldEntry(overview.entries, fieldPreload);
+
+    if (relatedEntry) {
+      preloadSelectedEntryIdRef.current = relatedEntry.id;
+      setSelectedEntryId(relatedEntry.id);
+      if (fieldPreload.nextAction) {
+        preloadNextActionRef.current = fieldPreload.nextAction;
+      }
+      setWorkspaceView("control");
+      return;
+    }
+
+    setWorkspaceView("capture");
+  }, [fieldPreload, overview]);
+
+  useEffect(() => {
+    if (selectedEntry?.id && preloadSelectedEntryIdRef.current === selectedEntry.id && preloadNextActionRef.current) {
+      setNextActionDraft(preloadNextActionRef.current);
+      preloadSelectedEntryIdRef.current = null;
+      preloadNextActionRef.current = null;
+    } else {
+      setNextActionDraft(selectedEntry?.nextAction ?? "");
+    }
     setActionError(null);
     setActionMessage(null);
   }, [selectedEntryId, selectedEntry?.id, selectedEntry?.nextAction]);
@@ -840,17 +1130,17 @@ export default function DailyLogPage() {
 
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
-      setActionError("Next action must be more specific before updating the daily log.");
+      setActionError(t("La siguiente acción debe ser más específica antes de actualizar la bitácora.", "Next action must be more specific before updating the daily log."));
       return;
     }
 
     if (status === "approved" && selectedEntry.evidenceCount < 4) {
-      setActionError("Daily log needs at least 4 evidence items before approval.");
+      setActionError(t("La bitácora necesita al menos 4 evidencias antes de aprobar.", "Daily log needs at least 4 evidence items before approval."));
       return;
     }
 
     if (status === "approved" && selectedEntry.blockersCount > 0) {
-      setActionError("Daily log cannot be approved while blockers remain open.");
+      setActionError(t("La bitácora no puede aprobarse mientras existan bloqueos abiertos.", "Daily log cannot be approved while blockers remain open."));
       return;
     }
 
@@ -872,7 +1162,7 @@ export default function DailyLogPage() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Daily log update failed.");
+      setActionError(response.error?.message ?? t("Falló la actualización de la bitácora.", "Daily log update failed."));
       setIsSaving(false);
       return;
     }
@@ -895,7 +1185,12 @@ export default function DailyLogPage() {
     });
 
     setNextActionDraft(updatedEntry.nextAction);
-    setActionMessage(`Daily log moved to ${updatedEntry.status}.`);
+    setActionMessage(
+      t(
+        `Bitácora actualizada: ${localizeText(statusLabel(updatedEntry.status)).toLowerCase()} y relevo listo para seguimiento.`,
+        `Daily log updated: now ${localizeText(statusLabel(updatedEntry.status)).toLowerCase()} and ready for follow-through.`
+      )
+    );
     setIsSaving(false);
   }
 
@@ -910,13 +1205,13 @@ export default function DailyLogPage() {
     const nextAction = createForm.nextAction.trim();
 
     if (projectName.length < 3 || frontName.length < 3 || supervisor.length < 3) {
-      setActionError("Project, front and supervisor must be specific before creating the daily log.");
+      setActionError(t("Proyecto, frente y supervisor deben ser específicos antes de crear la bitácora.", "Project, front and supervisor must be specific before creating the daily log."));
       setCreateMessage(null);
       return;
     }
 
     if (nextAction.length < 8) {
-      setActionError("Next action must be more specific before creating the daily log.");
+      setActionError(t("La siguiente acción debe ser más específica antes de crear la bitácora.", "Next action must be more specific before creating the daily log."));
       setCreateMessage(null);
       return;
     }
@@ -929,25 +1224,25 @@ export default function DailyLogPage() {
     const concretePourM3 = Number(createForm.concretePourM3);
 
     if (!createForm.logDate) {
-      setActionError("Log date is required before creating the daily log.");
+      setActionError(t("La fecha es obligatoria antes de crear la bitácora.", "Log date is required before creating the daily log."));
       setCreateMessage(null);
       return;
     }
 
     if (!Number.isFinite(progressPercent) || progressPercent < 0 || progressPercent > 100) {
-      setActionError("Progress percent must be between 0 and 100.");
+      setActionError(t("El avance debe estar entre 0 y 100.", "Progress percent must be between 0 and 100."));
       setCreateMessage(null);
       return;
     }
 
     if (![workforceCount, blockersCount, incidentsCount, evidenceCount].every((value) => Number.isFinite(value) && value >= 0)) {
-      setActionError("Crew, blockers, incidents and evidence must be valid non-negative numbers.");
+      setActionError(t("Cuadrilla, bloqueos, incidentes y evidencia deben ser números válidos no negativos.", "Crew, blockers, incidents and evidence must be valid non-negative numbers."));
       setCreateMessage(null);
       return;
     }
 
     if (!Number.isFinite(concretePourM3) || concretePourM3 < 0) {
-      setActionError("Concrete volume must be a valid non-negative number.");
+      setActionError(t("El volumen de concreto debe ser un número válido no negativo.", "Concrete volume must be a valid non-negative number."));
       setCreateMessage(null);
       return;
     }
@@ -981,7 +1276,7 @@ export default function DailyLogPage() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Daily log creation failed.");
+      setActionError(response.error?.message ?? t("Falló la creación de la bitácora.", "Daily log creation failed."));
       setIsCreating(false);
       return;
     }
@@ -1002,7 +1297,13 @@ export default function DailyLogPage() {
     });
     setSelectedEntryId(newEntry.id);
     setNextActionDraft(newEntry.nextAction);
-    setCreateMessage(`${frontName} daily log added to the workbench.`);
+    setCreateMessage(
+      t(
+        `${frontName} quedó registrada y ya está al frente de la cola operativa.`,
+        `${frontName} was logged and is now leading the operating queue.`
+      )
+    );
+    setWorkspaceView("control");
     setCreateForm((current) => ({
       ...current,
       frontName,
@@ -1026,341 +1327,181 @@ export default function DailyLogPage() {
 
   return (
     <AppShell
-      title="Daily log"
-      eyebrow="Field execution"
-      description="Daily site diary for crews, evidence, blockers and shift-by-shift operating discipline."
+      title={{ es: "Bitácora diaria", en: "Daily log" }}
+      eyebrow={{ es: "Ejecución de campo", en: "Field execution" }}
+      description={{
+        es: "Puesto de mando para capturar el turno, ordenar bloqueos y dejar el siguiente movimiento claro para campo y supervisión.",
+        en: "Operator console for capturing the shift, sorting blockers and leaving the next move clear for field and supervision."
+      }}
     >
       <ModuleGate moduleKeys={["projects.daily-log"]} requiredPermissions={["projects:*"]} title="Daily log">
         {overview ? (
-          <>
+          <div className="stack" lang={uiLanguage}>
             <section className="grid cols4">
-              <KpiCard
-                label="Submitted today"
-                value={String(filteredSummary.submittedToday)}
-                footnote="Visible logs already out of draft and visible to supervision today."
-              />
-              <KpiCard
-                label="Approved logs"
-                value={String(filteredSummary.approvedLogs)}
-                footnote="Visible field logs that already cleared review with evidence discipline."
-              />
-              <KpiCard
-                label="Flagged logs"
-                value={String(filteredSummary.flaggedLogs)}
-                footnote="Visible logs still blocked by issues, evidence gaps or field exceptions."
-              />
-              <KpiCard
-                label="Pending evidence"
-                value={String(filteredSummary.pendingEvidence)}
-                footnote="Directional evidence debt still pending before clean field closure."
-              />
-              <KpiCard
-                label="Execution risk"
-                value={String(filteredSummary.executionRiskLogs)}
-                footnote="Visible logs already carrying field, quality or subcontract execution risk."
-              />
+              <KpiCard label={t("Enviadas hoy", "Submitted today")} value={String(filteredSummary.submittedToday)} footnote={t("visibles fuera de borrador", "visible outside draft")} />
+              <KpiCard label={t("Aprobadas", "Approved logs")} value={String(filteredSummary.approvedLogs)} footnote={t("liberadas por supervisión", "released by supervision")} />
+              <KpiCard label={t("Marcadas", "Flagged logs")} value={String(filteredSummary.flaggedLogs)} footnote={t("requieren contención", "require containment")} />
+              <KpiCard label={t("Evidencia pendiente", "Pending evidence")} value={String(filteredSummary.pendingEvidence)} footnote={t("deuda visible del subconjunto", "visible subset debt")} />
+              <KpiCard label={t("Riesgo de ejecución", "Execution risk")} value={String(filteredSummary.executionRiskLogs)} footnote={t("frentes con riesgo activo", "fronts with active risk")} />
             </section>
 
-            {isDemoMode ? (
-              <Card
-                title="Operable demo mode"
-                description="Daily logs can be created and moved across statuses locally in this browser."
-                aside={<Badge tone="warning">browser-persisted</Badge>}
-              >
-                <div className="detailGrid">
-                  <div className="detailRow">
-                    <div className="detailLabel">What works</div>
-                    <div>Create bitacoras, submit or flag them, and test evidence or blocker rules before production auth is wired.</div>
-                  </div>
-                  <div className="detailRow">
-                    <div className="detailLabel">Recommended test</div>
-                    <div>Create a new log for an active front, then submit it and verify how it appears in Operations.</div>
-                  </div>
-                </div>
-              </Card>
-            ) : null}
+            <div className="projectWorkspaceTabs" role="tablist" aria-label={t("Vistas de bitácora", "Daily log views")}>
+              {([
+                ["control", t("Control", "Control")],
+                ["capture", t("Captura", "Capture")],
+                ["queue", t("Mesa amplia", "Wide table")]
+              ] as const).map(([view, label]) => (
+                <button
+                  key={view}
+                  type="button"
+                  role="tab"
+                  aria-selected={workspaceView === view}
+                  className={`projectWorkspaceTab ${workspaceView === view ? "projectWorkspaceTabActive" : ""}`}
+                  onClick={() => setWorkspaceView(view)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
-            <section className="grid cols1">
-              <Card
-                title="Daily supervision workflow"
-                description="This route should already let a supervisor capture, review and push the next operational move without leaving the workbench."
-              >
-                <p className="sectionText">
-                  Create or update the daily log, move it across `draft`, `submitted`, `approved` or `flagged`, then continue into
-                  `field`, `operations` or `equipment` depending on whether the issue is execution, coordination or asset continuity.
-                </p>
-              </Card>
-            </section>
-
+            {workspaceView === "control" ? (
             <section className="grid cols2">
               <Card
-                title="Daily log continuity"
-                description="Daily log should be the formal checkpoint between front execution, field capture and quality follow-through."
-                aside={<Badge tone={filteredSummary.flaggedLogs > 0 ? "danger" : filteredSummary.executionRiskLogs > 0 ? "warning" : "success"}>{filteredSummary.flaggedLogs > 0 ? "flagged lane" : filteredSummary.executionRiskLogs > 0 ? "risk lane" : "stable lane"}</Badge>}
-              >
-                <div className="detailGrid">
-                  <div className="detailRow"><div className="detailLabel">Current route</div><div>{buildDailyLogWorkflow(selectedEntry)}</div></div>
-                  <div className="detailRow"><div className="detailLabel">Supervisor use</div><div>Approve only when the field story, evidence and blockers are coherent enough for the next shift.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Downstream jump</div><div>Move into `field`, `quality`, `operations` or `equipment` depending on what is actually blocking execution.</div></div>
-                </div>
-                <div className="row gap wrap" style={{ marginTop: 16 }}>
-                  <Link className="button" href="/field">Open field</Link>
-                  <Link className="buttonGhost" href="/quality">Open quality</Link>
-                  <Link className="buttonGhost" href="/operations">Open operations</Link>
-                  <Link className="buttonGhost" href="/equipment">Open equipment</Link>
-                </div>
-              </Card>
-            </section>
-
-            <section className="grid cols3">
-              <Card title="Equipment support" description="How much asset support is currently mapped to this field front.">
-                <p className="sectionText">
-                  {selectedStory?.equipmentSupport ?? "Choose a daily log to inspect equipment support."}
-                </p>
-              </Card>
-              <Card title="Execution constraint" description="Whether asset posture is already limiting this shift.">
-                <p className="sectionText">
-                  {selectedStory?.executionConstraint ?? "Choose a daily log to inspect equipment constraint."}
-                </p>
-              </Card>
-              <Card title="Next equipment move" description="Immediate asset action required for the selected front.">
-                <p className="sectionText">
-                  {selectedStory?.nextEquipmentMove ?? "Choose a daily log to inspect the next equipment move."}
-                </p>
-              </Card>
-            </section>
-
-            <section className="grid cols3">
-              <Card
-                title="Approval readiness"
-                description="Whether the selected log can actually clear supervision right now."
-                aside={<Badge tone={approvalReadiness.tone}>{approvalReadiness.label}</Badge>}
-              >
-                <p className="sectionText">{approvalReadiness.description}</p>
-              </Card>
-              <Card title="Escalation destination" description="Best next module based on the selected operating constraint.">
-                <p className="sectionText">{escalationDestination.description}</p>
-                <div className="row gap wrap" style={{ marginTop: 16 }}>
-                  <Link className="button secondary" href={escalationDestination.href}>
-                    {escalationDestination.label}
-                  </Link>
-                </div>
-              </Card>
-              <Card title="Supervisor checklist" description="Minimum discipline before closing the shift story.">
-                <div className="detailGrid">
-                  <div className="detailRow"><div className="detailLabel">Evidence</div><div>At least 4 usable evidence items for review.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Blockers</div><div>No open blockers if the log is going to approved status.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Next move</div><div>The next action must clearly say who acts next and where the follow-up continues.</div></div>
-                </div>
-              </Card>
-            </section>
-
-            <section className="grid cols2">
-              <Card title="Daily log board" description="Shift capture, productivity and blocker posture across the active fronts.">
-                <FilterBar summary={`${filteredEntries.length} logs match the current operating filters`}>
-                  <label className="fieldLabel">
-                    Status
-                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
-                      <option value="all">All</option>
-                      <option value="draft">Draft</option>
-                      <option value="submitted">Submitted</option>
-                      <option value="approved">Approved</option>
-                      <option value="flagged">Flagged</option>
-                    </select>
-                  </label>
-                  <label className="fieldLabel">
-                    Shift
-                    <select className="field" value={shiftFilter} onChange={(event) => setShiftFilter(event.target.value as typeof shiftFilter)}>
-                      <option value="all">All</option>
-                      <option value="morning">Morning</option>
-                      <option value="afternoon">Afternoon</option>
-                      <option value="night">Night</option>
-                      <option value="mixed">Mixed</option>
-                    </select>
-                  </label>
-                  <label className="fieldLabel">
-                    Weather
-                    <select className="field" value={weatherFilter} onChange={(event) => setWeatherFilter(event.target.value as typeof weatherFilter)}>
-                      <option value="all">All</option>
-                      <option value="clear">Clear</option>
-                      <option value="windy">Windy</option>
-                      <option value="rain">Rain</option>
-                      <option value="storm">Storm</option>
-                    </select>
-                  </label>
-                  <label className="fieldLabel" style={{ minWidth: 200 }}>
-                    Project
-                    <input
-                      className="field"
-                      type="search"
-                      value={projectFilter}
-                      onChange={(event) => setProjectFilter(event.target.value)}
-                      placeholder="Project or front"
-                    />
-                  </label>
-                  <label className="fieldLabel" style={{ minWidth: 220 }}>
-                    Search
-                    <input
-                      className="field"
-                      type="search"
-                      value={searchFilter}
-                      onChange={(event) => setSearchFilter(event.target.value)}
-                      placeholder="Supervisor or next action"
-                    />
-                  </label>
-                  <Badge tone={isDemoMode ? "warning" : "success"}>
-                    {isDemoMode ? "demo operable" : "live backend"}
-                  </Badge>
-                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "field diary ready"}</Badge>
-                  <Badge tone={filteredSummary.flaggedLogs > 0 ? "danger" : filteredSummary.executionRiskLogs > 0 ? "warning" : "success"}>
-                    {filteredSummary.flaggedLogs > 0
-                      ? `${filteredSummary.flaggedLogs} flagged`
-                      : filteredSummary.executionRiskLogs > 0
-                        ? `${filteredSummary.executionRiskLogs} at risk`
-                        : "visible subset controlled"}
-                  </Badge>
-                </FilterBar>
-                <DataTable
-                  rows={filteredEntries}
-                  columns={[
-                    {
-                      key: "frontName",
-                      label: "Front",
-                      render: (entry) => (
-                        <button type="button" className="button ghost" onClick={() => setSelectedEntryId(entry.id)}>
-                          {entry.frontName}
-                        </button>
-                      )
-                    },
-                    {
-                      key: "projectName",
-                      label: "Project",
-                      render: (entry) => entry.projectName
-                    },
-                    {
-                      key: "status",
-                      label: "Status",
-                      render: (entry) => <Badge tone={statusTone(entry.status)}>{entry.status}</Badge>
-                    },
-                    {
-                      key: "workforceCount",
-                      label: "Crew",
-                      render: (entry) => String(entry.workforceCount)
-                    },
-                    {
-                      key: "progressPercent",
-                      label: "Progress",
-                      render: (entry) => `${entry.progressPercent}%`
-                    }
-                  ]}
-                />
-              </Card>
-
-              <Card
-                title={selectedEntry ? selectedEntry.frontName : "Select a daily log"}
+                title={selectedEntry ? selectedEntry.frontName : t("Selecciona una bitácora activa", "Select an active log")}
                 description={
                   selectedEntry
                     ? `${selectedEntry.projectName} · ${selectedEntry.logDate} · ${selectedEntry.supervisor}`
-                    : "Review the selected field log, blockers and evidence posture."
+                    : t("Abre un frente de la cola para capturar decisiones del turno y dejar el relevo listo.", "Open a front from the queue to record shift decisions and leave the handoff ready.")
+                }
+                aside={
+                  <div className="row gap wrap" style={{ justifyContent: "flex-end" }}>
+                    {activeFieldPreload ? <Badge tone="info">Precargado desde campo / Preloaded from field</Badge> : null}
+                    {selectedEntry ? <Badge tone={statusTone(selectedEntry.status)}>{localizeText(statusLabel(selectedEntry.status))}</Badge> : null}
+                  </div>
                 }
               >
                 {selectedEntry ? (
                   <div className="stack">
-                    <div className="grid cols2">
-                      <KpiCard label="Crew" value={String(selectedEntry.workforceCount)} footnote={`Shift: ${selectedEntry.shift}`} />
-                      <KpiCard
-                        label="Progress"
-                        value={`${selectedEntry.progressPercent}%`}
-                        footnote={`${selectedEntry.concretePourM3} m3 concrete captured`}
-                      />
-                    </div>
+                    <p className="tableCellMuted">
+                      {t(
+                        "Usa este panel como tablero del turno: confirma avance, corrige la siguiente acción y mueve la bitácora sólo cuando el relevo quede operable.",
+                        "Use this panel as the live shift board: confirm progress, tighten the next action and move the log only when the handoff is operational."
+                      )}
+                    </p>
 
                     <div className="row gap wrap">
-                      <Badge tone={statusTone(selectedEntry.status)}>{selectedEntry.status}</Badge>
-                      <Badge tone="info">{weatherLabel(selectedEntry.weather)}</Badge>
-                      <Badge tone={selectedEntry.projectStatus === "blocked" ? "danger" : selectedEntry.projectStatus === "at_risk" ? "warning" : "success"}>
-                        {selectedEntry.projectStatus}
-                      </Badge>
-                      <Badge tone={selectedEntry.subcontractHealth === "critical" ? "danger" : selectedEntry.subcontractHealth === "watch" ? "warning" : "success"}>
-                        {selectedEntry.subcontractHealth}
-                      </Badge>
-                      <Badge tone={selectedEntry.blockersCount > 0 ? "danger" : "success"}>
-                        {selectedEntry.blockersCount} blockers
-                      </Badge>
-                      <Badge tone={selectedEntry.incidentsCount > 0 ? "warning" : "success"}>
-                        {selectedEntry.incidentsCount} incidents
-                      </Badge>
+                      <Badge tone="info">{t("Turno", "Shift")}: {localizeText(shiftLabel(selectedEntry.shift))}</Badge>
+                      <Badge tone="info">{t("Clima", "Weather")}: {localizeText(weatherLabel(selectedEntry.weather))}</Badge>
+                      <Badge tone={projectStatusTone(selectedEntry.projectStatus)}>{localizeText(projectStatusLabel(selectedEntry.projectStatus))}</Badge>
+                      <Badge tone={subcontractHealthTone(selectedEntry.subcontractHealth)}>{localizeText(subcontractHealthLabel(selectedEntry.subcontractHealth))}</Badge>
+                    </div>
+
+                    <div className="grid cols3">
+                      <KpiCard label={t("Avance", "Progress")} value={`${selectedEntry.progressPercent}%`} footnote={`${selectedEntry.concretePourM3} m3`} />
+                      <KpiCard label={t("Cuadrilla", "Crew")} value={String(selectedEntry.workforceCount)} footnote={t("personal en sitio", "people on site")} />
+                      <KpiCard label={t("Evidencia", "Evidence")} value={String(selectedEntry.evidenceCount)} footnote={t("items capturados", "captured items")} />
                     </div>
 
                     <div className="detailGrid">
                       <div className="detailRow">
-                        <div className="detailLabel">Quality posture</div>
-                        <div>
-                          {selectedEntry.qualityOpenFindings} open findings
-                          <div className="tableCellMuted">{selectedEntry.qualityReleaseReadiness}% release readiness</div>
+                        <div className="detailLabel">{t("Bloqueos / Incidencias", "Blockers / Incidents")}</div>
+                        <div>{selectedEntry.blockersCount} / {selectedEntry.incidentsCount}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Calidad", "Quality")}</div>
+                        <div>{selectedEntry.qualityOpenFindings} {t("hallazgos abiertos", "open findings")} · {selectedEntry.qualityReleaseReadiness}% {t("liberación", "readiness")}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Señal subcontrato", "Subcontract signal")}</div>
+                        <div>MXN {selectedEntry.pendingDestajo.toLocaleString()} · {localizeText(subcontractHealthLabel(selectedEntry.subcontractHealth))}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Estado actual", "Current status")}</div>
+                        <div className="tableCellStack">
+                          <Badge tone={approvalReadiness.tone}>{approvalReadiness.label}</Badge>
+                          <span className="tableCellMuted">{approvalReadiness.description}</span>
                         </div>
                       </div>
                       <div className="detailRow">
-                        <div className="detailLabel">Pending destajo</div>
-                        <div>MXN {selectedEntry.pendingDestajo.toLocaleString()}</div>
-                      </div>
-                      <div className="detailRow">
-                        <div className="detailLabel">Why now</div>
-                        <div>{selectedWhyNow}</div>
-                      </div>
-                      <div className="detailRow">
-                        <div className="detailLabel">Downstream effect</div>
-                        <div>{selectedDownstreamEffect}</div>
-                      </div>
-                      <div className="detailRow">
-                        <div className="detailLabel">Route summary</div>
-                        <div>{selectedRouteSummary}</div>
-                      </div>
-                      <div className="detailRow">
-                        <div className="detailLabel">Next human step</div>
+                        <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
                         <div>{selectedHumanStep}</div>
                       </div>
                       <div className="detailRow">
-                        <div className="detailLabel">Report back</div>
-                        <div>{selectedReportBack}</div>
-                      </div>
-                      <div className="detailRow">
-                        <div className="detailLabel">Downstream readiness</div>
+                        <div className="detailLabel">{t("Equipo", "Equipment")}</div>
                         <div className="tableCellStack">
-                          <Badge tone={downstreamReadiness.tone}>{downstreamReadiness.label}</Badge>
-                          <span className="tableCellMuted">{downstreamReadiness.summary}</span>
-                          {downstreamReadiness.checks.map((check) => (
-                            <span key={check} className="tableCellMuted">{check}</span>
-                          ))}
+                          <span>{selectedStory?.equipmentSupport ?? t("Sin lectura de equipo.", "No equipment reading available.")}</span>
+                          <span className="tableCellMuted">{selectedStory?.executionConstraint}</span>
+                          <span className="tableCellMuted">{selectedStory?.nextEquipmentMove}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="stack">
                       <label className="label" htmlFor="daily-log-next-action">
-                        Next action
+                        {t("Siguiente acción para el relevo", "Next action for handoff")}
                       </label>
+                      <p className="tableCellMuted">
+                        {t(
+                          "Escribe qué sigue, quién lo toma y qué condición debe quedar resuelta antes del siguiente corte operativo.",
+                          "Write what happens next, who owns it and what must be resolved before the next operating cutoff."
+                        )}
+                      </p>
                       <textarea
                         id="daily-log-next-action"
                         className="textarea"
                         rows={4}
+                        lang={uiLanguage}
                         value={nextActionDraft}
                         onChange={(event) => setNextActionDraft(event.target.value)}
+                        placeholder={t(
+                          "Ej. Cerrar colado del eje B, subir evidencia final y liberar revisión con residente de noche.",
+                          "Example: Close pour on grid B, upload final evidence and release review with the night resident engineer."
+                        )}
                       />
                     </div>
 
+                    <div className="stack">
+                      <p className="tableCellMuted">
+                        {t(
+                          "Elige la acción que realmente deja el frente listo para el siguiente dueño. Si el botón se bloquea, corrige primero la evidencia o los bloqueos.",
+                          "Pick the action that truly leaves the front ready for its next owner. If a button is blocked, fix evidence or blockers first."
+                        )}
+                      </p>
+                      <div className="row gap wrap">
+                        {entryActions.map((action) => {
+                          const guard = actionGuard(selectedEntry, action.status, t);
+                          return (
+                            <button
+                              key={action.label}
+                              type="button"
+                              className="button secondary"
+                              onClick={() => void handleAction(action.status, action.nextAction)}
+                              disabled={isSaving || Boolean(guard)}
+                              title={guard ?? undefined}
+                            >
+                              {isSaving ? t("Guardando...", "Saving...") : action.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {entryActions.map((action) => {
+                        const guard = actionGuard(selectedEntry, action.status, t);
+                        return guard ? <p key={action.label} className="tableCellMuted">{action.label}: {guard}</p> : null;
+                      })}
+                    </div>
+
                     <div className="row gap wrap">
-                      {entryActions.map((action) => (
-                        <button
-                          key={action.label}
-                          type="button"
-                          className="button secondary"
-                          onClick={() => void handleAction(action.status, action.nextAction)}
-                          disabled={isSaving}
-                        >
-                          {action.label}
-                        </button>
-                      ))}
+                      <Link className="button" href={escalationDestination.href}>
+                        {escalationDestination.label}
+                      </Link>
+                      {selectedScheduleHref ? (
+                        <Link className="buttonGhost" href={selectedScheduleHref}>
+                          {t("Escalar al programa", "Escalate to schedule")}
+                        </Link>
+                      ) : null}
+                      <button type="button" className="buttonGhost" onClick={() => setWorkspaceView("capture")}>
+                        {t("Registrar nuevo frente", "Log new front")}
+                      </button>
                       {selectedOperationalLinks.map((link) => (
                         <Link key={link.href + link.label} className="buttonGhost" href={link.href}>
                           {link.label}
@@ -1370,391 +1511,424 @@ export default function DailyLogPage() {
 
                     {actionError ? <p className="text-danger">{actionError}</p> : null}
                     {actionMessage ? <p className="text-success">{actionMessage}</p> : null}
-
-                    <Card title="Field risks" description="Current blockers or evidence issues tied to this daily log.">
-                      {selectedRisks.length > 0 ? (
-                        <div className="stack">
-                          {selectedRisks.map((risk) => (
-                            <div key={risk.id} className="row space-between card-section">
-                              <div>
-                                <strong>{risk.title}</strong>
-                                <p>
-                                  {risk.category} · {risk.owner}
-                                </p>
-                              </div>
-                              <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
-                                {risk.status}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyState title="No active risks" description="This log is not carrying explicit field blockers right now." />
-                      )}
-                    </Card>
                   </div>
                 ) : (
-                  <EmptyState title="No log selected" description="Choose a daily log from the board to review field detail." />
+                  <EmptyState
+                    title={t("Sin frente en revisión", "No front under review")}
+                    description={t(
+                      "Selecciona una bitácora de la cola para revisar evidencia, decidir el siguiente movimiento y cerrar el relevo del turno.",
+                      "Select a log from the queue to review evidence, decide the next move and close the shift handoff."
+                    )}
+                  />
+                )}
+              </Card>
+
+              <Card
+                title={t("Cola de frentes", "Front queue")}
+                description={t(
+                  "Ordena la revisión del día y entra al frente correcto sin perder tiempo en la tabla completa.",
+                  "Sort today’s review and jump into the right front without losing time in the full table."
+                )}
+                aside={<Badge tone={isLoading ? "info" : isDemoMode ? "warning" : "success"}>{isLoading ? t("Actualizando", "Refreshing") : isDemoMode ? t("Demo operable", "Operable demo") : t("Backend vivo", "Live backend")}</Badge>}
+              >
+                <FilterBar summary={t(`${filteredEntries.length} frentes visibles en cola`, `${filteredEntries.length} fronts visible in queue`)}>
+                  <label className="fieldLabel">
+                    {t("Estado", "Status")}
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                      <option value="all">{t("Todos", "All")}</option>
+                      {(["draft", "submitted", "approved", "flagged"] as DailyLogEntryContract["status"][]).map((status) => (
+                        <option key={status} value={status}>{localizeText(statusLabel(status))}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    {t("Turno", "Shift")}
+                    <select className="field" value={shiftFilter} onChange={(event) => setShiftFilter(event.target.value as typeof shiftFilter)}>
+                      <option value="all">{t("Todos", "All")}</option>
+                      {(["morning", "night", "mixed"] as DailyLogEntryContract["shift"][]).map((shift) => (
+                        <option key={shift} value={shift}>{localizeText(shiftLabel(shift))}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    {t("Clima", "Weather")}
+                    <select className="field" value={weatherFilter} onChange={(event) => setWeatherFilter(event.target.value as typeof weatherFilter)}>
+                      <option value="all">{t("Todos", "All")}</option>
+                      {(["clear", "windy", "rain", "storm"] as DailyLogEntryContract["weather"][]).map((weather) => (
+                        <option key={weather} value={weather}>{localizeText(weatherLabel(weather))}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="fieldLabel">
+                    {t("Proyecto / frente", "Project / front")}
+                    <input
+                      className="field"
+                      type="search"
+                      value={projectFilter}
+                      onChange={(event) => setProjectFilter(event.target.value)}
+                      placeholder={t("Ej. Torre Norte o Losa 3", "Example: North Tower or Slab 3")}
+                    />
+                  </label>
+                  <label className="fieldLabel">
+                    {t("Buscar", "Search")}
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder={t("Supervisor, frente o siguiente acción", "Supervisor, front or next action")}
+                    />
+                  </label>
+                </FilterBar>
+
+                {filteredEntries.length > 0 ? (
+                  <div className="list">
+                    {filteredEntries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className={`listItem ${selectedEntry?.id === entry.id ? "listItemSelected" : ""}`}
+                        onClick={() => setSelectedEntryId(entry.id)}
+                      >
+                        <div>
+                          <strong>{entry.frontName}</strong>
+                          <p>{entry.projectName} · {localizeText(shiftLabel(entry.shift))} · {entry.progressPercent}%</p>
+                          <p>{entry.workforceCount} {t("personas en sitio", "people on site")} · {entry.evidenceCount} {t("evidencias", "evidence items")} · {entry.blockersCount} {t("bloqueos", "blockers")}</p>
+                        </div>
+                        <Badge tone={statusTone(entry.status)}>{localizeText(statusLabel(entry.status))}</Badge>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    title={t("La cola quedó vacía", "Queue is empty")}
+                    description={t(
+                      "Ajusta filtros o registra un nuevo frente para volver a tener algo operable en este turno.",
+                      "Adjust filters or log a new front to get an operable item back into this shift."
+                    )}
+                  />
                 )}
               </Card>
             </section>
+            ) : null}
 
+            {workspaceView === "capture" ? (
             <section className="grid cols2">
               <Card
-                title="Capture daily log"
-                description="Create a new field diary entry in the tenant workbench before wiring live POST endpoints."
+                title={t("Registrar frente del turno", "Log the shift front")}
+                description={t(
+                  "Captura la historia mínima de campo para que supervisión y el siguiente relevo puedan continuar sin pedir contexto extra.",
+                  "Capture the minimum field story so supervision and the next handoff can continue without asking for extra context."
+                )}
+                aside={activeFieldPreload ? <Badge tone="info">Precargado desde campo / Preloaded from field</Badge> : null}
               >
+                <p className="tableCellMuted">
+                  {t(
+                    "Llena primero proyecto, frente, responsable y siguiente acción. Los presets sirven para arrancar rápido, pero la captura final debe hablar como el equipo en campo.",
+                    "Fill project, front, owner and next action first. Presets help you start fast, but the final capture should read like the field team actually works."
+                  )}
+                </p>
+
                 <div className="row gap wrap" style={{ marginBottom: 16 }}>
-                  <button
-                    type="button"
-                    className="buttonGhost"
-                    onClick={() => setCreateForm(createDailyLogExample())}
-                  >
-                    Load demo example
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDailyLogExample())}>
+                    {t("Ejemplo guiado", "Guided example")}
                   </button>
-                  <button
-                    type="button"
-                    className="buttonGhost"
-                    onClick={() =>
-                      setCreateForm({
-                        projectName: "Nuevo proyecto",
-                        frontName: "Frente 1",
-                        supervisor: "Resident engineer",
-                        logDate: new Date().toISOString().slice(0, 10),
-                        shift: "morning",
-                        weather: "clear",
-                        status: "draft",
-                        progressPercent: "0",
-                        workforceCount: "18",
-                        incidentsCount: "0",
-                        blockersCount: "0",
-                        evidenceCount: "4",
-                        concretePourM3: "0",
-                        projectStatus: "active",
-                        qualityOpenFindings: "0",
-                        qualityReleaseReadiness: "92",
-                        subcontractHealth: "controlled",
-                        pendingDestajo: "0",
-                        nextAction: ""
-                      })
-                    }
-                  >
-                    Reset form
+                  <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDefaultCreateForm())}>
+                    {t("Nueva captura", "New capture")}
                   </button>
                   <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDailyLogPreset("concrete_pour"))}>
-                    Concrete pour preset
+                    {t("Preset colado", "Concrete pour preset")}
                   </button>
                   <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDailyLogPreset("quality_hold"))}>
-                    Quality hold preset
+                    {t("Preset calidad", "Quality hold preset")}
                   </button>
                   <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDailyLogPreset("equipment_delay"))}>
-                    Equipment delay preset
+                    {t("Preset equipo", "Equipment delay preset")}
                   </button>
-                  <Link className="buttonGhost" href="/field">Open field</Link>
-                  <Link className="buttonGhost" href="/operations">Open operations</Link>
                 </div>
+
                 <div className="detailGrid">
                   <label className="detailRow">
-                    <div className="detailLabel">Project</div>
-                    <input
-                      className="field"
-                      value={createForm.projectName}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Proyecto", "Project")}</div>
+                    <input className="field" value={createForm.projectName} onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))} placeholder={t("Nombre del proyecto o paquete", "Project or package name")} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Front</div>
-                    <input
-                      className="field"
-                      value={createForm.frontName}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, frontName: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Frente / zona", "Front / zone")}</div>
+                    <input className="field" value={createForm.frontName} onChange={(event) => setCreateForm((current) => ({ ...current, frontName: event.target.value }))} placeholder={t("Ej. Muro perimetral norte", "Example: North perimeter wall")} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Supervisor</div>
-                    <input
-                      className="field"
-                      value={createForm.supervisor}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, supervisor: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Responsable del turno", "Shift owner")}</div>
+                    <input className="field" value={createForm.supervisor} onChange={(event) => setCreateForm((current) => ({ ...current, supervisor: event.target.value }))} placeholder={t("Nombre del residente o supervisor", "Resident engineer or supervisor name")} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Date</div>
-                    <input
-                      className="field"
-                      type="date"
-                      value={createForm.logDate}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, logDate: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Fecha del parte", "Log date")}</div>
+                    <input className="field" type="date" value={createForm.logDate} onChange={(event) => setCreateForm((current) => ({ ...current, logDate: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Shift</div>
-                    <select
-                      className="selectField"
-                      value={createForm.shift}
-                      onChange={(event) =>
-                        setCreateForm((current) => ({ ...current, shift: event.target.value as DailyLogEntryContract["shift"] }))
-                      }
-                    >
-                      <option value="morning">morning</option>
-                      <option value="mixed">mixed</option>
-                      <option value="night">night</option>
+                    <div className="detailLabel">{t("Turno", "Shift")}</div>
+                    <select className="selectField" value={createForm.shift} onChange={(event) => setCreateForm((current) => ({ ...current, shift: event.target.value as DailyLogEntryContract["shift"] }))}>
+                      {(["morning", "night", "mixed"] as DailyLogEntryContract["shift"][]).map((shift) => (
+                        <option key={shift} value={shift}>{localizeText(shiftLabel(shift))}</option>
+                      ))}
                     </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Weather</div>
-                    <select
-                      className="selectField"
-                      value={createForm.weather}
-                      onChange={(event) =>
-                        setCreateForm((current) => ({
-                          ...current,
-                          weather: event.target.value as DailyLogEntryContract["weather"]
-                        }))
-                      }
-                    >
-                      <option value="clear">clear</option>
-                      <option value="windy">windy</option>
-                      <option value="rain">rain</option>
-                      <option value="storm">storm</option>
+                    <div className="detailLabel">{t("Clima", "Weather")}</div>
+                    <select className="selectField" value={createForm.weather} onChange={(event) => setCreateForm((current) => ({ ...current, weather: event.target.value as DailyLogEntryContract["weather"] }))}>
+                      {(["clear", "windy", "rain", "storm"] as DailyLogEntryContract["weather"][]).map((weather) => (
+                        <option key={weather} value={weather}>{localizeText(weatherLabel(weather))}</option>
+                      ))}
                     </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Status</div>
-                    <select
-                      className="selectField"
-                      value={createForm.status}
-                      onChange={(event) =>
-                        setCreateForm((current) => ({
-                          ...current,
-                          status: event.target.value as DailyLogEntryContract["status"]
-                        }))
-                      }
-                    >
-                      <option value="draft">draft</option>
-                      <option value="submitted">submitted</option>
-                      <option value="approved">approved</option>
-                      <option value="flagged">flagged</option>
+                    <div className="detailLabel">{t("Estado de arranque", "Starting status")}</div>
+                    <select className="selectField" value={createForm.status} onChange={(event) => setCreateForm((current) => ({ ...current, status: event.target.value as DailyLogEntryContract["status"] }))}>
+                      {(["draft", "submitted", "approved", "flagged"] as DailyLogEntryContract["status"][]).map((status) => (
+                        <option key={status} value={status}>{localizeText(statusLabel(status))}</option>
+                      ))}
                     </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Progress %</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={createForm.progressPercent}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, progressPercent: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Avance del frente %", "Front progress %")}</div>
+                    <input className="field" type="number" min="0" max="100" value={createForm.progressPercent} onChange={(event) => setCreateForm((current) => ({ ...current, progressPercent: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Crew</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={createForm.workforceCount}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, workforceCount: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Cuadrilla activa", "Active crew")}</div>
+                    <input className="field" type="number" min="0" value={createForm.workforceCount} onChange={(event) => setCreateForm((current) => ({ ...current, workforceCount: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Blockers</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={createForm.blockersCount}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, blockersCount: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Bloqueos", "Blockers")}</div>
+                    <input className="field" type="number" min="0" value={createForm.blockersCount} onChange={(event) => setCreateForm((current) => ({ ...current, blockersCount: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Incidents</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={createForm.incidentsCount}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, incidentsCount: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Incidencias", "Incidents")}</div>
+                    <input className="field" type="number" min="0" value={createForm.incidentsCount} onChange={(event) => setCreateForm((current) => ({ ...current, incidentsCount: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Evidence</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={createForm.evidenceCount}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, evidenceCount: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Evidencia cargada", "Evidence logged")}</div>
+                    <input className="field" type="number" min="0" value={createForm.evidenceCount} onChange={(event) => setCreateForm((current) => ({ ...current, evidenceCount: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Concrete m3</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={createForm.concretePourM3}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, concretePourM3: event.target.value }))}
-                    />
+                    <div className="detailLabel">{t("Concreto m3", "Concrete m3")}</div>
+                    <input className="field" type="number" min="0" value={createForm.concretePourM3} onChange={(event) => setCreateForm((current) => ({ ...current, concretePourM3: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Project status</div>
-                    <select
-                      className="selectField"
-                      value={createForm.projectStatus}
-                      onChange={(event) =>
-                        setCreateForm((current) => ({
-                          ...current,
-                          projectStatus: event.target.value as DailyLogEntryContract["projectStatus"]
-                        }))
-                      }
-                    >
-                      <option value="on_track">on_track</option>
-                      <option value="at_risk">at_risk</option>
-                      <option value="blocked">blocked</option>
-                      <option value="completed">completed</option>
-                      <option value="unknown">unknown</option>
-                    </select>
-                  </label>
-                  <label className="detailRow">
-                    <div className="detailLabel">Quality findings</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={createForm.qualityOpenFindings}
-                      onChange={(event) =>
-                        setCreateForm((current) => ({ ...current, qualityOpenFindings: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="detailRow">
-                    <div className="detailLabel">Release readiness %</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={createForm.qualityReleaseReadiness}
-                      onChange={(event) =>
-                        setCreateForm((current) => ({ ...current, qualityReleaseReadiness: event.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="detailRow">
-                    <div className="detailLabel">Subcontract health</div>
-                    <select
-                      className="selectField"
-                      value={createForm.subcontractHealth}
-                      onChange={(event) =>
-                        setCreateForm((current) => ({
-                          ...current,
-                          subcontractHealth: event.target.value as DailyLogEntryContract["subcontractHealth"]
-                        }))
-                      }
-                    >
-                      <option value="controlled">controlled</option>
-                      <option value="watch">watch</option>
-                      <option value="critical">critical</option>
-                      <option value="unknown">unknown</option>
-                    </select>
-                  </label>
-                  <label className="detailRow">
-                    <div className="detailLabel">Pending destajo</div>
-                    <input
-                      className="field"
-                      type="number"
-                      min="0"
-                      value={createForm.pendingDestajo}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, pendingDestajo: event.target.value }))}
-                    />
-                  </label>
-                  <label className="detailRow">
-                    <div className="detailLabel">Next action</div>
+                    <div className="detailLabel">{t("Siguiente acción operativa", "Next operating action")}</div>
                     <input
                       className="field"
                       value={createForm.nextAction}
                       onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))}
-                      placeholder="Cerrar evidencia, alinear cuadrilla y liberar revisión del residente"
+                      placeholder={t(
+                        "Ej. Reponer cimbra en eje 4 y avisar a calidad para liberar antes del turno noche",
+                        "Example: Replace formwork on grid 4 and alert quality for release before night shift"
+                      )}
                     />
                   </label>
                 </div>
 
-                <div className="row gap wrap" style={{ marginTop: 16 }}>
-                  <div className="detailGrid" style={{ width: "100%" }}>
-                    <div className="detailRow">
-                      <div className="detailLabel">Creation gate</div>
-                      <div className="tableCellStack">
-                        <div className="row gap wrap" style={{ alignItems: "center" }}>
-                          <Badge tone={createGate.tone}>{createGate.label}</Badge>
-                          <span>{createGate.summary}</span>
-                        </div>
-                        {createGate.checks.map((check) => (
-                          <span key={check} className="tableCellMuted">
-                            {check}
-                          </span>
+                <details className="captureDetails" style={{ marginTop: 16 }}>
+                  <summary>{t("Datos operativos avanzados", "Advanced operational data")}</summary>
+                  <div className="detailGrid" style={{ marginTop: 16 }}>
+                    <label className="detailRow">
+                      <div className="detailLabel">{t("Estado proyecto", "Project status")}</div>
+                      <select className="selectField" value={createForm.projectStatus} onChange={(event) => setCreateForm((current) => ({ ...current, projectStatus: event.target.value as DailyLogEntryContract["projectStatus"] }))}>
+                        {(["planning", "active", "at_risk", "blocked", "closed"] as DailyLogEntryContract["projectStatus"][]).map((status) => (
+                          <option key={status} value={status}>{localizeText(projectStatusLabel(status))}</option>
                         ))}
+                      </select>
+                    </label>
+                    <label className="detailRow">
+                      <div className="detailLabel">{t("Hallazgos calidad", "Quality findings")}</div>
+                      <input className="field" type="number" min="0" value={createForm.qualityOpenFindings} onChange={(event) => setCreateForm((current) => ({ ...current, qualityOpenFindings: event.target.value }))} />
+                    </label>
+                    <label className="detailRow">
+                      <div className="detailLabel">{t("Liberación %", "Release readiness %")}</div>
+                      <input className="field" type="number" min="0" max="100" value={createForm.qualityReleaseReadiness} onChange={(event) => setCreateForm((current) => ({ ...current, qualityReleaseReadiness: event.target.value }))} />
+                    </label>
+                    <label className="detailRow">
+                      <div className="detailLabel">{t("Señal subcontrato", "Subcontract health")}</div>
+                      <select className="selectField" value={createForm.subcontractHealth} onChange={(event) => setCreateForm((current) => ({ ...current, subcontractHealth: event.target.value as DailyLogEntryContract["subcontractHealth"] }))}>
+                        {(["controlled", "watch", "critical", "unknown"] as DailyLogEntryContract["subcontractHealth"][]).map((status) => (
+                          <option key={status} value={status}>{localizeText(subcontractHealthLabel(status))}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="detailRow">
+                      <div className="detailLabel">{t("Destajo pendiente", "Pending destajo")}</div>
+                      <input className="field" type="number" min="0" value={createForm.pendingDestajo} onChange={(event) => setCreateForm((current) => ({ ...current, pendingDestajo: event.target.value }))} />
+                    </label>
+                  </div>
+                </details>
+
+                <div className="detailGrid" style={{ marginTop: 16 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">{t("Chequeo antes de guardar", "Pre-save check")}</div>
+                    <div className="tableCellStack">
+                      <div className="row gap wrap" style={{ alignItems: "center" }}>
+                        <Badge tone={createGate.tone}>{createGate.label}</Badge>
+                        <span>{createGate.summary}</span>
                       </div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">Next human step</div>
-                      <div>{createHumanStep}</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">Immediate downstream</div>
-                      <div>
-                        {Number(createForm.blockersCount) > 0
-                          ? "Do not treat this shift as clean continuity yet; it should go back into field or operations first."
-                          : Number(createForm.qualityOpenFindings) > 2 || Number(createForm.qualityReleaseReadiness) < 75
-                            ? "This log should continue into quality review before the shift is treated as safely releasable."
-                            : createForm.subcontractHealth === "critical" || Number(createForm.pendingDestajo) > 0
-                              ? "This log should continue into operations because subcontract or destajo pressure still shapes the next shift."
-                              : "The log can continue into supervision review with a clean enough shift story."}
-                      </div>
+                      {createGate.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">{check}</span>
+                      ))}
                     </div>
                   </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">{t("Instrucción para el relevo", "Handoff instruction")}</div>
+                    <div>{createHumanStep}</div>
+                  </div>
+                </div>
+
+                {actionError ? <p className="text-danger" style={{ marginTop: 16 }}>{actionError}</p> : null}
+
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateEntry()}>
-                    {isCreating ? "Saving..." : "Add daily log"}
+                    {isCreating ? t("Guardando parte...", "Saving log...") : t("Registrar bitácora del turno", "Log shift entry")}
+                  </button>
+                  <button type="button" className="buttonGhost" onClick={() => setWorkspaceView("queue")}>
+                    {t("Abrir mesa amplia", "Open wide table")}
                   </button>
                   {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
                 </div>
               </Card>
 
               <Card
-                title="Capture rules"
-                description="This keeps the daily-log workflow useful before backend creation endpoints are implemented."
+                title={t("Relieve y destino", "Handoff and routing")}
+                description={t("Resume qué hacer ahora y a dónde debe saltar la operación.", "Summarize what to do now and where operations should jump next.")}
               >
                 <div className="detailGrid">
                   <div className="detailRow">
-                    <div className="detailLabel">Scope</div>
-                    <div>New entries stay inside the active tenant session and immediately affect the field diary board.</div>
+                    <div className="detailLabel">{t("Por qué ahora", "Why now")}</div>
+                    <div>{selectedWhyNow}</div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Focus</div>
-                    <div>The new daily log becomes the active selected record so the supervisor can continue working on it.</div>
+                    <div className="detailLabel">{t("Ruta operativa", "Operational route")}</div>
+                    <div>{selectedRouteSummary}</div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Backend path</div>
-                    <div>This form already persists through `POST /daily-log/entries`, so field supervision is no longer browser-only.</div>
+                    <div className="detailLabel">{t("Regreso esperado", "Expected report-back")}</div>
+                    <div>{selectedReportBack}</div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Next destinations</div>
-                    <div>Use `Field` for frontline capture, `Operations` for cross-domain follow-up and `Equipment` when asset continuity becomes the blocker.</div>
+                    <div className="detailLabel">{t("Destino recomendado", "Recommended route")}</div>
+                    <div className="tableCellStack">
+                      <strong>{escalationDestination.label}</strong>
+                      <span className="tableCellMuted">{escalationDestination.description}</span>
+                    </div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Starter presets</div>
-                    <div>Use the preset buttons to simulate common scenarios like concrete pours, quality holds or equipment delays without retyping the full capture.</div>
+                    <div className="detailLabel">{t("Lista para continuidad", "Downstream readiness")}</div>
+                    <div className="tableCellStack">
+                      <Badge tone={downstreamReadiness.tone}>{downstreamReadiness.label}</Badge>
+                      <span className="tableCellMuted">{downstreamReadiness.summary}</span>
+                      {downstreamReadiness.checks.map((check) => (
+                        <span key={check} className="tableCellMuted">{check}</span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </Card>
             </section>
-          </>
+            ) : null}
+
+            {workspaceView === "queue" ? (
+              <section className="stack">
+                {isDemoMode ? (
+                  <Card
+                    title={t("Modo demo operable", "Operable demo mode")}
+                    description={t("Las bitácoras se pueden crear y mover localmente en este navegador.", "Daily logs can be created and moved across statuses locally in this browser.")}
+                    aside={<Badge tone="warning">{t("persistencia local", "browser-persisted")}</Badge>}
+                  >
+                    <div className="detailGrid">
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Qué funciona", "What works")}</div>
+                        <div>{t("Crear bitácoras, enviarlas o marcarlas, y probar reglas de evidencia y bloqueos.", "Create logs, submit or flag them, and test evidence or blocker rules.")}</div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Prueba sugerida", "Recommended test")}</div>
+                        <div>{t("Crea una bitácora para un frente activo, envíala y confirma cómo salta a operaciones.", "Create a log for an active front, submit it and verify how it jumps into Operations.")}</div>
+                      </div>
+                    </div>
+                  </Card>
+                ) : null}
+
+                <section className="grid cols3">
+                  <Card title={t("Continuidad de bitácora", "Daily log continuity")} description={t("La bitácora debe sostener el puente entre campo, supervisión y seguimiento.", "The log should be the formal checkpoint between field execution, supervision and follow-through.")}>
+                    <p className="sectionText">{selectedRouteSummary}</p>
+                  </Card>
+                  <Card title={t("Restricción de equipo", "Equipment constraint")} description={t("Qué está limitando este turno desde activos.", "What is limiting this shift from the asset side.")}>
+                    <p className="sectionText">{selectedStory?.executionConstraint ?? t("Selecciona una bitácora para revisar la restricción de equipo.", "Choose a daily log to inspect equipment constraint.")}</p>
+                  </Card>
+                  <Card title={t("Checklist supervisor", "Supervisor checklist")} description={t("Disciplina mínima antes de cerrar el turno.", "Minimum discipline before closing the shift story.")}>
+                    <div className="detailGrid">
+                      <div className="detailRow"><div className="detailLabel">{t("Evidencia", "Evidence")}</div><div>{t("Al menos 4 evidencias útiles para revisión.", "At least 4 usable evidence items for review.")}</div></div>
+                      <div className="detailRow"><div className="detailLabel">{t("Bloqueos", "Blockers")}</div><div>{t("Ningún bloqueo abierto si el estado va a aprobado.", "No open blockers if the log is moving to approved.")}</div></div>
+                      <div className="detailRow"><div className="detailLabel">{t("Siguiente movimiento", "Next move")}</div><div>{t("La siguiente acción debe decir quién actúa y dónde continúa.", "The next action must clearly say who acts next and where follow-up continues.")}</div></div>
+                    </div>
+                  </Card>
+                </section>
+
+                <Card title={t("Tabla completa de bitácoras", "Full daily log table")} description={t("Vista amplia para revisar el subconjunto filtrado.", "Wide view for reviewing the filtered subset.")}>
+                  <DataTable
+                    rows={filteredEntries}
+                    columns={[
+                      {
+                        key: "frontName",
+                        label: t("Frente", "Front"),
+                        render: (entry) => (
+                          <button type="button" className="button ghost" onClick={() => { setSelectedEntryId(entry.id); setWorkspaceView("control"); }}>
+                            {entry.frontName}
+                          </button>
+                        )
+                      },
+                      {
+                        key: "projectName",
+                        label: t("Proyecto", "Project"),
+                        render: (entry) => entry.projectName
+                      },
+                      {
+                        key: "status",
+                        label: t("Estado", "Status"),
+                        render: (entry) => <Badge tone={statusTone(entry.status)}>{localizeText(statusLabel(entry.status))}</Badge>
+                      },
+                      {
+                        key: "workforceCount",
+                        label: t("Cuadrilla", "Crew"),
+                        render: (entry) => String(entry.workforceCount)
+                      },
+                      {
+                        key: "progressPercent",
+                        label: t("Avance", "Progress"),
+                        render: (entry) => `${entry.progressPercent}%`
+                      }
+                    ]}
+                  />
+                </Card>
+
+                <Card title={t("Riesgos del frente", "Field risks")} description={t("Bloqueos o huecos de evidencia ligados a la bitácora seleccionada.", "Current blockers or evidence issues tied to the selected log.")}>
+                  {selectedRisks.length > 0 ? (
+                    <div className="stack">
+                      {selectedRisks.map((risk) => (
+                        <div key={risk.id} className="row space-between card-section">
+                          <div>
+                            <strong>{risk.title}</strong>
+                            <p>{risk.category} · {risk.owner}</p>
+                          </div>
+                          <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
+                            {risk.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState title={t("Sin riesgos activos", "No active risks")} description={t("Esta bitácora no carga bloqueos explícitos ahora mismo.", "This log is not carrying explicit field blockers right now.")} />
+                  )}
+                </Card>
+              </section>
+            ) : null}
+          </div>
         ) : (
-          <EmptyState
-            title="Daily log unavailable"
-            description={error ?? "The field diary could not be loaded from the current source."}
-          />
+          <EmptyState title={t("Bitácora no disponible", "Daily log unavailable")} description={error ?? t("No se pudo cargar la bitácora desde la fuente actual.", "The field diary could not be loaded from the current source.")} />
         )}
       </ModuleGate>
     </AppShell>

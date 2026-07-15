@@ -72,6 +72,10 @@ img {
   min-height: 100vh;
 }
 
+.sidebarBackdrop {
+  display: none;
+}
+
 .sidebarWrap {
   position: sticky;
   top: 0;
@@ -114,6 +118,7 @@ img {
   padding: 16px;
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.06);
+  min-width: 0;
 }
 
 .sidebarCollapseButton,
@@ -261,6 +266,84 @@ img {
   margin-top: 14px;
 }
 
+.sidebarContextCard,
+.sidebarCompactTenantCard {
+  display: none;
+}
+
+.sidebarContextCard {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(241, 207, 143, 0.12), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(241, 207, 143, 0.14);
+}
+
+.sidebarContextIcon {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1cf8f;
+}
+
+.sidebarContextMeta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sidebarContextMeta span,
+.sidebarContextMeta small {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.sidebarContextMeta span {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.sidebarContextMeta strong,
+.sidebarContextMeta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarContextMeta strong {
+  font-size: 0.94rem;
+}
+
+.sidebarContextMeta small {
+  font-size: 0.77rem;
+}
+
+.sidebarCompactTenantCard {
+  width: 100%;
+  place-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+}
+
+.sidebarCompactTenantCard strong {
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+}
+
+.sidebarCompactTenantCard span {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
 .tenantSelect {
   width: 100%;
   height: 44px;
@@ -285,10 +368,15 @@ img {
   color: rgba(255, 255, 255, 0.44);
 }
 
+.navHeadingCompact {
+  display: none;
+}
+
 .navGroupToggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: relative;
   width: 100%;
   padding: 10px 12px;
   border: 0;
@@ -357,14 +445,16 @@ img {
 }
 
 .navLink {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
   border-radius: 16px;
   color: rgba(255, 255, 255, 0.8);
   transition: transform 160ms ease, background 160ms ease, color 160ms ease;
+  min-width: 0;
+  position: relative;
 }
 
 .navIcon {
@@ -390,6 +480,7 @@ img {
 .navLinkActive {
   background: linear-gradient(90deg, rgba(63, 111, 151, 0.3), rgba(255, 255, 255, 0.12));
   color: white;
+  box-shadow: inset 0 0 0 1px rgba(241, 207, 143, 0.18);
 }
 
 .navLinkActive .navIcon {
@@ -407,15 +498,22 @@ img {
 .navLabel {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .navLabel strong {
   font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .navLabel span {
   font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.52);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mainWrap {
@@ -446,6 +544,7 @@ img {
   display: grid;
   min-width: 0;
   gap: 10px;
+  flex: 1 1 auto;
 }
 
 .topbarRail {
@@ -472,6 +571,10 @@ img {
   border-color: rgba(41, 84, 122, 0.34);
   background: rgba(41, 84, 122, 0.07);
   color: var(--brand-800);
+}
+
+.desktopSidebarToggleCollapsed {
+  flex-shrink: 0;
 }
 
 .desktopSidebarToggle svg,
@@ -503,6 +606,29 @@ img {
   letter-spacing: 0.12em;
 }
 
+.topbarRouteBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.topbarRouteBadge span {
+  color: var(--brand-700);
+  font-weight: 600;
+}
+
+.topbarRouteBadge strong {
+  color: var(--ink);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+}
+
 .topbar h1,
 .topbar p {
   margin: 0;
@@ -520,24 +646,70 @@ img {
   line-height: 1.65;
 }
 
+.topbarContextStrip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.topbarContextCard {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.topbarContextCard span,
+.topbarContextCard small {
+  color: var(--ink-muted);
+}
+
+.topbarContextCard span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.topbarContextCard strong,
+.topbarContextCard small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbarContextCard strong {
+  color: var(--ink);
+}
+
+.topbarContextCard small {
+  font-size: 0.82rem;
+}
+
 .topbarAside {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   justify-items: end;
+  width: min(100%, 380px);
+  max-width: 100%;
 }
 
 .topbarSummary {
   display: grid;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: 12px;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 16px;
   background: rgba(15, 23, 42, 0.035);
-  text-align: right;
+  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .topbarSummary strong {
   font-size: 0.98rem;
-  color: var(--ink-strong);
+  color: var(--ink);
 }
 
 .topbarSummary span {
@@ -545,11 +717,108 @@ img {
   font-size: 0.84rem;
 }
 
+.topbarSummaryLabel {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.topbarSummaryHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.topbarSummaryIdentity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.topbarAvatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(20, 33, 61, 0.94), rgba(63, 111, 151, 0.9));
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.topbarSummaryFacts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.topbarSummaryFacts span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 10px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.topbarSummaryFacts strong,
+.topbarSummaryFacts small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbarSummaryFacts strong {
+  font-size: 0.88rem;
+}
+
+.topbarSummaryFacts small {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.topbarActionGroups {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.topbarPrimaryActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .topbarActions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+  width: 100%;
+}
+
+.topbarStatusRail,
+.topbarUtilityRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.topbarUtilityRail {
+  justify-content: flex-end;
+}
+
+.topbarUtilityButton {
+  min-width: 0;
 }
 
 .mobileToggle {
@@ -573,14 +842,14 @@ img {
 
   .sidebarWrapCollapsed .sidebar {
     gap: 14px;
-    padding: 14px 10px;
+    padding: 14px 8px;
     border-radius: 26px;
     align-items: center;
   }
 
   .sidebarWrapCollapsed .brandBlock {
     width: 100%;
-    gap: 0;
+    gap: 8px;
   }
 
   .sidebarWrapCollapsed .sidebarBrandRow {
@@ -619,6 +888,59 @@ img {
 
   .sidebarWrapCollapsed .navGroup {
     gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .sidebarWrapCollapsed .sidebarContextCard,
+  .sidebarWrapCollapsed .sidebarCompactTenantCard {
+    display: grid;
+  }
+
+  .sidebarWrapCollapsed .sidebarContextCard {
+    justify-items: center;
+    gap: 8px;
+    padding: 10px 8px;
+  }
+
+  .sidebarWrapCollapsed .sidebarContextMeta {
+    justify-items: center;
+  }
+
+  .sidebarWrapCollapsed .sidebarContextMeta small {
+    display: none;
+  }
+
+  .sidebarWrapCollapsed .sidebarContextMeta strong {
+    max-width: 100%;
+    font-size: 0.68rem;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  .sidebarWrapCollapsed .sidebarContextIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .sidebarWrapCollapsed .navHeadingCompact {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.56);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+  }
+
+  .sidebarWrapCollapsed .navGroup:first-of-type {
+    padding-top: 0;
+    border-top: 0;
   }
 
   .sidebarWrapCollapsed .navLink,
@@ -630,6 +952,19 @@ img {
     padding: 0;
     justify-content: center;
     border-radius: 15px;
+  }
+
+  .sidebarWrapCollapsed .navLinkActive::after,
+  .sidebarWrapCollapsed .navGroupToggleOpen::after {
+    content: "";
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #f1cf8f;
+    transform: translateY(-50%);
   }
 
   .sidebarWrapCollapsed .navGroupLabel {
@@ -648,6 +983,10 @@ img {
 
   .sidebarWrapCollapsed .navLink:hover {
     transform: translateY(-1px);
+  }
+
+  .sidebarWrapCollapsed .navLink {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2057,6 +2396,16 @@ img {
     transform: translateX(0);
   }
 
+  .sidebarBackdropVisible {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    border: 0;
+    background: rgba(15, 23, 42, 0.42);
+    backdrop-filter: blur(2px);
+  }
+
   .mainWrap {
     padding: 18px;
   }
@@ -2082,6 +2431,12 @@ img {
 
   .topbarAside {
     justify-items: stretch;
+    min-width: 0;
+  }
+
+  .topbarContextStrip,
+  .topbarSummaryFacts {
+    grid-template-columns: 1fr;
   }
 
   .fieldWorkbench {
@@ -2113,6 +2468,29 @@ img {
 
   .topbar {
     flex-direction: column;
+  }
+
+  .topbarAside,
+  .topbarSummary,
+  .topbarActionGroups,
+  .topbarActions,
+  .topbarPrimaryActions,
+  .topbarUtilityRail,
+  .topbarStatusRail {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .topbarSummary {
+    text-align: left;
+  }
+
+  .topbarRail {
+    flex-wrap: wrap;
+  }
+
+  .topbarRouteBadge {
+    order: 4;
   }
 
   .topbarActions {

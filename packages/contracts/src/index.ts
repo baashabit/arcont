@@ -180,6 +180,87 @@ export const CreateProjectPortfolioItemRequestSchema = z.object({
   nextMilestone: z.string().min(8)
 });
 
+export const projectScheduleActivityStatuses = ["not_started", "in_progress", "blocked", "completed"] as const;
+
+export const ProjectScheduleActivitySchema = z.object({
+  id: z.string(),
+  companyId: z.string(),
+  projectId: z.string(),
+  code: z.string(),
+  name: z.string(),
+  phase: z.string(),
+  status: z.enum(projectScheduleActivityStatuses),
+  plannedStart: z.string().min(10),
+  plannedFinish: z.string().min(10),
+  actualStart: z.string().nullable(),
+  actualFinish: z.string().nullable(),
+  progressPercent: z.number().min(0).max(100),
+  predecessorIds: z.array(z.string()),
+  owner: z.string(),
+  nextAction: z.string(),
+  updatedAt: z.string()
+});
+
+export const ProjectScheduleOverviewSchema = z.object({
+  project: ProjectPortfolioItemSchema,
+  summary: z.object({
+    totalActivities: z.number().int().nonnegative(),
+    completedActivities: z.number().int().nonnegative(),
+    blockedActivities: z.number().int().nonnegative(),
+    plannedProgress: z.number().min(0).max(100),
+    actualProgress: z.number().min(0).max(100),
+    scheduleVarianceDays: z.number(),
+    baselineStart: z.string().nullable(),
+    baselineFinish: z.string().nullable()
+  }),
+  activities: z.array(ProjectScheduleActivitySchema)
+});
+
+export const CreateProjectScheduleActivityRequestSchema = z.object({
+  code: z.string().min(3),
+  name: z.string().min(3),
+  phase: z.string().min(3),
+  plannedStart: z.string().min(10),
+  plannedFinish: z.string().min(10),
+  predecessorIds: z.array(z.string()).default([]),
+  owner: z.string().min(3),
+  nextAction: z.string().min(8)
+});
+
+export const UpdateProjectScheduleActivityRequestSchema = z.object({
+  status: z.enum(projectScheduleActivityStatuses),
+  progressPercent: z.number().min(0).max(100),
+  plannedStart: z.string().min(10),
+  plannedFinish: z.string().min(10),
+  actualStart: z.string().nullable(),
+  actualFinish: z.string().nullable(),
+  predecessorIds: z.array(z.string()),
+  owner: z.string().min(3),
+  nextAction: z.string().min(8)
+});
+
+export const ImportProjectScheduleActivitySchema = z.object({
+  code: z.string().min(3),
+  name: z.string().min(3),
+  phase: z.string().min(3),
+  plannedStart: z.string().min(10),
+  plannedFinish: z.string().min(10),
+  predecessorCodes: z.array(z.string().min(1)).default([]),
+  owner: z.string().min(3),
+  nextAction: z.string().min(8)
+});
+
+export const ImportProjectScheduleActivitiesRequestSchema = z.object({
+  activities: z.array(ImportProjectScheduleActivitySchema).min(1).max(300)
+});
+
+export const ImportProjectScheduleActivitiesResponseSchema = z.object({
+  createdCount: z.number().int().nonnegative(),
+  linkedToExistingCount: z.number().int().nonnegative(),
+  linkedWithinImportCount: z.number().int().nonnegative(),
+  createdCodes: z.array(z.string())
+});
+
 export const DailyLogRiskSchema = z.object({
   id: z.string(),
   logId: z.string(),
@@ -1928,6 +2009,13 @@ export type ProjectPortfolioItemContract = z.infer<typeof ProjectPortfolioItemSc
 export type ProjectPortfolioOverviewContract = z.infer<typeof ProjectPortfolioOverviewSchema>;
 export type UpdateProjectPortfolioItemRequestContract = z.infer<typeof UpdateProjectPortfolioItemRequestSchema>;
 export type CreateProjectPortfolioItemRequestContract = z.infer<typeof CreateProjectPortfolioItemRequestSchema>;
+export type ProjectScheduleActivityContract = z.infer<typeof ProjectScheduleActivitySchema>;
+export type ProjectScheduleOverviewContract = z.infer<typeof ProjectScheduleOverviewSchema>;
+export type CreateProjectScheduleActivityRequestContract = z.infer<typeof CreateProjectScheduleActivityRequestSchema>;
+export type UpdateProjectScheduleActivityRequestContract = z.infer<typeof UpdateProjectScheduleActivityRequestSchema>;
+export type ImportProjectScheduleActivityContract = z.infer<typeof ImportProjectScheduleActivitySchema>;
+export type ImportProjectScheduleActivitiesRequestContract = z.infer<typeof ImportProjectScheduleActivitiesRequestSchema>;
+export type ImportProjectScheduleActivitiesResponseContract = z.infer<typeof ImportProjectScheduleActivitiesResponseSchema>;
 export type DailyLogRiskContract = z.infer<typeof DailyLogRiskSchema>;
 export type DailyLogEntryContract = z.infer<typeof DailyLogEntrySchema>;
 export type DailyLogOverviewContract = z.infer<typeof DailyLogOverviewSchema>;
