@@ -331,6 +331,20 @@ export const UpdatePlatformUserStatusRequestSchema = z.object({
   status: z.enum(userStatuses)
 });
 
+export const CreateSubcontractLineRequestSchema = z.object({
+  code: z.string().min(3),
+  contractorName: z.string().min(3),
+  projectName: z.string().min(3),
+  frontName: z.string().min(3),
+  activeHeadcount: z.number().int().positive(),
+  attendanceRate: z.number().min(0).max(100),
+  productivityRate: z.number().min(0).max(100),
+  complianceExpirations: z.number().int().nonnegative(),
+  incidentCount: z.number().int().nonnegative(),
+  subcontractHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const UpdateSubcontractLineRequestSchema = z.object({
   subcontractHealth: z.enum(["controlled", "watch", "critical"]),
   nextAction: z.string().min(8)
@@ -517,6 +531,7 @@ export type UpdatePlatformUserStatusRequestContract = z.infer<typeof UpdatePlatf
 export type PlatformUserDetailContract = z.infer<typeof PlatformUserDetailSchema>;
 export type CreatePlatformUserResponseContract = z.infer<typeof CreatePlatformUserResponseSchema>;
 export type PlatformApiErrorContract = z.infer<typeof PlatformApiErrorSchema>;
+export type CreateSubcontractLineRequestContract = z.infer<typeof CreateSubcontractLineRequestSchema>;
 export type UpdateSubcontractLineRequestContract = z.infer<typeof UpdateSubcontractLineRequestSchema>;
 export type PlatformReadinessCheckContract = z.infer<typeof PlatformReadinessCheckSchema>;
 export type PlatformSystemReadinessContract = z.infer<typeof PlatformSystemReadinessSchema>;

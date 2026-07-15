@@ -50,6 +50,77 @@ function projectStatusTone(status: EstimationCollectionLineContract["projectStat
   }
 }
 
+function collectionHealthLabel(status: EstimationCollectionLineContract["collectionHealth"]) {
+  switch (status) {
+    case "controlled":
+      return { es: "Controlada", en: "Controlled" };
+    case "watch":
+      return { es: "En vigilancia", en: "Watch" };
+    default:
+      return { es: "Crítica", en: "Critical" };
+  }
+}
+
+function estimationProjectStatusLabel(status: EstimationCollectionLineContract["projectStatus"]) {
+  switch (status) {
+    case "active":
+      return { es: "Activo", en: "Active" };
+    case "at_risk":
+      return { es: "En riesgo", en: "At risk" };
+    case "blocked":
+      return { es: "Bloqueado", en: "Blocked" };
+    case "closed":
+      return { es: "Cerrado", en: "Closed" };
+    default:
+      return { es: "Planeación", en: "Planning" };
+  }
+}
+
+function collectionActionLabel(label: string) {
+  const labels: Record<string, { es: string; en: string }> = {
+    "Move to watch": { es: "Mover a vigilancia", en: "Move to watch" },
+    "Escalate critical": { es: "Escalar a crítica", en: "Escalate critical" },
+    "Mark controlled": { es: "Marcar controlada", en: "Mark controlled" }
+  };
+
+  return labels[label] ?? { es: label, en: label };
+}
+
+function estimationRouteLabel(href: string) {
+  switch (href) {
+    case "/cash-flow":
+      return { es: "Abrir flujo de efectivo", en: "Open cash flow" };
+    case "/accounts-payable":
+      return { es: "Abrir cuentas por pagar", en: "Open accounts payable" };
+    case "/document-control":
+      return { es: "Abrir control documental", en: "Open document control" };
+    case "/close-control":
+      return { es: "Abrir control de cierre", en: "Open close control" };
+    default:
+      return { es: "Abrir finanzas", en: "Open finance" };
+  }
+}
+
+function buildEstimationHumanStepSpanish(line: EstimationCollectionLineContract | null) {
+  if (!line) {
+    return "Selecciona una estimación para definir el siguiente movimiento de cobro.";
+  }
+
+  if (line.collectionHealth === "critical") {
+    return "Contén el tramo vencido más antiguo, confirma evidencia con el revisor del cliente y actualiza el responsable de cobro.";
+  }
+
+  if (line.progressGap > 0) {
+    return "Cierra primero la brecha entre avance de obra y evidencia antes de tratar la estimación como cobrable.";
+  }
+
+  if (line.pendingToBill > 0) {
+    return "Completa el paquete de facturación y define la fecha de presentación antes de pasar la presión a tesorería.";
+  }
+
+  return "Mantén el seguimiento de cobro y confirma la conversión a efectivo en el siguiente ciclo financiero.";
+}
+
 function lineActionOptions(line: EstimationCollectionLineContract) {
   switch (line.collectionHealth) {
     case "critical":
@@ -169,12 +240,140 @@ function buildCollectionWorkflow(line: EstimationCollectionLineContract | null) 
     closeoutRead:
       line.closeReadiness < 80
         ? `Closeout readiness is only ${line.closeReadiness}%, so this line still depends on document and compliance discipline.`
-        : `Closeout readiness is ${line.closeReadiness}% and the line is structurally closer to controlled cash conversion.`
+      : `Closeout readiness is ${line.closeReadiness}% and the line is structurally closer to controlled cash conversion.`
   };
 }
 
+function buildEstimationRoutingDesk(line: EstimationCollectionLineContract | null) {
+  if (!line) {
+    return {
+      primaryHref: "/finance",
+      primaryReason: {
+        es: "Selecciona una estimación para definir qué dominio toma el siguiente turno.",
+        en: "Select an estimation to define which domain should take the next turn."
+      },
+      secondaryHref: "/cash-flow",
+      secondaryReason: {
+        es: "Aquí aparecerá el segundo salto operativo cuando exista una línea activa.",
+        en: "The secondary operational jump will appear here once a line is active."
+      },
+      returnRule: {
+        es: "Vuelve con responsable, fecha y soporte listos para sostener el cobro.",
+        en: "Return with owner, date and support ready to sustain collection."
+      }
+    };
+  }
+
+  if (line.progressGap > 0 || line.evidenceProgress < line.projectProgress) {
+    return {
+      primaryHref: "/document-control",
+      primaryReason: {
+        es: "La brecha real está en soporte y evidencia; sin eso la estimación no debe empujarse como cobrable.",
+        en: "The real gap is in support and evidence; without it the estimation should not be pushed as collectible."
+      },
+      secondaryHref: "/close-control",
+      secondaryReason: {
+        es: "Si la evidencia débil ya compromete el corte, el segundo salto debe ir a cierre para contener el riesgo.",
+        en: "If weak evidence is already compromising closeout, the secondary jump should move to close control to contain the risk."
+      },
+      returnRule: {
+        es: "Vuelve cuando el paquete de evidencia ya respalde el avance ejecutado y la fecha de presentación.",
+        en: "Return once the evidence pack fully supports executed progress and the submission date."
+      }
+    };
+  }
+
+  if (line.closeReadiness < 80) {
+    return {
+      primaryHref: "/close-control",
+      primaryReason: {
+        es: "La preparación de cierre sigue baja y puede convertir una buena estimación en ruido de corte.",
+        en: "Close readiness is still weak and can turn a good estimation into close noise."
+      },
+      secondaryHref: "/document-control",
+      secondaryReason: {
+        es: "El segundo salto es documentos para cerrar soportes que hoy todavía le pegan al corte.",
+        en: "The secondary jump is document control to close support gaps that are still hitting closeout."
+      },
+      returnRule: {
+        es: "Vuelve cuando el corte acepte la línea sin observaciones ocultas de soporte.",
+        en: "Return once closeout accepts the line without hidden support observations."
+      }
+    };
+  }
+
+  if (line.pendingToBill > 0 || line.pendingApprovalAmount > 0) {
+    return {
+      primaryHref: "/finance",
+      primaryReason: {
+        es: "La fricción principal está en facturación o aprobación, no todavía en caja.",
+        en: "The main friction is in billing or approval, not yet in cash conversion."
+      },
+      secondaryHref: "/document-control",
+      secondaryReason: {
+        es: "Si finanzas detecta huecos, el segundo salto debe cerrar anexos, estimación y soporte documental.",
+        en: "If finance finds gaps, the secondary jump should close annexes, estimation backup and document support."
+      },
+      returnRule: {
+        es: "Vuelve con fecha real de presentación, monto liberado y aprobador confirmado.",
+        en: "Return with the real submission date, released amount and approver confirmed."
+      }
+    };
+  }
+
+  if (line.pendingCollection > 0) {
+    return {
+      primaryHref: "/cash-flow",
+      primaryReason: {
+        es: "La línea ya vive en conversión a efectivo y la presión principal está en caja y cobranza.",
+        en: "This line already lives in cash conversion and the main pressure is now in cash and collection."
+      },
+      secondaryHref: "/finance",
+      secondaryReason: {
+        es: "Si tesorería rebota la presión, el segundo salto debe confirmar postura contable y seguimiento financiero.",
+        en: "If treasury bounces the pressure back, the secondary jump should confirm accounting posture and finance follow-through."
+      },
+      returnRule: {
+        es: "Vuelve con fecha compromiso de cobro, tramo vencido contenido y efecto esperado en caja.",
+        en: "Return with the collection commitment date, contained overdue tranche and expected cash effect."
+      }
+    };
+  }
+
+  return {
+    primaryHref: "/finance",
+    primaryReason: {
+      es: "La línea ya está bastante limpia y finanzas debe confirmar que puede sostenerse como cobro controlado.",
+      en: "The line is already fairly clean, and finance should confirm it can be sustained as a controlled collection."
+    },
+    secondaryHref: "/cash-flow",
+    secondaryReason: {
+      es: "Después de finanzas, caja debe confirmar que la conversión ya es real y no solo prometida.",
+      en: "After finance, cash flow should confirm the conversion is real rather than merely promised."
+    },
+    returnRule: {
+      es: "Vuelve con confirmación de cobro o con la nueva fecha defendible de entrada a caja.",
+      en: "Return with collection confirmation or the next defensible date for cash entry."
+    }
+  };
+}
+
+function buildEstimationOperationalRoutes(line: EstimationCollectionLineContract | null) {
+  const desk = buildEstimationRoutingDesk(line);
+  return [
+    desk.primaryHref,
+    desk.secondaryHref,
+    "/cash-flow",
+    "/finance",
+    "/accounts-payable",
+    "/document-control",
+    "/close-control"
+  ].filter((href, index, array) => array.indexOf(href) === index);
+}
+
 export default function EstimationsPage() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, localizeText, uiLanguage } = useAppState();
+  const t = (es: string, en: string) => localizeText({ es, en });
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<EstimationCollectionOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<EstimationBridgeContext>(null);
@@ -285,6 +484,16 @@ export default function EstimationsPage() {
   );
 
   const actionOptions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
+  const selectedEstimationHumanStep = uiLanguage === "es" ? buildEstimationHumanStepSpanish(selectedLine) : selectedLine?.nextAction ?? "Choose an estimation to define the next collection move.";
+  const selectedRoutingDesk = useMemo(() => buildEstimationRoutingDesk(selectedLine), [selectedLine]);
+  const selectedOperationalRoutes = useMemo(() => buildEstimationOperationalRoutes(selectedLine), [selectedLine]);
+  const selectedEstimationDecision = !selectedLine
+    ? t("Selecciona una estimación para revisar su cobro.", "Select an estimation to review collection.")
+    : selectedLine.collectionHealth === "critical"
+      ? t("No cierres la cobranza: el tramo vencido o la evidencia siguen en riesgo.", "Do not close collection: the overdue tranche or evidence remains at risk.")
+      : selectedLine.progressGap > 0
+        ? t("La estimación requiere alinear avance y evidencia antes de convertirse en efectivo.", "The estimation needs field progress and evidence aligned before cash conversion.")
+        : t("La estimación puede continuar, pero conserva facturación y cobranza bajo seguimiento.", "The estimation can continue, but keep billing and collection under follow-through.");
 
   useEffect(() => {
     if (!overview) {
@@ -367,17 +576,57 @@ export default function EstimationsPage() {
 
   return (
     <AppShell
-      title="Estimations and collections"
-      eyebrow="Execution finance"
-      description="Executed work, submitted estimations and pending collection tied back to project progress."
+      title={t("Estimaciones y cobranza", "Estimations and collections")}
+      eyebrow={t("Finanzas de ejecución", "Execution finance")}
+      description={t("Trabajo ejecutado, estimaciones presentadas y cobranza pendiente vinculados al avance real de proyecto.", "Executed work, submitted estimations and pending collection tied to real project progress.")}
     >
       <ModuleGate
         moduleKeys={["finance.accounting"]}
         requiredPermissions={["finance:*", "finance:read"]}
-        title="Estimations"
+        title={t("Estimaciones", "Estimations")}
       >
         {overview ? (
           <>
+            <section className="grid cols2">
+              <Card
+                title={t("Control de estimación", "Estimation control")}
+                description={t("Decide si el avance ya puede presentarse o cobrarse sin trasladar presión a tesorería.", "Decide whether progress can be billed or collected without shifting pressure to treasury.")}
+                aside={selectedLine ? <Badge tone={healthTone(selectedLine.collectionHealth)}>{localizeText(collectionHealthLabel(selectedLine.collectionHealth))}</Badge> : null}
+              >
+                {selectedLine ? (
+                  <div className="detailGrid">
+                    <div className="detailRow"><div className="detailLabel">{t("Proyecto", "Project")}</div><div><strong>{selectedLine.projectName}</strong><div className="tableCellMuted">{selectedLine.code} · {selectedLine.client}</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Decisión", "Decision")}</div><div className="tableCellStack"><Badge tone={healthTone(selectedLine.collectionHealth)}>{localizeText(collectionHealthLabel(selectedLine.collectionHealth))}</Badge><span className="tableCellMuted">{selectedEstimationDecision}</span></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Avance / evidencia", "Progress / evidence")}</div><div><strong>{selectedLine.projectProgress}% / {selectedLine.evidenceProgress}%</strong><div className="tableCellMuted">{t("Brecha de evidencia", "Evidence gap")}: {selectedLine.progressGap}%</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Por facturar", "Pending to bill")}</div><div><strong>MXN {selectedLine.pendingToBill.toLocaleString()}</strong><div className="tableCellMuted">{t("En aprobación", "Approval hold")}: MXN {selectedLine.pendingApprovalAmount.toLocaleString()}</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Por cobrar", "Pending collection")}</div><div><strong>MXN {selectedLine.pendingCollection.toLocaleString()}</strong><div className="tableCellMuted">{selectedLine.oldestPendingDays} {t("días del tramo más antiguo", "days on the oldest tranche")} · {selectedLine.billingCycleLabel}</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Cierre y responsable", "Closeout and owner")}</div><div><Badge tone={projectStatusTone(selectedLine.projectStatus)}>{localizeText(estimationProjectStatusLabel(selectedLine.projectStatus))}</Badge><div className="tableCellMuted">{selectedLine.closeReadiness}% {t("preparación de cierre", "close readiness")} · {selectedLine.collectionOwner}</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div><div>{selectedEstimationHumanStep}</div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Módulo responsable", "Responsible module")}</div><div className="tableCellStack"><strong>{localizeText(estimationRouteLabel(selectedRoutingDesk.primaryHref))}</strong><span className="tableCellMuted">{t(selectedRoutingDesk.primaryReason.es, selectedRoutingDesk.primaryReason.en)}</span></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div><div className="tableCellStack"><strong>{localizeText(estimationRouteLabel(selectedRoutingDesk.secondaryHref))}</strong><span className="tableCellMuted">{t(selectedRoutingDesk.secondaryReason.es, selectedRoutingDesk.secondaryReason.en)}</span></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Compromiso al volver", "Return commitment")}</div><div>{t(selectedRoutingDesk.returnRule.es, selectedRoutingDesk.returnRule.en)}</div></div>
+                    <label className="stack"><span className="detailLabel">{t("Próxima acción", "Next action")}</span><input className="field" value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} placeholder={t("Describe la acción de cobranza o evidencia", "Describe the collection or evidence action")} /></label>
+                    <div className="cluster"><button className="button" type="button" disabled={isSaving} onClick={() => void handleLineAction(selectedLine.collectionHealth, selectedLine.nextAction)}>{isSaving ? t("Guardando...", "Saving...") : t("Guardar acción", "Save action")}</button>{actionOptions.map((option) => <button key={option.label} className={option.collectionHealth === "critical" ? "buttonGhost" : "button"} type="button" disabled={isSaving} onClick={() => void handleLineAction(option.collectionHealth, option.nextAction)}>{isSaving ? t("Guardando...", "Saving...") : localizeText(collectionActionLabel(option.label))}</button>)}</div>
+                    <div className="row gap wrap">{selectedOperationalRoutes.map((href, index) => <Link key={href} className={index === 0 ? "buttonSecondary" : "buttonGhost"} href={href}>{index === 0 ? t(`Ir primero a ${localizeText(estimationRouteLabel(href))}`, `Go first to ${localizeText(estimationRouteLabel(href))}`) : localizeText(estimationRouteLabel(href))}</Link>)}</div>
+                    {actionMessage ? <Badge tone="success">{actionMessage}</Badge> : null}
+                    {actionError ? <Badge tone="danger">{actionError}</Badge> : null}
+                  </div>
+                ) : <EmptyState title={t("Selecciona una estimación", "Select an estimation")} description={t("Elige un proyecto desde la bandeja para revisar avance, evidencia y cobranza.", "Choose a project from the queue to review progress, evidence and collection.")} />}
+              </Card>
+
+              <Card title={t("Bandeja de estimaciones", "Estimation queue")} description={t("Filtra y cambia de proyecto sin perder la decisión de cobro principal.", "Filter and switch projects without losing the primary collection decision.")}>
+                <FilterBar summary={t(`${filteredLines.length} estimaciones coinciden con los filtros actuales`, `${filteredLines.length} estimations match the current filters`)}>
+                  <label className="fieldLabel">{t("Cobranza", "Collection")}<select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}><option value="all">{t("Todas", "All")}</option><option value="critical">{t("Crítica", "Critical")}</option><option value="watch">{t("Vigilancia", "Watch")}</option><option value="controlled">{t("Controlada", "Controlled")}</option></select></label>
+                  <label className="fieldLabel">{t("Proyecto", "Project")}<select className="field" value={projectStatusFilter} onChange={(event) => setProjectStatusFilter(event.target.value as typeof projectStatusFilter)}><option value="all">{t("Todos", "All")}</option><option value="active">{t("Activo", "Active")}</option><option value="at_risk">{t("En riesgo", "At risk")}</option><option value="blocked">{t("Bloqueado", "Blocked")}</option><option value="closed">{t("Cerrado", "Closed")}</option></select></label>
+                  <label className="fieldLabel">{t("Búsqueda", "Search")}<input className="field" type="search" value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder={t("Proyecto, responsable o acción", "Project, owner or action")} /></label>
+                </FilterBar>
+                {filteredLines.length > 0 ? <div className="list">{filteredLines.map((line) => <button key={line.id} type="button" className={`listItem ${selectedLine?.id === line.id ? "listItemSelected" : ""}`} style={{ width: "100%", textAlign: "left", cursor: "pointer" }} onClick={() => setSelectedLineId(line.id)}><div><strong>{line.projectName} · MXN {line.pendingCollection.toLocaleString()}</strong><p>{line.client} · {line.evidenceProgress}% {t("evidencia", "evidence")}</p></div><div className="tableCellStack"><Badge tone={healthTone(line.collectionHealth)}>{localizeText(collectionHealthLabel(line.collectionHealth))}</Badge><span className="tableCellMuted">{line.oldestPendingDays} {t("días", "days")}</span></div></button>)}</div> : <EmptyState title={t("Sin estimaciones para estos filtros", "No estimations for these filters")} description={t("Limpia o cambia los filtros para recuperar la bandeja activa.", "Clear or change filters to recover the active queue.")} />}
+              </Card>
+            </section>
+
+            <details className="fieldAdvanced">
+              <summary>{t("Abrir indicadores, continuidad financiera, excepciones y bloqueos", "Open metrics, financial continuity, exceptions and blockers")}</summary>
+              <div className="fieldAdvancedContent">
             <section className="grid cols4">
               <KpiCard
                 label="Tracked projects"
@@ -610,6 +859,17 @@ export default function EstimationsPage() {
                       <div>{selectedLine.closeReadiness}%</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">Responsible module</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(estimationRouteLabel(selectedRoutingDesk.primaryHref))}</strong>
+                        <span className="tableCellMuted">{localizeText(selectedRoutingDesk.primaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Return commitment</div>
+                      <div>{localizeText(selectedRoutingDesk.returnRule)}</div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Next action</div>
                       <div>
                         <input
@@ -653,21 +913,11 @@ export default function EstimationsPage() {
                           ))}
                         </div>
                         <div className="row gap wrap">
-                          <Link className="button secondary" href="/cash-flow">
-                            Open cash flow
-                          </Link>
-                          <Link className="buttonGhost" href="/finance">
-                            Open finance
-                          </Link>
-                          <Link className="buttonGhost" href="/accounts-payable">
-                            Open accounts payable
-                          </Link>
-                          <Link className="buttonGhost" href="/document-control">
-                            Open document control
-                          </Link>
-                          <Link className="buttonGhost" href="/close-control">
-                            Open close control
-                          </Link>
+                          {selectedOperationalRoutes.map((href, index) => (
+                            <Link key={href} className={index === 0 ? "button secondary" : "buttonGhost"} href={href}>
+                              {index === 0 ? `Go first to ${localizeText(estimationRouteLabel(href))}` : localizeText(estimationRouteLabel(href))}
+                            </Link>
+                          ))}
                         </div>
                         {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
                         {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
@@ -756,6 +1006,8 @@ export default function EstimationsPage() {
                 ]}
               />
             </Card>
+              </div>
+            </details>
           </>
         ) : error ? (
           <EmptyState

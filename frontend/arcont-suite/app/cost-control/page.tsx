@@ -51,6 +51,90 @@ function collectionTone(health: CostControlLineContract["collectionHealth"]) {
   }
 }
 
+function costHealthLabel(health: CostControlLineContract["controlHealth"]) {
+  switch (health) {
+    case "on_track":
+      return { es: "En control", en: "On track" };
+    case "watch":
+      return { es: "En vigilancia", en: "Watch" };
+    default:
+      return { es: "Crítico", en: "Critical" };
+  }
+}
+
+function procurementLabel(status: CostControlLineContract["procurementStatus"]) {
+  switch (status) {
+    case "draft":
+      return { es: "Borrador", en: "Draft" };
+    case "sourcing":
+      return { es: "En cotización", en: "Sourcing" };
+    case "awaiting_approval":
+      return { es: "Pendiente de aprobación", en: "Awaiting approval" };
+    case "awarded":
+      return { es: "Adjudicada", en: "Awarded" };
+    default:
+      return { es: "Bloqueada", en: "Blocked" };
+  }
+}
+
+function collectionHealthLabel(health: CostControlLineContract["collectionHealth"]) {
+  switch (health) {
+    case "controlled":
+      return { es: "Controlada", en: "Controlled" };
+    case "watch":
+      return { es: "En vigilancia", en: "Watch" };
+    default:
+      return { es: "Crítica", en: "Critical" };
+  }
+}
+
+function costActionLabel(label: string) {
+  const labels: Record<string, { es: string; en: string }> = {
+    "Start sourcing": { es: "Iniciar cotización", en: "Start sourcing" },
+    "Send to approval": { es: "Enviar a aprobación", en: "Send to approval" },
+    "Block line": { es: "Bloquear partida", en: "Block line" },
+    "Return to sourcing": { es: "Volver a cotización", en: "Return to sourcing" },
+    "Award line": { es: "Adjudicar partida", en: "Award line" },
+    "Block approval": { es: "Bloquear aprobación", en: "Block approval" },
+    "Resume sourcing": { es: "Reanudar cotización", en: "Resume sourcing" }
+  };
+
+  return labels[label] ?? { es: label, en: label };
+}
+
+function costRouteLabel(href: string) {
+  switch (href) {
+    case "/procurement":
+      return { es: "Abrir compras", en: "Open procurement" };
+    case "/cash-flow":
+      return { es: "Abrir flujo de efectivo", en: "Open cash flow" };
+    case "/projects":
+      return { es: "Abrir proyectos", en: "Open projects" };
+    default:
+      return { es: "Abrir finanzas", en: "Open finance" };
+  }
+}
+
+function buildCostHumanStepSpanish(line: CostControlLineContract | null) {
+  if (!line) {
+    return "Selecciona una partida para definir la acción de recuperación.";
+  }
+
+  if (line.controlHealth === "critical") {
+    return "Contén la desviación y el riesgo de cobro antes de avanzar la compra o comprometer más costo.";
+  }
+
+  if (line.procurementStatus === "draft" || line.procurementStatus === "sourcing") {
+    return "Completa la comparación comercial y documenta la cobertura de cotizaciones antes de solicitar aprobación.";
+  }
+
+  if (line.procurementStatus === "awaiting_approval") {
+    return "Resuelve las diferencias de pronóstico y confirma el responsable de cobro antes de adjudicar la partida.";
+  }
+
+  return "Conserva la coordinación entre compras, avance de proyecto y flujo de efectivo hasta cerrar la exposición.";
+}
+
 function lineActionOptions(line: CostControlLineContract) {
   switch (line.procurementStatus) {
     case "draft":
@@ -142,7 +226,8 @@ function pickFocusLine(lines: CostControlLineContract[]) {
 }
 
 export default function CostControlPage() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, localizeText, uiLanguage } = useAppState();
+  const t = (es: string, en: string) => localizeText({ es, en });
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<CostControlOverviewContract | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -231,6 +316,14 @@ export default function CostControlPage() {
   );
 
   const actionOptions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
+  const selectedCostHumanStep = uiLanguage === "es" ? buildCostHumanStepSpanish(selectedLine) : selectedLine?.nextAction ?? "Choose a cost line to define the next recovery action.";
+  const selectedCostDecision = !selectedLine
+    ? t("Selecciona una partida para revisar su postura.", "Select a line to review its posture.")
+    : selectedLine.controlHealth === "critical"
+      ? t("No avances la partida: la desviación o el cobro siguen comprometiendo el costo real.", "Do not advance the line: variance or collection still compromises real cost.")
+      : selectedLine.procurementStatus === "awaiting_approval"
+        ? t("La partida requiere una decisión comercial con pronóstico y cobertura de cotizaciones alineados.", "The line needs a commercial decision with forecast and bid coverage aligned.")
+        : t("La partida puede seguir, pero conserva compras, avance y cobro alineados.", "The line can continue, but keep procurement, progress and collection aligned.");
 
   useEffect(() => {
     if (!overview) {
@@ -314,13 +407,52 @@ export default function CostControlPage() {
 
   return (
     <AppShell
-      title="Cost control"
-      eyebrow="Execution finance"
-      description="Budget drift, forecast pressure and procurement-backed cost actions tied to real project progress."
+      title={t("Control de costos", "Cost control")}
+      eyebrow={t("Finanzas de ejecución", "Execution finance")}
+      description={t("Desviación presupuestal, presión de pronóstico y acciones de compra ligadas al avance real de proyecto.", "Budget drift, forecast pressure and procurement actions tied to real project progress.")}
     >
-      <ModuleGate moduleKeys={["procurement.purchasing"]} requiredPermissions={["procurement:*"]} title="Cost control">
+      <ModuleGate moduleKeys={["procurement.purchasing"]} requiredPermissions={["procurement:*"]} title={t("Control de costos", "Cost control")}>
         {overview ? (
           <>
+            <section className="grid cols2">
+              <Card
+                title={t("Control de partida", "Cost line control")}
+                description={t("Decide si la partida puede avanzar sin aumentar la desviación o la exposición de cobro.", "Decide whether the line can advance without increasing variance or collection exposure.")}
+                aside={selectedLine ? <Badge tone={healthTone(selectedLine.controlHealth)}>{localizeText(costHealthLabel(selectedLine.controlHealth))}</Badge> : null}
+              >
+                {selectedLine ? (
+                  <div className="detailGrid">
+                    <div className="detailRow"><div className="detailLabel">{t("Partida", "Line")}</div><div><strong>{selectedLine.packageName}</strong><div className="tableCellMuted">{selectedLine.code} · {selectedLine.projectName}</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Decisión", "Decision")}</div><div className="tableCellStack"><Badge tone={healthTone(selectedLine.controlHealth)}>{localizeText(costHealthLabel(selectedLine.controlHealth))}</Badge><span className="tableCellMuted">{selectedCostDecision}</span></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Presupuesto / pronóstico", "Budget / forecast")}</div><div><strong>MXN {selectedLine.budgetAmount.toLocaleString()} / MXN {selectedLine.forecastAtCompletion.toLocaleString()}</strong><div className="tableCellMuted">{t("Desviación", "Variance")}: MXN {selectedLine.varianceAmount.toLocaleString()} · {selectedLine.variancePercent}%</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Compra", "Procurement")}</div><div><Badge tone={statusTone(selectedLine.procurementStatus)}>{localizeText(procurementLabel(selectedLine.procurementStatus))}</Badge><div className="tableCellMuted">{t("Comprador", "Buyer")}: {selectedLine.buyer}</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Exposición de cobro", "Collection exposure")}</div><div><strong>MXN {selectedLine.cashExposure.toLocaleString()}</strong><div className="tableCellMuted">{localizeText(collectionHealthLabel(selectedLine.collectionHealth))} · {selectedLine.overdueCollectionDays} {t("días vencidos", "overdue days")}</div></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div><div>{selectedCostHumanStep}</div></div>
+                    <label className="stack"><span className="detailLabel">{t("Próxima acción", "Next action")}</span><input className="field" value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} placeholder={t("Describe la recuperación, contención o adjudicación", "Describe recovery, containment or award")} /></label>
+                    <div className="cluster">
+                      <button className="button" type="button" disabled={isSaving} onClick={() => void handleLineAction(selectedLine.procurementStatus, selectedLine.nextAction)}>{isSaving ? t("Guardando...", "Saving...") : t("Guardar acción", "Save action")}</button>
+                      {actionOptions.map((option) => <button key={option.label} className={option.procurementStatus === "blocked" ? "buttonGhost" : "button"} type="button" disabled={isSaving || (option.procurementStatus === "awarded" && (selectedLine.controlHealth === "critical" || selectedLine.collectionHealth === "critical")) || (option.procurementStatus === "awaiting_approval" && selectedLine.riskDrivers.some((driver) => driver.includes("Insufficient bid coverage")))} onClick={() => void handleLineAction(option.procurementStatus, option.nextAction)}>{isSaving ? t("Guardando...", "Saving...") : localizeText(costActionLabel(option.label))}</button>)}
+                    </div>
+                    <div className="row gap wrap">{["/procurement", "/cash-flow", "/finance", "/projects"].map((href, index) => <Link key={href} className={index === 0 ? "buttonSecondary" : "buttonGhost"} href={href}>{localizeText(costRouteLabel(href))}</Link>)}</div>
+                    {actionMessage ? <Badge tone="success">{actionMessage}</Badge> : null}
+                    {actionError ? <Badge tone="danger">{actionError}</Badge> : null}
+                  </div>
+                ) : <EmptyState title={t("Selecciona una partida", "Select a cost line")} description={t("Elige una partida desde la bandeja para revisar su recuperación.", "Choose a line from the queue to review recovery.")} />}
+              </Card>
+
+              <Card title={t("Bandeja de costos", "Cost queue")} description={t("Filtra y cambia de partida sin perder la decisión financiera principal.", "Filter and switch cost lines without losing the primary financial decision.")}>
+                <FilterBar summary={t(`${filteredLines.length} partidas coinciden con los filtros actuales`, `${filteredLines.length} lines match the current filters`)}>
+                  <label className="fieldLabel">{t("Proyecto", "Project")}<select className="field" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}><option value="all">{t("Todos", "All")}</option>{projectOptions.map((projectName) => <option key={projectName} value={projectName}>{projectName}</option>)}</select></label>
+                  <label className="fieldLabel">{t("Salud", "Health")}<select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as "all" | CostControlLineContract["controlHealth"])}><option value="all">{t("Todas", "All")}</option><option value="on_track">{t("En control", "On track")}</option><option value="watch">{t("Vigilancia", "Watch")}</option><option value="critical">{t("Crítica", "Critical")}</option></select></label>
+                  <label className="fieldLabel">{t("Búsqueda", "Search")}<input className="field" value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder={t("Partida, clave o proyecto", "Package, code or project")} /></label>
+                </FilterBar>
+                {filteredLines.length > 0 ? <div className="list">{filteredLines.map((line) => <button key={line.id} type="button" className={`listItem ${selectedLine?.id === line.id ? "listItemSelected" : ""}`} style={{ width: "100%", textAlign: "left", cursor: "pointer" }} onClick={() => setSelectedLineId(line.id)}><div><strong>{line.packageName} · MXN {line.varianceAmount.toLocaleString()}</strong><p>{line.projectName} · {localizeText(procurementLabel(line.procurementStatus))}</p></div><div className="tableCellStack"><Badge tone={healthTone(line.controlHealth)}>{localizeText(costHealthLabel(line.controlHealth))}</Badge><span className="tableCellMuted">{line.projectProgress}% {t("avance", "progress")}</span></div></button>)}</div> : <EmptyState title={t("Sin partidas para estos filtros", "No cost lines for these filters")} description={t("Limpia o cambia los filtros para recuperar la bandeja activa.", "Clear or change filters to recover the active queue.")} />}
+              </Card>
+            </section>
+
+            <details className="fieldAdvanced">
+              <summary>{t("Abrir indicadores, detalle, excepciones y bloqueos", "Open metrics, detail, exceptions and blockers")}</summary>
+              <div className="fieldAdvancedContent">
             <section className="grid cols4">
               <KpiCard
                 label="Tracked lines"
@@ -640,6 +772,8 @@ export default function CostControlPage() {
                 ]}
               />
             </Card>
+              </div>
+            </details>
           </>
         ) : error ? (
           <EmptyState

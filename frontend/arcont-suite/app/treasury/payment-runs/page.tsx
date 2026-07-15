@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -20,11 +21,6 @@ import {
   removeTreasuryPaymentRunInvoice,
   updateTreasuryPaymentRun
 } from "@/lib/platform-api";
-
-type BilingualText = {
-  es: string;
-  en: string;
-};
 
 const emptyCreateForm = {
   bankAccountLabel: "Banorte Operacion ****4451",
@@ -55,6 +51,30 @@ function tone(status: TreasuryPaymentRunContract["status"]) {
   }
 }
 
+function paymentRunLinkLabel(label: string) {
+  switch (label) {
+    case "Open accounts payable":
+      return { es: "Abrir cuentas por pagar", en: "Open accounts payable" };
+    case "Open supplier master":
+      return { es: "Abrir proveedores", en: "Open supplier master" };
+    case "Open cash flow":
+      return { es: "Abrir flujo de efectivo", en: "Open cash flow" };
+    default:
+      return { es: "Abrir finanzas", en: "Open finance" };
+  }
+}
+
+function paymentRunActionLabel(action: "ready" | "blocked" | "executed") {
+  switch (action) {
+    case "ready":
+      return { es: "Marcar listo", en: "Mark ready" };
+    case "blocked":
+      return { es: "Bloquear corrida", en: "Block run" };
+    default:
+      return { es: "Ejecutar corrida", en: "Execute run" };
+  }
+}
+
 function unavailableTone(reasonCode: TreasuryPaymentRunsOverviewContract["unavailableInvoices"][number]["reasonCode"]) {
   switch (reasonCode) {
     case "already_paid":
@@ -66,6 +86,106 @@ function unavailableTone(reasonCode: TreasuryPaymentRunsOverviewContract["unavai
   }
 }
 
+type AccountsPayablePaymentRunContext = {
+  source: "accounts-payable";
+  invoiceCode: string;
+  supplierName: string;
+  projectName: string;
+  purchaseOrderCode: string;
+  receiptCode: string;
+  nextAction: string;
+};
+
+function normalizePaymentRunContextValue(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function buildAccountsPayablePaymentRunContext(
+  searchParams: ReturnType<typeof useSearchParams>
+): AccountsPayablePaymentRunContext | null {
+  if (searchParams.get("source") !== "accounts-payable") {
+    return null;
+  }
+
+  const context = {
+    source: "accounts-payable" as const,
+    invoiceCode: searchParams.get("invoiceCode")?.trim() ?? "",
+    supplierName: searchParams.get("supplierName")?.trim() ?? "",
+    projectName: searchParams.get("projectName")?.trim() ?? "",
+    purchaseOrderCode: searchParams.get("purchaseOrderCode")?.trim() ?? "",
+    receiptCode: searchParams.get("receiptCode")?.trim() ?? "",
+    nextAction: searchParams.get("nextAction")?.trim() ?? ""
+  };
+
+  return Object.values(context).some((value) => typeof value === "string" && value.length > 0) ? context : null;
+}
+
+function findBestMatchingPaymentRun(
+  overview: TreasuryPaymentRunsOverviewContract,
+  context: AccountsPayablePaymentRunContext
+) {
+  const normalizedInvoiceCode = normalizePaymentRunContextValue(context.invoiceCode);
+  const normalizedSupplierName = normalizePaymentRunContextValue(context.supplierName);
+
+  return (
+    overview.runs
+      .map((run) => {
+        let score = 0;
+
+        run.invoices.forEach((invoice) => {
+          if (normalizedInvoiceCode && normalizePaymentRunContextValue(invoice.invoiceCode) === normalizedInvoiceCode) {
+            score += 8;
+          }
+
+          if (normalizedSupplierName && normalizePaymentRunContextValue(invoice.supplierName) === normalizedSupplierName) {
+            score += 2;
+          }
+        });
+
+        return { run, score };
+      })
+      .sort((left, right) => right.score - left.score)
+      .find((item) => item.score > 0)
+      ?.run ?? null
+  );
+}
+
+function findMatchingEligibleInvoiceIds(
+  overview: TreasuryPaymentRunsOverviewContract,
+  context: AccountsPayablePaymentRunContext
+) {
+  const normalizedInvoiceCode = normalizePaymentRunContextValue(context.invoiceCode);
+  const normalizedSupplierName = normalizePaymentRunContextValue(context.supplierName);
+
+  return overview.eligibleInvoices
+    .filter((invoice) => {
+      if (normalizedInvoiceCode && normalizePaymentRunContextValue(invoice.code) === normalizedInvoiceCode) {
+        return true;
+      }
+
+      return normalizedSupplierName.length > 0 && normalizePaymentRunContextValue(invoice.supplierName) === normalizedSupplierName;
+    })
+    .map((invoice) => invoice.id);
+}
+
+function buildPaymentRunCashFlowHref(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return "/cash-flow";
+  }
+
+  const query = new URLSearchParams({
+    source: "payment-runs",
+    runCode: run.code,
+    runStatus: run.status,
+    runOwner: run.owner,
+    criticalInvoices: String(run.criticalInvoices),
+    totalAmount: String(run.totalAmount),
+    nextAction: run.nextAction
+  });
+
+  return `/cash-flow?${query.toString()}`;
+}
+
 function buildCreatePaymentRunGate(input: {
   bankAccountLabel: string;
   scheduledDate: string;
@@ -75,52 +195,34 @@ function buildCreatePaymentRunGate(input: {
   selectedInvoiceAmount: number;
   availableEligibleInvoices: number;
 }) {
-  const checks: BilingualText[] = [];
+  const checks: string[] = [];
 
   if (input.bankAccountLabel.trim().length < 8) {
-    checks.push({
-      es: "La cuenta bancaria todavía necesita una captura más descriptiva para tesorería.",
-      en: "The bank account label still needs more descriptive treasury capture."
-    });
+    checks.push("Bank account label still needs more descriptive treasury capture.");
   }
 
   if (!input.scheduledDate) {
-    checks.push({ es: "Todavía falta la fecha programada.", en: "The scheduled date is still missing." });
+    checks.push("Scheduled date is still missing.");
   }
 
   if (input.owner.trim().length < 3) {
-    checks.push({
-      es: "El responsable de tesorería todavía necesita una captura más específica.",
-      en: "The treasury owner still needs more specific capture."
-    });
+    checks.push("Treasury owner still needs more specific capture.");
   }
 
   if (input.nextAction.trim().length < 8) {
-    checks.push({
-      es: "La siguiente acción todavía necesita suficiente detalle para dar seguimiento a la liberación.",
-      en: "The next action still needs enough detail for release follow-through."
-    });
+    checks.push("Next action still needs enough detail for release follow-through.");
   }
 
   if (input.selectedInvoiceCount === 0) {
-    checks.push({
-      es: "Debes seleccionar al menos una factura elegible antes de crear una corrida.",
-      en: "At least one eligible invoice must be selected before creating a payment run."
-    });
+    checks.push("At least one eligible invoice must be selected before creating a payment run.");
   }
 
   if (input.availableEligibleInvoices === 0) {
-    checks.push({
-      es: "No hay facturas elegibles disponibles para armar una corrida en este momento.",
-      en: "There are no eligible invoices available to assemble into a run right now."
-    });
+    checks.push("There are no eligible invoices available to assemble into a run right now.");
   }
 
   if (input.selectedInvoiceAmount <= 0 && input.selectedInvoiceCount > 0) {
-    checks.push({
-      es: "Las facturas seleccionadas todavía no forman un monto válido para tesorería.",
-      en: "The selected invoices still do not form a valid treasury amount."
-    });
+    checks.push("Selected invoices still do not form a valid treasury amount.");
   }
 
   if (checks.length > 0) {
@@ -128,38 +230,21 @@ function buildCreatePaymentRunGate(input: {
 
     return {
       tone: hardBlock ? "danger" as const : "warning" as const,
-      label: hardBlock
-        ? { es: "No crear aún", en: "Do not create yet" }
-        : { es: "Crear con control", en: "Create with control" },
+      label: hardBlock ? "Do not create yet" : "Create with control",
       summary: hardBlock
-        ? {
-            es: "Este lote de tesorería arrancaría con un bloqueo duro de preparación.",
-            en: "This treasury batch would open with a hard readiness blocker."
-          }
-        : {
-            es: "La corrida se puede crear, pero la disciplina operativa todavía debe apretarse antes de liberarla.",
-            en: "The batch can be created, but treasury discipline still needs tightening before it becomes truly releasable."
-          },
+        ? "This treasury batch would open with a hard readiness blocker."
+        : "The batch can be created, but treasury discipline still needs tightening before it becomes truly releasable.",
       checks
     };
   }
 
   return {
     tone: "success" as const,
-    label: { es: "Lista para crear", en: "Ready to create" },
-    summary: {
-      es: "La corrida tiene suficiente estructura para entrar limpia a revisión de tesorería.",
-      en: "The payment run has enough structure to enter treasury review cleanly."
-    },
+    label: "Ready to create",
+    summary: "The payment run has enough structure to enter treasury review cleanly.",
     checks: [
-      {
-        es: "La corrida creada se volverá el lote de enfoque inmediatamente.",
-        en: "The created run will become the current focus batch immediately."
-      },
-      {
-        es: "Conserva la trazabilidad de CXP, proveedor y ejecución bancaria desde el primer armado.",
-        en: "Keep AP, supplier and bank execution traceability attached from the first treasury assembly."
-      }
+      "The created run will become the current focus batch immediately.",
+      "Keep AP, supplier and bank execution traceability attached from the first treasury assembly."
     ]
   };
 }
@@ -170,268 +255,280 @@ function buildCreatePaymentRunHumanStep(input: {
   nextAction: string;
 }) {
   if (input.selectedInvoiceCount === 0) {
-    return {
-      es: "Selecciona primero las facturas por pagar para que tesorería no cree un lote vacío.",
-      en: "Select the payable invoices first so treasury is not creating an empty batch."
-    };
+    return "Select the payable invoices first so treasury is not creating an empty batch.";
   }
 
   if (!input.scheduledDate) {
-    return {
-      es: "Define la fecha de ejecución antes de crear la corrida para mantener explícito el calendario de caja.",
-      en: "Set the execution date before creating the batch so cash timing stays explicit."
-    };
+    return "Set the execution date before creating the batch so cash timing stays explicit.";
   }
 
   if (input.nextAction.trim().length < 8) {
-    return {
-      es: "Aclara el plan de liberación de tesorería antes de guardar la corrida.",
-      en: "Clarify the treasury release plan before persisting the batch."
-    };
+    return "Clarify the treasury release plan before persisting the batch.";
   }
 
-  return {
-    es: "Crea la corrida y revísala de inmediato para decidir si se queda en borrador o puede avanzar a lista sin reconstruir el contexto de CXP.",
-    en: "Create the run and immediately review whether it should stay draft or move toward ready without rebuilding the AP context."
-  };
+  return "Create the run and immediately review whether it should stay draft or move toward ready without rebuilding the AP context.";
 }
 
 function buildSelectedRunGate(run: TreasuryPaymentRunContract | null) {
   if (!run) {
     return {
       tone: "info" as const,
-      label: { es: "Sin corrida seleccionada", en: "No run selected" },
-      summary: {
-        es: "Elige una corrida de tesorería para validar si de verdad está lista, bloqueada o sigue en borrador.",
-        en: "Choose a treasury run to verify whether it is really ready, blocked or still draft."
-      },
-      checks: [{ es: "Selecciona una corrida desde la bandeja activa de tesorería.", en: "Select a run from the active treasury board." }]
+      label: "No run selected",
+      summary: "Choose a treasury run to verify whether it is really ready, blocked or still draft.",
+      checks: ["Select a run from the active treasury board."]
     };
   }
 
-  const checks: BilingualText[] = [];
+  const checks: string[] = [];
 
   if (run.status === "blocked") {
-    checks.push({ es: "La corrida ya está bloqueada a nivel tesorería.", en: "The run is already blocked at treasury level." });
+    checks.push("Run is already blocked at treasury level.");
   }
 
   if (run.criticalInvoices > 0) {
-    checks.push({
-      es: `${run.criticalInvoices} factura(s) crítica(s) todavía amenazan una ejecución limpia.`,
-      en: `${run.criticalInvoices} critical invoice(s) still threaten clean execution.`
-    });
+    checks.push(`${run.criticalInvoices} critical invoice(s) still threaten clean execution.`);
   }
 
   if (run.totalInvoices <= 0) {
-    checks.push({ es: "La corrida todavía no tiene facturas asociadas.", en: "The run still has no invoices attached." });
+    checks.push("Run still has no invoices attached.");
   }
 
   if (run.status === "draft") {
-    checks.push({
-      es: "La corrida sigue en borrador y todavía no alcanza una postura de lista.",
-      en: "The run is still draft and has not reached ready posture."
-    });
+    checks.push("Run is still draft and has not reached ready posture.");
   }
 
   if (checks.length > 0) {
     const hardBlock = run.status === "blocked" || run.totalInvoices <= 0 || run.criticalInvoices > 0;
     return {
       tone: hardBlock ? "danger" as const : "warning" as const,
-      label: hardBlock
-        ? { es: "No ejecutar aún", en: "Do not execute yet" }
-        : { es: "Operar con control", en: "Operate with control" },
+      label: hardBlock ? "Do not execute yet" : "Operate with control",
       summary: hardBlock
-        ? {
-            es: "Este lote de tesorería todavía carga bloqueos antes de confiar su ejecución bancaria.",
-            en: "This treasury batch still carries blockers before bank execution should be trusted."
-          }
-        : {
-            es: "La corrida puede seguir, pero tesorería debe apretar primero el carril de liberación.",
-            en: "The batch can continue, but treasury should tighten the release lane first."
-          },
+        ? "This treasury batch still carries blockers before bank execution should be trusted."
+        : "The batch can continue, but treasury should tighten the release lane first.",
       checks
     };
   }
 
   return {
     tone: "success" as const,
-    label: run.status === "executed" ? { es: "Ya ejecutada", en: "Already executed" } : { es: "Lista para continuidad", en: "Ready for treasury continuity" },
+    label: run.status === "executed" ? "Already executed" : "Ready for treasury continuity",
     summary:
       run.status === "executed"
-        ? {
-            es: "La corrida ya fue ejecutada y debe quedarse solo como trazabilidad financiera.",
-            en: "The batch is already executed and should stay only as financial traceability."
-          }
-        : {
-            es: "La cantidad de facturas, el riesgo y la postura operativa ya están alineados para continuidad de tesorería.",
-            en: "Invoice count, risk and posture are aligned for treasury continuity."
-          },
+        ? "The batch is already executed and should stay only as financial traceability."
+        : "Invoice count, risk and posture are aligned for treasury continuity.",
     checks: [
-      {
-        es: "Continúa a ejecución bancaria o seguimiento de CXP sin reconstruir el mismo contexto de corrida.",
-        en: "Continue into bank execution or AP follow-through without rebuilding the same run context."
-      },
-      {
-        es: "Conserva el mismo responsable y la misma siguiente acción hasta cerrar el lote por completo.",
-        en: "Keep the same owner and next action attached until the batch is fully closed."
-      }
+      "Continue into bank execution or AP follow-through without rebuilding the same run context.",
+      "Keep the same owner and next action attached until the batch is fully closed."
     ]
   };
 }
 
-function buildSelectedRunWhyNow(run: TreasuryPaymentRunContract | null) {
+function buildSelectedRunHumanStep(run: TreasuryPaymentRunContract | null) {
   if (!run) {
-    return {
-      es: "Selecciona una corrida para entender por qué merece atención en este momento.",
-      en: "Choose a treasury run to understand why it deserves attention right now."
-    };
+    return "Choose a treasury run to identify the next human move.";
   }
 
   if (run.status === "blocked") {
-    return {
-      es: "Este lote ya está bloqueado, así que cualquier demora aquí puede congelar al mismo tiempo la continuidad de pago de varios proveedores.",
-      en: "This batch is already blocked, so delay here can freeze payment continuity across multiple suppliers at once."
-    };
+    return "Clear the blocking invoice or treasury dependency first, then return only when the batch can move again.";
   }
 
   if (run.criticalInvoices > 0) {
-    return {
-      es: "Ya hay facturas críticas dentro del lote, así que tesorería debe actuar antes de normalizar una mala calidad de liberación.",
-      en: "Critical invoices are already inside the batch, so treasury should act before the run normalizes bad release quality."
-    };
+    return "Contain the critical invoices first and confirm whether they should stay, move or leave the batch.";
   }
 
   if (run.status === "draft") {
-    return {
-      es: "La corrida sigue en borrador, así que tesorería debe decidir ahora si realmente puede ejecutarse o necesita más limpieza.",
-      en: "The run is still draft, so treasury should decide now whether it can become real execution or needs more cleanup."
-    };
+    return "Validate the batch composition now and decide whether it is ready or still needs AP cleanup.";
   }
 
   if (run.status === "ready") {
-    return {
-      es: "La corrida ya está lo bastante cerca de ejecución bancaria como para que una demora de tesorería convierta un buen lote en una liberación obsoleta.",
-      en: "The run is close enough to bank execution that treasury delay can turn a good batch into stale release posture."
-    };
+    return "Confirm bank execution conditions and keep AP informed so the run does not decay before payment.";
   }
 
-  return {
-    es: "La corrida ya está ejecutada, pero tesorería todavía debe conservar una trazabilidad limpia y confirmación hacia abajo.",
-    en: "This run is already executed, but treasury should still preserve clean traceability and downstream confirmation."
-  };
+  return "Close the traceability loop and verify the executed batch no longer carries unresolved AP residue.";
+}
+
+function buildSelectedRunWhyNow(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return "Choose a treasury run to understand why it deserves attention right now.";
+  }
+
+  if (run.status === "blocked") {
+    return "This batch is already blocked, so delay here can freeze payment continuity across multiple suppliers at once.";
+  }
+
+  if (run.criticalInvoices > 0) {
+    return "Critical invoices are already inside the batch, so treasury should act before the run normalizes bad release quality.";
+  }
+
+  if (run.status === "draft") {
+    return "The run is still draft, so treasury should decide now whether it can become real execution or needs more cleanup.";
+  }
+
+  if (run.status === "ready") {
+    return "The run is close enough to bank execution that treasury delay can turn a good batch into stale release posture.";
+  }
+
+  return "This run is already executed, but treasury should still preserve clean traceability and downstream confirmation.";
 }
 
 function buildSelectedRunDownstreamEffect(run: TreasuryPaymentRunContract | null) {
   if (!run) {
-    return {
-      es: "Selecciona una corrida para revisar qué puede bloquear aguas abajo.",
-      en: "Choose a treasury run to inspect what it can block downstream."
-    };
+    return "Choose a treasury run to inspect what it can block downstream.";
   }
 
   if (run.status === "blocked" || run.criticalInvoices > 0) {
-    return {
-      es: "El efecto aguas abajo es desconfianza del proveedor, congestión en CXP y distorsión del calendario financiero en toda la cadena de pagos.",
-      en: "The downstream effect is supplier distrust, AP congestion and distorted finance timing across the payment chain."
-    };
+    return "The downstream effect is supplier distrust, AP congestion and distorted finance timing across the payment chain.";
   }
 
   if (run.status === "draft") {
-    return {
-      es: "Una corrida inestable en borrador puede propagar confusión hacia CXP, la liberación de proveedores y la secuencia de caja de corto plazo.",
-      en: "An unstable draft run can propagate confusion back into AP, supplier release and short-term cash sequencing."
-    };
+    return "An unstable draft run can propagate confusion back into AP, supplier release and short-term cash sequencing.";
   }
 
   if (run.status === "ready") {
-    return {
-      es: "Si este lote listo se estanca, la confianza de tesorería y el calendario de liberación a proveedores pueden degradarse al mismo tiempo.",
-      en: "If this ready batch stalls, treasury confidence and supplier release timing can degrade together."
-    };
+    return "If this ready batch stalls, treasury confidence and supplier release timing can degrade together.";
   }
 
-  return {
-    es: "El efecto aguas abajo es sobre todo disciplina de conciliación: mantener alineados a CXP, proveedores y finanzas después de ejecutar.",
-    en: "The downstream effect is mostly reconciliation discipline: keep AP, suppliers and finance aligned after execution."
-  };
+  return "The downstream effect is mostly reconciliation discipline: keep AP, suppliers and finance aligned after execution.";
 }
 
 function buildSelectedRunReportBack(run: TreasuryPaymentRunContract | null) {
   if (!run) {
-    return {
-      es: "Selecciona una corrida para definir la siguiente ventana de reporte.",
-      en: "Choose a treasury run to define the next report-back window."
-    };
+    return "Choose a treasury run to define the next report-back window.";
   }
 
   if (run.status === "blocked" || run.criticalInvoices > 0) {
-    return {
-      es: "Reporta antes del siguiente corte de tesorería con la contención del bloqueo y el estatus de liberación de facturas.",
-      en: "Report back before the next treasury cutoff with blocker containment and invoice-release status."
-    };
+    return "Report back before the next treasury cutoff with blocker containment and invoice-release status.";
   }
 
   if (run.status === "draft") {
-    return {
-      es: "Reporta dentro del mismo ciclo operativo una vez que la corrida quede lista o se re-secuencie explícitamente.",
-      en: "Report back in the same operating cycle once the batch is either ready or explicitly resequenced."
-    };
+    return "Report back in the same operating cycle once the batch is either ready or explicitly resequenced.";
   }
 
   if (run.status === "ready") {
-    return {
-      es: "Reporta tan pronto se confirme que el calendario de ejecución bancaria sigue vigente.",
-      en: "Report back as soon as bank execution timing is confirmed and still valid."
-    };
+    return "Report back as soon as bank execution timing is confirmed and still valid.";
   }
 
-  return {
-    es: "Reporta en la siguiente actualización de tesorería confirmando que la ejecución se mantuvo conciliada y limpia.",
-    en: "Report back on the next treasury refresh confirming execution stayed reconciled and clean."
-  };
+  return "Report back on the next treasury refresh confirming execution stayed reconciled and clean.";
 }
 
 function buildSelectedRunLinks(run: TreasuryPaymentRunContract | null) {
   if (!run) {
     return [
-      { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" },
-      { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" },
-      { label: { es: "Abrir flujo de efectivo", en: "Open cash flow" }, href: "/cash-flow" }
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open cash flow", href: "/cash-flow" }
     ];
   }
 
   if (run.status === "blocked" || run.criticalInvoices > 0) {
     return [
-      { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" },
-      { label: { es: "Abrir catálogo de proveedores", en: "Open supplier master" }, href: "/supplier-master" },
-      { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" }
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open supplier master", href: "/supplier-master" },
+      { label: "Open cash flow", href: buildPaymentRunCashFlowHref(run) }
     ];
   }
 
   if (run.status === "draft") {
     return [
-      { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" },
-      { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" },
-      { label: { es: "Abrir flujo de efectivo", en: "Open cash flow" }, href: "/cash-flow" }
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open finance", href: "/finance" },
+      { label: "Open cash flow", href: buildPaymentRunCashFlowHref(run) }
     ];
   }
 
   return [
-    { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" },
-    { label: { es: "Abrir flujo de efectivo", en: "Open cash flow" }, href: "/cash-flow" },
-    { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" }
+    { label: "Open finance", href: "/finance" },
+    { label: "Open cash flow", href: buildPaymentRunCashFlowHref(run) },
+    { label: "Open accounts payable", href: "/accounts-payable" }
   ];
 }
 
+function buildSelectedRunDesk(run: TreasuryPaymentRunContract | null) {
+  if (!run) {
+    return {
+      primaryLabel: { es: "Cuentas por pagar", en: "Accounts payable" },
+      primaryReason: {
+        es: "Selecciona una corrida para definir qué dominio debe absorber primero la presión del lote.",
+        en: "Select a run to define which domain should absorb batch pressure first."
+      },
+      secondaryLabel: { es: "Finanzas", en: "Finance" },
+      secondaryReason: {
+        es: "Después de la fuente del problema, finanzas debe sostener postura de liberación e impacto de caja.",
+        en: "After the problem source, finance should sustain release posture and cash impact."
+      },
+      returnRule: {
+        es: "Regresa con dueño, lote y condición de liberación ya confirmados.",
+        en: "Return with owner, batch and release condition already confirmed."
+      }
+    };
+  }
+
+  if (run.status === "blocked" || run.criticalInvoices > 0) {
+    return {
+      primaryLabel: { es: "Cuentas por pagar", en: "Accounts payable" },
+      primaryReason: {
+        es: "La corrida está bloqueada por calidad de factura o disciplina de liberación; AP debe limpiar primero la composición del lote.",
+        en: "The run is blocked by invoice quality or release discipline, so AP should clean batch composition first."
+      },
+      secondaryLabel: { es: "Proveedores", en: "Supplier master" },
+      secondaryReason: {
+        es: "Después de AP, proveedores debe sostener cobertura, datos y compromiso comercial de las facturas críticas.",
+        en: "After AP, supplier management should sustain coverage, data and commercial commitment for critical invoices."
+      },
+      returnRule: {
+        es: "Regresa con facturas críticas contenidas, proveedor confirmado y la corrida lista para revalidarse.",
+        en: "Return with critical invoices contained, supplier confirmed and the run ready to be revalidated."
+      }
+    };
+  }
+
+  if (run.status === "draft") {
+    return {
+      primaryLabel: { es: "Cuentas por pagar", en: "Accounts payable" },
+      primaryReason: {
+        es: "El lote todavía depende de depuración operativa antes de que tesorería lo trate como liberable.",
+        en: "The batch still depends on operating cleanup before treasury can treat it as releasable."
+      },
+      secondaryLabel: { es: "Finanzas", en: "Finance" },
+      secondaryReason: {
+        es: "Después de limpiar AP, finanzas debe confirmar impacto y postura de ejecución del lote.",
+        en: "After cleaning AP, finance should confirm batch impact and execution posture."
+      },
+      returnRule: {
+        es: "Regresa con composición validada, siguiente corte definido y criterio claro para pasarlo a listo.",
+        en: "Return with validated composition, next cutoff defined and clear criteria to move it into ready."
+      }
+    };
+  }
+
+  return {
+    primaryLabel: { es: "Finanzas", en: "Finance" },
+    primaryReason: {
+      es: "La corrida ya está madura y ahora la presión principal es sostener ejecución, caja y trazabilidad financiera.",
+      en: "The run is already mature and the main pressure is now sustaining execution, cash and financial traceability."
+    },
+    secondaryLabel: { es: "Flujo de efectivo", en: "Cash flow" },
+    secondaryReason: {
+      es: "Después de finanzas, flujo de efectivo debe absorber cobertura y secuencia de salida sin perder el mismo contexto.",
+      en: "After finance, cash flow should absorb coverage and outflow sequencing without losing the same context."
+    },
+    returnRule: {
+      es: "Regresa con fecha de ejecución, cobertura de caja y conciliación esperada ya confirmadas.",
+      en: "Return with execution date, cash coverage and expected reconciliation already confirmed."
+    }
+  };
+}
+
 export default function TreasuryPaymentRunsPage() {
-  const { activeCompany, apiBaseUrl, session, source, uiLanguage, localizeText } = useAppState();
+  const searchParams = useSearchParams();
+  const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
-  const t = useCallback((es: string, en: string) => localizeText({ es, en }), [localizeText]);
+  const t = (es: string, en: string) => localizeText({ es, en });
+  const accountsPayableContext = useMemo(() => buildAccountsPayablePaymentRunContext(searchParams), [searchParams]);
   const [overview, setOverview] = useState<TreasuryPaymentRunsOverviewContract | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | TreasuryPaymentRunContract["status"]>("all");
   const [searchFilter, setSearchFilter] = useState("");
-  const [workspaceView, setWorkspaceView] = useState<"workbench" | "queue" | "details">("workbench");
   const [nextActionDraft, setNextActionDraft] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -440,6 +537,23 @@ export default function TreasuryPaymentRunsPage() {
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([]);
   const [selectedEligibleInvoiceId, setSelectedEligibleInvoiceId] = useState<string>("");
   const [moveTargets, setMoveTargets] = useState<Record<string, string>>({});
+  const [appliedAccountsPayableContextKey, setAppliedAccountsPayableContextKey] = useState<string | null>(null);
+  const [accountsPayableMatchedRunId, setAccountsPayableMatchedRunId] = useState<string | null>(null);
+  const accountsPayableContextKey = useMemo(
+    () =>
+      accountsPayableContext
+        ? [
+            accountsPayableContext.source,
+            accountsPayableContext.invoiceCode,
+            accountsPayableContext.supplierName,
+            accountsPayableContext.projectName,
+            accountsPayableContext.purchaseOrderCode,
+            accountsPayableContext.receiptCode,
+            accountsPayableContext.nextAction
+          ].join("|")
+        : null,
+    [accountsPayableContext]
+  );
 
   async function reloadOverview() {
     const runs = await fetchTreasuryPaymentRunsOverview(activeCompany.id, { apiBaseUrl, accessToken: session.accessToken });
@@ -484,7 +598,12 @@ export default function TreasuryPaymentRunsPage() {
         run.code.toLowerCase().includes(normalizedSearch) ||
         run.bankAccountLabel.toLowerCase().includes(normalizedSearch) ||
         run.owner.toLowerCase().includes(normalizedSearch) ||
-        run.nextAction.toLowerCase().includes(normalizedSearch);
+        run.nextAction.toLowerCase().includes(normalizedSearch) ||
+        run.invoices.some(
+          (invoice) =>
+            invoice.invoiceCode.toLowerCase().includes(normalizedSearch) ||
+            invoice.supplierName.toLowerCase().includes(normalizedSearch)
+        );
 
       return matchesStatus && matchesSearch;
     });
@@ -501,64 +620,12 @@ export default function TreasuryPaymentRunsPage() {
     [overview, selectedRun]
   );
   const selectedRunGate = useMemo(() => buildSelectedRunGate(selectedRun), [selectedRun]);
+  const selectedRunHumanStep = useMemo(() => buildSelectedRunHumanStep(selectedRun), [selectedRun]);
   const selectedRunWhyNow = useMemo(() => buildSelectedRunWhyNow(selectedRun), [selectedRun]);
   const selectedRunDownstreamEffect = useMemo(() => buildSelectedRunDownstreamEffect(selectedRun), [selectedRun]);
   const selectedRunReportBack = useMemo(() => buildSelectedRunReportBack(selectedRun), [selectedRun]);
   const selectedRunLinks = useMemo(() => buildSelectedRunLinks(selectedRun), [selectedRun]);
-  const selectedRunGateLabel = useMemo(() => {
-    if (!selectedRun) {
-      return t("Sin corrida seleccionada", "No run selected");
-    }
-    if (selectedRun.status === "executed") {
-      return t("Ya ejecutada", "Already executed");
-    }
-    if (selectedRunGate.tone === "danger") {
-      return t("No ejecutar aún", "Do not execute yet");
-    }
-    if (selectedRunGate.tone === "warning") {
-      return t("Operar con control", "Operate with control");
-    }
-    return t("Lista para continuidad", "Ready for continuity");
-  }, [selectedRun, selectedRunGate.tone, t]);
-  const selectedRunGateSummary = useMemo(() => {
-    if (!selectedRun) {
-      return t("Selecciona una corrida para validar si realmente está lista, bloqueada o todavía en borrador.", "Select a run to validate whether it is really ready, blocked or still draft.");
-    }
-    if (selectedRun.status === "blocked") {
-      return t("La corrida ya tiene un bloqueo activo de tesorería y no debe avanzar al banco.", "The run already carries an active treasury block and should not advance to the bank.");
-    }
-    if (selectedRun.criticalInvoices > 0) {
-      return t("Todavía hay facturas críticas dentro del lote y eso invalida una liberación limpia.", "Critical invoices are still inside the batch, which invalidates a clean release.");
-    }
-    if (selectedRun.totalInvoices <= 0) {
-      return t("La corrida no tiene facturas asociadas y necesita recomposición antes de seguir.", "The run has no invoices attached and needs recomposition before continuing.");
-    }
-    if (selectedRun.status === "draft") {
-      return t("La corrida sigue en borrador y requiere validación operativa antes de marcarse lista.", "The run is still draft and needs operating validation before being marked ready.");
-    }
-    if (selectedRun.status === "ready") {
-      return t("La corrida ya tiene postura suficiente para confirmar condiciones bancarias y ejecutar.", "The run has enough posture to confirm banking conditions and execute.");
-    }
-    return t("La corrida queda solo para trazabilidad y conciliación posterior.", "The run stays as traceability and post-execution reconciliation only.");
-  }, [selectedRun, t]);
-  const selectedRunHumanStepCopy = useMemo(() => {
-    if (!selectedRun) {
-      return t("Selecciona una corrida para identificar el siguiente movimiento humano.", "Choose a run to identify the next human move.");
-    }
-    if (selectedRun.status === "blocked") {
-      return t("Resuelve primero el bloqueo fiscal, documental o de factura y regresa cuando el lote pueda moverse.", "Resolve the fiscal, documentary or invoice block first, then return when the batch can move again.");
-    }
-    if (selectedRun.criticalInvoices > 0) {
-      return t("Contén las facturas críticas y decide si deben quedarse, moverse o salir de la corrida.", "Contain the critical invoices and decide whether they should stay, move or leave the run.");
-    }
-    if (selectedRun.status === "draft") {
-      return t("Valida la composición del lote ahora y decide si ya puede quedar lista o todavía requiere limpieza de CXP.", "Validate the batch composition now and decide whether it can be ready or still needs AP cleanup.");
-    }
-    if (selectedRun.status === "ready") {
-      return t("Confirma condiciones bancarias y conserva informada a CXP antes de que la corrida se degrade.", "Confirm banking conditions and keep AP informed before the run degrades.");
-    }
-    return t("Cierra la trazabilidad y confirma que la corrida ejecutada no dejó residuos operativos pendientes.", "Close traceability and confirm the executed run did not leave unresolved operating residue.");
-  }, [selectedRun, t]);
+  const selectedRunDesk = useMemo(() => buildSelectedRunDesk(selectedRun), [selectedRun]);
   const eligibleInvoices = useMemo(
     () => overview?.eligibleInvoices ?? [],
     [overview]
@@ -597,67 +664,24 @@ export default function TreasuryPaymentRunsPage() {
     () => overview?.runs.filter((run) => run.id !== selectedRun?.id && run.status !== "executed") ?? [],
     [overview, selectedRun?.id]
   );
-  const executableActions = useMemo(() => {
-    if (!selectedRun) {
-      return [];
-    }
-
-    const actions = [t("Bloquear corrida", "Block run")];
-    if (selectedRun.status !== "executed") {
-      actions.unshift(t("Separar o mover facturas", "Separate or move invoices"));
-      actions.unshift(t("Actualizar siguiente acción", "Update next action"));
-    }
-    if (selectedRun.status === "draft" || selectedRun.status === "blocked") {
-      actions.unshift(t("Marcar lista", "Mark ready"));
-    }
-    if (selectedRun.status === "ready") {
-      actions.unshift(t("Ejecutar corrida", "Execute run"));
-    }
-
-    return actions;
-  }, [selectedRun, t]);
-  const restrictedActions = useMemo(() => {
-    if (!selectedRun) {
-      return [t("Sin corrida seleccionada todavía.", "No run selected yet.")];
-    }
-
-    const restrictions: string[] = [];
-
-    if (selectedRun.status !== "ready") {
-      restrictions.push(t("No se puede ejecutar hasta que la corrida esté en estado lista.", "Cannot execute until the run is already in ready status."));
-    }
-    if (selectedRun.criticalInvoices > 0) {
-      restrictions.push(
-        t(
-          "Las facturas críticas deben resolverse antes de confiar la liberación bancaria.",
-          "Critical invoices must be resolved before bank release can be trusted."
-        )
-      );
-    }
-    if (selectedRun.totalInvoices <= 0) {
-      restrictions.push(t("No debe quedar una corrida sin facturas.", "A run should not be left without invoices."));
-    }
-    if (selectedRun.status === "executed") {
-      restrictions.push(t("Las corridas ejecutadas quedan solo para trazabilidad; ya no admiten rebalanceo.", "Executed runs stay traceability-only and no longer allow rebalancing."));
-    }
-
-    return restrictions.length > 0 ? restrictions : [t("Sin restricciones operativas inmediatas.", "No immediate operating restrictions.")];
-  }, [selectedRun, t]);
-
-  function paymentRunStatusLabel(status: TreasuryPaymentRunContract["status"]) {
-    switch (status) {
-      case "draft":
-        return { es: "Borrador", en: "Draft" };
-      case "ready":
-        return { es: "Lista", en: "Ready" };
-      case "blocked":
-        return { es: "Bloqueada", en: "Blocked" };
-      case "executed":
-        return { es: "Ejecutada", en: "Executed" };
-      default:
-        return { es: status, en: status };
-    }
-  }
+  const accountsPayableContextRows = useMemo(
+    () =>
+      accountsPayableContext
+        ? [
+            { label: "Invoice", value: accountsPayableContext.invoiceCode },
+            { label: "Supplier", value: accountsPayableContext.supplierName },
+            { label: "Project", value: accountsPayableContext.projectName },
+            { label: "PO code", value: accountsPayableContext.purchaseOrderCode },
+            { label: "Receipt code", value: accountsPayableContext.receiptCode },
+            { label: "Next action", value: accountsPayableContext.nextAction }
+          ].filter((row) => row.value)
+        : [],
+    [accountsPayableContext]
+  );
+  const hasAccountsPayableRunMatch =
+    Boolean(accountsPayableContext) &&
+    Boolean(selectedRun) &&
+    accountsPayableMatchedRunId === selectedRun?.id;
 
   useEffect(() => {
     if (!overview) {
@@ -681,6 +705,50 @@ export default function TreasuryPaymentRunsPage() {
     setError(null);
   }, [selectedRun?.id, selectedRun?.nextAction]);
 
+  useEffect(() => {
+    if (
+      !overview ||
+      !accountsPayableContext ||
+      !accountsPayableContextKey ||
+      appliedAccountsPayableContextKey === accountsPayableContextKey
+    ) {
+      return;
+    }
+
+    const preloadTerms = [
+      accountsPayableContext.invoiceCode,
+      accountsPayableContext.supplierName,
+      accountsPayableContext.projectName,
+      accountsPayableContext.purchaseOrderCode
+    ].filter(Boolean);
+    if (preloadTerms.length > 0) {
+      setSearchFilter(preloadTerms.join(" "));
+    }
+
+    if (accountsPayableContext.nextAction.length > 0) {
+      setForm((current) => ({
+        ...current,
+        nextAction: accountsPayableContext.nextAction || current.nextAction
+      }));
+    }
+
+    const matchedRun = findBestMatchingPaymentRun(overview, accountsPayableContext);
+    if (matchedRun) {
+      setSelectedId(matchedRun.id);
+      setAccountsPayableMatchedRunId(matchedRun.id);
+      setAppliedAccountsPayableContextKey(accountsPayableContextKey);
+      return;
+    }
+
+    const matchedEligibleInvoiceIds = findMatchingEligibleInvoiceIds(overview, accountsPayableContext);
+    if (matchedEligibleInvoiceIds.length > 0) {
+      setSelectedInvoiceIds(matchedEligibleInvoiceIds);
+    }
+
+    setAccountsPayableMatchedRunId(null);
+    setAppliedAccountsPayableContextKey(accountsPayableContextKey);
+  }, [accountsPayableContext, accountsPayableContextKey, appliedAccountsPayableContextKey, overview]);
+
   function recomputeSummary(runs: TreasuryPaymentRunContract[]) {
     return {
       activeRuns: runs.filter((run) => run.status !== "executed").length,
@@ -700,12 +768,12 @@ export default function TreasuryPaymentRunsPage() {
 
     const nextAction = nextActionDraft.trim();
     if (nextAction.length < 8) {
-      setError(t("La siguiente acción debe describir el seguimiento de liberación de tesorería.", "Next action must describe the treasury release follow-up."));
+      setError("Next action must describe the treasury release follow-up.");
       return;
     }
 
     if (status === "executed" && selectedRun.status !== "ready") {
-      setError(t("Solo las corridas ya marcadas como listas pueden ejecutarse.", "Only runs already marked ready can be executed."));
+      setError("Only runs already marked ready can be executed.");
       return;
     }
 
@@ -719,7 +787,7 @@ export default function TreasuryPaymentRunsPage() {
     );
 
     if (!response.data) {
-      setError(response.error?.message ?? t("La actualización de la corrida falló.", "Payment run update failed."));
+      setError(response.error?.message ?? "Payment run update failed.");
       return;
     }
     const updated = response.data;
@@ -731,37 +799,32 @@ export default function TreasuryPaymentRunsPage() {
       const runs = current.runs.map((run) => (run.id === updated.id ? updated : run));
       return { ...current, summary: recomputeSummary(runs), runs, focusRun: updated };
     });
-    setMessage(
-      t(
-        `La corrida cambió a ${localizeText(paymentRunStatusLabel(updated.status)).toLowerCase()}.`,
-        `Payment run moved to ${localizeText(paymentRunStatusLabel(updated.status)).toLowerCase()}.`
-      )
-    );
+    setMessage(`Payment run moved to ${updated.status}.`);
   }
 
   async function handleCreate() {
     if (form.bankAccountLabel.trim().length < 8) {
-      setError(t("La cuenta bancaria debe ser suficientemente descriptiva para la operación de tesorería.", "Bank account label must be descriptive enough for treasury operations."));
+      setError("Bank account label must be descriptive enough for treasury operations.");
       return;
     }
 
     if (!form.scheduledDate) {
-      setError(t("La fecha programada es obligatoria.", "Scheduled date is required."));
+      setError("Scheduled date is required.");
       return;
     }
 
     if (form.owner.trim().length < 3) {
-      setError(t("El responsable debe contener al menos 3 caracteres.", "Owner must contain at least 3 characters."));
+      setError("Owner must contain at least 3 characters.");
       return;
     }
 
     if (form.nextAction.trim().length < 8) {
-      setError(t("La siguiente acción debe describir el plan de liberación.", "Next action must describe the release plan."));
+      setError("Next action must describe the release plan.");
       return;
     }
 
     if (selectedInvoiceIds.length === 0) {
-      setError(t("Selecciona al menos una factura elegible antes de crear la corrida.", "Select at least one eligible invoice before creating a payment run."));
+      setError("Select at least one eligible invoice before creating a payment run.");
       return;
     }
 
@@ -780,7 +843,7 @@ export default function TreasuryPaymentRunsPage() {
     );
 
     if (!response.data) {
-      setError(response.error?.message ?? t("La creación de la corrida falló.", "Payment run creation failed."));
+      setError(response.error?.message ?? "Payment run creation failed.");
       return;
     }
     const created = response.data;
@@ -795,7 +858,7 @@ export default function TreasuryPaymentRunsPage() {
     setSelectedId(created.id);
     setSelectedInvoiceIds([]);
     setForm(emptyCreateForm);
-    setMessage(t(`${created.code} creada.`, `${created.code} created.`));
+    setMessage(`${created.code} created.`);
   }
 
   async function handleRemoveInvoice(invoiceId: string) {
@@ -814,17 +877,12 @@ export default function TreasuryPaymentRunsPage() {
     );
 
     if (!response.data) {
-      setError(response.error?.message ?? t("La separación de la factura desde la corrida falló.", "Invoice removal from payment run failed."));
+      setError(response.error?.message ?? "Invoice removal from payment run failed.");
       return;
     }
 
     await reloadOverview();
-    setMessage(
-      t(
-        `Se separó la factura de ${selectedRun.code}; la corrida volvió a borrador para revalidación.`,
-        `Invoice removed from ${selectedRun.code}; run returned to draft for revalidation.`
-      )
-    );
+    setMessage(`Invoice removed from ${selectedRun.code}; run returned to draft for revalidation.`);
   }
 
   async function handleAddInvoiceToRun() {
@@ -833,7 +891,7 @@ export default function TreasuryPaymentRunsPage() {
     }
 
     if (!selectedEligibleInvoiceId) {
-      setError(t("Selecciona una factura elegible antes de agregarla a la corrida.", "Select one eligible invoice before adding it to the run."));
+      setError("Select one eligible invoice before adding it to the run.");
       return;
     }
 
@@ -848,18 +906,13 @@ export default function TreasuryPaymentRunsPage() {
     );
 
     if (!response.data) {
-      setError(response.error?.message ?? t("La incorporación de la factura a la corrida falló.", "Invoice add into payment run failed."));
+      setError(response.error?.message ?? "Invoice add into payment run failed.");
       return;
     }
 
     setSelectedEligibleInvoiceId("");
     await reloadOverview();
-    setMessage(
-      t(
-        `La factura se agregó a ${selectedRun.code}; la corrida volvió a borrador para revalidación.`,
-        `Invoice added into ${selectedRun.code}; run returned to draft for revalidation.`
-      )
-    );
+    setMessage(`Invoice added into ${selectedRun.code}; run returned to draft for revalidation.`);
   }
 
   async function handleMoveInvoice(invoiceId: string) {
@@ -869,7 +922,7 @@ export default function TreasuryPaymentRunsPage() {
 
     const targetPaymentRunId = moveTargets[invoiceId];
     if (!targetPaymentRunId) {
-      setError(t("Elige una corrida destino antes de mover la factura.", "Choose a target run before moving the invoice."));
+      setError("Choose a target run before moving the invoice.");
       return;
     }
 
@@ -885,374 +938,295 @@ export default function TreasuryPaymentRunsPage() {
     );
 
     if (!response.data) {
-      setError(response.error?.message ?? t("El movimiento de la factura entre corridas falló.", "Invoice move between payment runs failed."));
+      setError(response.error?.message ?? "Invoice move between payment runs failed.");
       return;
     }
 
     setMoveTargets((current) => ({ ...current, [invoiceId]: "" }));
     await reloadOverview();
-    setMessage(
-      t(
-        `La factura salió de ${selectedRun.code} hacia otra corrida abierta.`,
-        `Invoice moved out of ${selectedRun.code} into another open run.`
-      )
-    );
+    setMessage(`Invoice moved out of ${selectedRun.code} into another open run.`);
   }
 
   return (
-    <AppShell
-      title={t("Corridas de pago de tesorería", "Treasury payment runs")}
-      eyebrow={t("Ejecución de tesorería", "Treasury execution")}
-      description={t(
-        "Agrupa y libera pagos a proveedores con controles fiscales y de evidencia.",
-        "Batch and release supplier payments with fiscal and evidence controls."
-      )}
-    >
-      <ModuleGate
-        moduleKeys={["finance.accounting"]}
-        requiredPermissions={["finance:*", "finance:read"]}
-        title={t("Corridas de pago de tesorería", "Treasury payment runs")}
-      >
+    <AppShell title="Treasury Payment Runs" eyebrow="Treasury execution" description="Batch and release supplier payments with fiscal and evidence controls.">
+      <ModuleGate moduleKeys={["finance.accounting"]} requiredPermissions={["finance:*", "finance:read"]} title="Treasury payment runs">
         {overview ? (
           <>
-            <section className="stack" lang={uiLanguage}>
-              <div className="row gap wrap" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div className="stack" style={{ maxWidth: 840 }}>
-                  <span className="eyebrow">
-                    {t("Workbench de tesorería", "Treasury workbench")}
-                    <span className="mono">{t("corridas de pago", "payment runs")}</span>
-                  </span>
-                  <h2>{selectedRun?.code ?? t("Selecciona una corrida", "Select a payment run")}</h2>
-                  <p>
-                    {t(
-                      "Controla la corrida activa arriba del pliegue: confirma la puerta de tesorería, el responsable, la siguiente acción humana y rebalancea facturas sin salir del lote.",
-                      "Control the active run above the fold: confirm the treasury gate, owner, next human action and rebalance invoices without leaving the batch."
-                    )}
-                  </p>
-                </div>
-                <div className="row gap wrap">
-                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? t("modo demo", "demo mode") : t("backend real", "live backend")}</Badge>
-                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? t("actualizando", "refreshing") : t("lista para operar", "ready to operate")}</Badge>
-                </div>
-              </div>
-
-              <div className="row gap wrap" role="tablist" aria-label={t("Vistas de corridas de pago", "Payment run views")}>
-                {([
-                  ["workbench", t("Control", "Control")],
-                  ["queue", t("Bandeja", "Queue")],
-                  ["details", t("Detalles operativos", "Operational details")]
-                ] as const).map(([view, label]) => (
-                  <button
-                    key={view}
-                    type="button"
-                    role="tab"
-                    aria-selected={workspaceView === view}
-                    className={workspaceView === view ? "button" : "buttonGhost"}
-                    onClick={() => setWorkspaceView(view)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+            <section className="grid cols4">
+              <KpiCard label="Active runs" value={String(filteredSummary.activeRuns)} footnote="Visible treasury batches still in play." />
+              <KpiCard label="Scheduled amount" value={`MXN ${filteredSummary.scheduledAmount.toLocaleString()}`} footnote="Pending disbursement volume across visible open runs." />
+              <KpiCard label="Blocked runs" value={String(filteredSummary.blockedRuns)} footnote="Visible runs held by fiscal or evidence blockers." />
+              <KpiCard label="Ready runs" value={String(filteredSummary.readyRuns)} footnote="Visible runs that can move to execution." />
+              <KpiCard label="Duplicate assignments" value={String(filteredSummary.duplicateAssignments)} footnote="Invoices duplicated across visible active runs must be rebalanced." />
             </section>
 
-            {workspaceView === "workbench" ? (
-              <section className="grid cols2" lang={uiLanguage}>
+            {accountsPayableContextRows.length > 0 ? (
+              <section className="grid cols1">
                 <Card
-                  title={t("Corrida seleccionada", "Selected payment run")}
-                  description={t("Resumen inmediato para decidir si la corrida puede seguir, bloquearse o ejecutarse.", "Immediate summary to decide whether the run can continue, be blocked or be executed.")}
-                  aside={selectedRun ? <Badge tone={tone(selectedRun.status)}>{localizeText(paymentRunStatusLabel(selectedRun.status))}</Badge> : null}
-                >
-                  {selectedRun ? (
-                    <div className="detailGrid">
-                      <div className="detailRow"><div className="detailLabel">{t("Puerta de tesorería", "Treasury gate")}</div><div className="tableCellStack"><div className="row gap wrap" style={{ alignItems: "center" }}><Badge tone={selectedRunGate.tone}>{selectedRunGateLabel}</Badge><span>{selectedRunGateSummary}</span></div></div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Responsable", "Owner")}</div><div>{selectedRun.owner}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Valor", "Value")}</div><div>{`MXN ${selectedRun.totalAmount.toLocaleString()}`}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Facturas", "Invoices")}</div><div>{selectedRun.totalInvoices}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Siguiente acción humana", "Next human action")}</div><div>{selectedRunHumanStepCopy}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Acciones ejecutables", "Executable actions")}</div><div>{executableActions.join(" · ")}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Acciones restringidas", "Restricted actions")}</div><div className="tableCellStack">{restrictedActions.map((item) => <span key={item}>{item}</span>)}</div></div>
-                      <label className="detailRow">
-                        <div className="detailLabel">{t("Siguiente acción", "Next action")}</div>
-                        <textarea className="field" rows={4} lang={uiLanguage} value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} />
-                      </label>
-                      <div className="cluster">
-                        <button className="button" type="button" onClick={() => void handleUpdate("ready")}>{t("Marcar lista", "Mark ready")}</button>
-                        <button className="buttonGhost" type="button" onClick={() => void handleUpdate("blocked")}>{t("Bloquear corrida", "Block run")}</button>
-                        <button className="button" type="button" onClick={() => void handleUpdate("executed")}>{t("Ejecutar corrida", "Execute run")}</button>
-                      </div>
-                      <div className="row gap wrap">
-                        {selectedRunLinks.map((link, index) => (
-                          <Link key={`${link.href}-${link.label.en}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
-                            {localizeText(link.label)}
-                          </Link>
-                        ))}
-                      </div>
-                      {message ? <Badge tone="success">{message}</Badge> : null}
-                      {error ? <Badge tone="danger">{error}</Badge> : null}
-                    </div>
-                  ) : (
-                    <EmptyState title={t("Selecciona una corrida", "Select a payment run")} description={t("Elige una corrida de tesorería para abrir su control operativo.", "Choose a treasury run to open its operating control.")} />
-                  )}
-                </Card>
-
-                <Card title={t("Bandeja de corridas", "Run queue")} description={t("Cambia de lote rápido y vuelve al control sin perder filtros.", "Switch batches quickly and return to control without losing filters.")}>
-                  <FilterBar summary={`${filteredRuns.length} ${t("corridas visibles", "visible runs")}`}>
-                    <label className="fieldLabel">
-                      {t("Estado", "Status")}
-                      <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
-                        <option value="all">{t("Todos", "All")}</option>
-                        <option value="draft">{t("Borrador", "Draft")}</option>
-                        <option value="ready">{t("Lista", "Ready")}</option>
-                        <option value="blocked">{t("Bloqueada", "Blocked")}</option>
-                        <option value="executed">{t("Ejecutada", "Executed")}</option>
-                      </select>
-                    </label>
-                    <label className="fieldLabel" style={{ minWidth: 220 }}>
-                      {t("Buscar", "Search")}
-                      <input
-                        className="field"
-                        type="search"
-                        value={searchFilter}
-                        onChange={(event) => setSearchFilter(event.target.value)}
-                        placeholder={t("Corrida, cuenta, responsable o siguiente acción", "Run, account, owner or next action")}
-                      />
-                    </label>
-                    <Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>
-                      {filteredSummary.blockedRuns > 0
-                        ? `${filteredSummary.blockedRuns} ${t("bloqueadas", "blocked")}`
-                        : filteredSummary.readyRuns > 0
-                          ? `${filteredSummary.readyRuns} ${t("listas", "ready")}`
-                          : t("subset visible controlado", "visible subset controlled")}
-                    </Badge>
-                  </FilterBar>
-                  {filteredRuns.length > 0 ? (
-                    <div className="stack">
-                      {filteredRuns.map((row) => {
-                        const isSelected = row.id === selectedRun?.id;
-
-                        return (
-                          <button
-                            key={row.id}
-                            className={`listItem ${isSelected ? "listItemSelected" : ""}`}
-                            type="button"
-                            onClick={() => {
-                              setSelectedId(row.id);
-                              setWorkspaceView("workbench");
-                            }}
-                            style={{ width: "100%", alignItems: "stretch", justifyContent: "flex-start", padding: 16, textAlign: "left" }}
-                          >
-                            <div className="stack" style={{ width: "100%", gap: 12 }}>
-                              <div className="row gap wrap" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                                <div className="tableCellStack" style={{ alignItems: "flex-start" }}>
-                                  <strong>{row.code}</strong>
-                                  <span className="tableCellMuted">{row.bankAccountLabel}</span>
-                                </div>
-                                <Badge tone={tone(row.status)}>{localizeText(paymentRunStatusLabel(row.status))}</Badge>
-                              </div>
-                              <div className="row gap wrap" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                                <span className="tableCellMuted">{t("Fecha", "Date")}: {row.scheduledDate}</span>
-                                <strong>{`MXN ${row.totalAmount.toLocaleString()}`}</strong>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title={t("Sin corridas visibles", "No visible runs")}
-                      description={t(
-                        "Ajusta los filtros para recuperar corridas en la bandeja principal.",
-                        "Adjust filters to bring runs back into the primary queue."
-                      )}
-                    />
-                  )}
-                </Card>
-              </section>
-            ) : null}
-
-            {workspaceView === "queue" ? (
-              <section className="grid cols2" lang={uiLanguage}>
-                <Card title={t("Cola completa de corridas", "Full run queue")} description={t("Usa esta vista cuando necesites explorar la bandeja completa antes de volver al control.", "Use this view when you need the full queue before returning to control.")}>
-                  <FilterBar summary={`${filteredRuns.length} ${t("corridas coinciden con los filtros", "runs match current filters")}`}>
-                    <label className="fieldLabel">
-                      {t("Estado", "Status")}
-                      <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
-                        <option value="all">{t("Todos", "All")}</option>
-                        <option value="draft">{t("Borrador", "Draft")}</option>
-                        <option value="ready">{t("Lista", "Ready")}</option>
-                        <option value="blocked">{t("Bloqueada", "Blocked")}</option>
-                        <option value="executed">{t("Ejecutada", "Executed")}</option>
-                      </select>
-                    </label>
-                    <label className="fieldLabel" style={{ minWidth: 220 }}>
-                      {t("Buscar", "Search")}
-                      <input
-                        className="field"
-                        type="search"
-                        value={searchFilter}
-                        onChange={(event) => setSearchFilter(event.target.value)}
-                        placeholder={t("Corrida, cuenta, responsable o siguiente acción", "Run, account, owner or next action")}
-                      />
-                    </label>
-                  </FilterBar>
-                  <DataTable
-                    rows={filteredRuns}
-                    columns={[
-                      {
-                        key: "run",
-                        label: t("Corrida", "Run"),
-                        render: (row) => (
-                          <button className="buttonGhost" type="button" onClick={() => setSelectedId(row.id)} style={{ justifyContent: "flex-start", paddingInline: 0 }}>
-                            <div className="tableCellStack">
-                              <strong>{row.code}</strong>
-                              <span className="tableCellMuted">{row.bankAccountLabel}</span>
-                            </div>
-                          </button>
-                        )
-                      },
-                      { key: "date", label: t("Fecha", "Date"), render: (row) => row.scheduledDate },
-                      { key: "amount", label: t("Valor", "Value"), render: (row) => `MXN ${row.totalAmount.toLocaleString()}` },
-                      { key: "status", label: t("Estado", "Status"), render: (row) => <Badge tone={tone(row.status)}>{localizeText(paymentRunStatusLabel(row.status))}</Badge> }
-                    ]}
-                  />
-                </Card>
-                <Card title={selectedRun?.code ?? t("Selecciona una corrida", "Select a payment run")} description={selectedRun ? `${selectedRun.bankAccountLabel} · ${selectedRun.owner}` : t("Elige una corrida desde la bandeja.", "Choose a run from the queue.")}>
-                  {selectedRun ? (
-                    <div className="detailGrid">
-                      <div className="detailRow"><div className="detailLabel">{t("Estado", "Status")}</div><div><Badge tone={tone(selectedRun.status)}>{localizeText(paymentRunStatusLabel(selectedRun.status))}</Badge></div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Puerta", "Gate")}</div><div><Badge tone={selectedRunGate.tone}>{selectedRunGateLabel}</Badge></div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Siguiente acción", "Next action")}</div><div>{selectedRun.nextAction}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Facturas críticas", "Critical invoices")}</div><div>{selectedRun.criticalInvoices}</div></div>
-                    </div>
-                  ) : null}
-                  {selectedRun ? <div className="row gap wrap" style={{ marginTop: 20 }}><button type="button" className="button" onClick={() => setWorkspaceView("workbench")}>{t("Abrir control", "Open control")}</button></div> : null}
-                </Card>
-              </section>
-            ) : null}
-
-            {workspaceView === "details" ? (
-              <section className="stack" id="operational-details">
-                <Card
-                  title="Operational details"
-                  description="Secondary treasury context, run creation and broader risk review."
-                  aside={<Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>{filteredSummary.blockedRuns > 0 ? "blocked" : filteredSummary.readyRuns > 0 ? "ready to release" : "stable"}</Badge>}
+                  title="Accounts-payable context"
+                  description={
+                    hasAccountsPayableRunMatch
+                      ? "A related treasury run was found and opened from accounts payable."
+                      : selectedInvoiceIds.length > 0
+                        ? "No open run matched cleanly, so eligible invoices were preselected for a new treasury batch."
+                        : "No clear run matched. Treasury keeps the AP context visible for manual continuation."
+                  }
+                  aside={<Badge tone="info">Precargada desde cuentas por pagar / Preloaded from accounts payable</Badge>}
                 >
                   <div className="detailGrid">
-                    <div className="detailRow"><div className="detailLabel">Upstream check</div><div>Validate supplier fiscal packet and invoice evidence before the batch is even assembled.</div></div>
-                    <div className="detailRow"><div className="detailLabel">Treasury action</div><div>Group invoices by release lane, move them between runs and avoid executing false-ready batches.</div></div>
-                    <div className="detailRow"><div className="detailLabel">Downstream continuity</div><div>Confirm finance and cash-flow impact immediately after the batch is marked ready or executed.</div></div>
-                    <div className="detailRow"><div className="detailLabel">Why now</div><div>{localizeText(selectedRunWhyNow)}</div></div>
-                    <div className="detailRow"><div className="detailLabel">Downstream effect</div><div>{localizeText(selectedRunDownstreamEffect)}</div></div>
-                    <div className="detailRow"><div className="detailLabel">Report back</div><div>{localizeText(selectedRunReportBack)}</div></div>
-                  </div>
-                  <div className="row gap wrap" style={{ marginTop: 16 }}>
-                    <Link className="button" href="/accounts-payable">{t("Abrir cuentas por pagar", "Open accounts payable")}</Link>
-                    <Link className="buttonGhost" href="/supplier-master">{t("Abrir catálogo de proveedores", "Open supplier master")}</Link>
-                    <Link className="buttonGhost" href="/cash-flow">{t("Abrir flujo de efectivo", "Open cash flow")}</Link>
+                    <div className="detailRow">
+                      <div className="detailLabel">Context status</div>
+                      <div>
+                        <Badge tone="info">
+                          {hasAccountsPayableRunMatch
+                            ? "Context applied"
+                            : selectedInvoiceIds.length > 0
+                              ? "Eligible invoices preselected"
+                              : "Context visible"}
+                        </Badge>
+                      </div>
+                    </div>
+                    {accountsPayableContextRows.map((row) => (
+                      <div key={row.label} className="detailRow">
+                        <div className="detailLabel">{row.label}</div>
+                        <div>{row.value}</div>
+                      </div>
+                    ))}
                   </div>
                 </Card>
+              </section>
+            ) : null}
 
-                <section className="grid cols4">
-                  <KpiCard label="Active runs" value={String(filteredSummary.activeRuns)} footnote="Visible treasury batches still in play." />
-                  <KpiCard label="Scheduled amount" value={`MXN ${filteredSummary.scheduledAmount.toLocaleString()}`} footnote="Pending disbursement volume across visible open runs." />
-                  <KpiCard label="Blocked runs" value={String(filteredSummary.blockedRuns)} footnote="Visible runs held by fiscal or evidence blockers." />
-                  <KpiCard label="Ready runs" value={String(filteredSummary.readyRuns)} footnote="Visible runs that can move to execution." />
-                  <KpiCard label="Duplicate assignments" value={String(filteredSummary.duplicateAssignments)} footnote="Invoices duplicated across visible active runs must be rebalanced." />
-                </section>
+            <section className="grid cols3">
+              <Card
+                title="Treasury walkthrough"
+                description="Assemble payment batches from validated invoices, rebalance them, then release execution."
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    This screen now supports human testing of the full treasury loop: create run, add or remove invoices, move them between runs and mark execution posture.
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">accounts payable</Badge>
+                    <Badge tone="info">treasury</Badge>
+                    <Badge tone="info">release flow</Badge>
+                  </div>
+                </div>
+              </Card>
 
-                <section className="grid cols2">
-                  <Card title="Run composition" description="Invoices in the selected run and all supported rebalance operations.">
-                    {selectedRun ? (
-                      <div className="detailGrid">
-                        <div className="detailRow"><div className="detailLabel">Critical invoices</div><div>{selectedRun.criticalInvoices}</div></div>
-                        {selectedRun.status !== "executed" ? (
-                          <div className="detailRow">
-                            <div className="detailLabel">Add eligible invoice</div>
-                            <div className="row gap wrap" style={{ flex: 1 }}>
-                              <select className="field" value={selectedEligibleInvoiceId} onChange={(event) => setSelectedEligibleInvoiceId(event.target.value)}>
-                                <option value="">Select eligible invoice</option>
-                                {eligibleInvoices.map((invoice) => (
-                                  <option key={invoice.id} value={invoice.id}>
-                                    {invoice.code} · {invoice.supplierName} · MXN {invoice.pendingAmount.toLocaleString()}
-                                  </option>
-                                ))}
-                              </select>
-                              <button className="button" type="button" disabled={!selectedEligibleInvoiceId} onClick={() => void handleAddInvoiceToRun()}>
-                                Add
-                              </button>
-                            </div>
+              <Card
+                title="Payment release workflow"
+                description="Use treasury as the execution bridge between accounts payable, supplier readiness and real bank release."
+                aside={<Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>{filteredSummary.blockedRuns > 0 ? "blocked" : filteredSummary.readyRuns > 0 ? "ready to release" : "stable"}</Badge>}
+              >
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Upstream check</div><div>Validate supplier fiscal packet and invoice evidence before the batch is even assembled.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Treasury action</div><div>Group invoices by release lane, move them between runs and avoid executing false-ready batches.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Downstream continuity</div><div>Confirm finance and cash-flow impact immediately after the batch is marked ready or executed.</div></div>
+                </div>
+                <div className="row gap wrap" style={{ marginTop: 16 }}>
+                  <Link className="button" href="/accounts-payable">Open accounts payable</Link>
+                  <Link className="buttonGhost" href="/supplier-master">Open supplier master</Link>
+                  <Link className="buttonGhost" href={buildPaymentRunCashFlowHref(selectedRun)}>Open cash flow</Link>
+                </div>
+              </Card>
+            </section>
+
+            <section className="grid cols3">
+              <Card title="Payment run board" description="Treasury batches and current release posture.">
+                <FilterBar summary={`${filteredRuns.length} runs match the current operating filters`}>
+                  <label className="fieldLabel">
+                    Status
+                    <select className="field" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+                      <option value="all">All</option>
+                      <option value="draft">Draft</option>
+                      <option value="ready">Ready</option>
+                      <option value="blocked">Blocked</option>
+                      <option value="executed">Executed</option>
+                    </select>
+                  </label>
+                  <label className="fieldLabel" style={{ minWidth: 220 }}>
+                    Search
+                    <input
+                      className="field"
+                      type="search"
+                      value={searchFilter}
+                      onChange={(event) => setSearchFilter(event.target.value)}
+                      placeholder="Run, bank account, owner or next action"
+                    />
+                  </label>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? "demo mode" : "live backend"}</Badge>
+                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "treasury ready"}</Badge>
+                  <Badge tone={filteredSummary.blockedRuns > 0 ? "danger" : filteredSummary.readyRuns > 0 ? "warning" : "success"}>
+                    {filteredSummary.blockedRuns > 0
+                      ? `${filteredSummary.blockedRuns} blocked`
+                      : filteredSummary.readyRuns > 0
+                        ? `${filteredSummary.readyRuns} ready`
+                        : "visible subset controlled"}
+                  </Badge>
+                </FilterBar>
+                <DataTable
+                  rows={filteredRuns}
+                  columns={[
+                    {
+                      key: "run",
+                      label: "Run",
+                      render: (row) => (
+                        <button className="buttonGhost" type="button" onClick={() => setSelectedId(row.id)} style={{ justifyContent: "flex-start", paddingInline: 0 }}>
+                          <div className="tableCellStack">
+                            <strong>{row.code}</strong>
+                            <span className="tableCellMuted">{row.bankAccountLabel}</span>
                           </div>
-                        ) : null}
-                        <div className="stack">
-                          {selectedRun.invoices.map((invoice) => (
-                            <div key={invoice.invoiceId} className="detailRow">
-                              <div className="detailLabel">{invoice.invoiceCode}</div>
-                              <div className="tableCellStack" style={{ alignItems: "flex-start" }}>
-                                <span>{invoice.supplierName} · MXN {invoice.total.toLocaleString()}</span>
-                                <span className="tableCellMuted">{invoice.complementStatus} / {invoice.receiptEvidenceStatus}</span>
-                              </div>
-                              {selectedRun.status !== "executed" ? (
-                                <div className="row gap wrap">
-                                  <button className="buttonGhost" type="button" onClick={() => void handleRemoveInvoice(invoice.invoiceId)}>
-                                    Separate
-                                  </button>
-                                  {availableTargetRuns.length > 0 ? (
-                                    <>
-                                      <select
-                                        className="field"
-                                        value={moveTargets[invoice.invoiceId] ?? ""}
-                                        onChange={(event) =>
-                                          setMoveTargets((current) => ({ ...current, [invoice.invoiceId]: event.target.value }))
-                                        }
-                                      >
-                                        <option value="">Move to run</option>
-                                        {availableTargetRuns.map((run) => (
-                                          <option key={run.id} value={run.id}>
-                                            {run.code} · MXN {run.totalAmount.toLocaleString()}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <button
-                                        className="button"
-                                        type="button"
-                                        disabled={!moveTargets[invoice.invoiceId]}
-                                        onClick={() => void handleMoveInvoice(invoice.invoiceId)}
-                                      >
-                                        Move
-                                      </button>
-                                    </>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
+                        </button>
+                      )
+                    },
+                    { key: "date", label: "Date", render: (row) => row.scheduledDate },
+                    { key: "amount", label: "Amount", render: (row) => `MXN ${row.totalAmount.toLocaleString()}` },
+                    { key: "status", label: "Status", render: (row) => <Badge tone={tone(row.status)}>{row.status}</Badge> }
+                  ]}
+                />
+              </Card>
+
+              <Card title="Selected run" description="Treasury release posture for the active batch." aside={selectedRun ? <Badge tone={tone(selectedRun.status)}>{selectedRun.status}</Badge> : null}>
+                {selectedRun ? (
+                  <div className="detailGrid">
+                    <div className="detailRow"><div className="detailLabel">Owner</div><div>{selectedRun.owner}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Invoices</div><div>{selectedRun.totalInvoices}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Critical invoices</div><div>{selectedRun.criticalInvoices}</div></div>
+                    <div className="detailRow">
+                      <div className="detailLabel">Treasury gate</div>
+                      <div className="tableCellStack">
+                        <div className="row gap wrap" style={{ alignItems: "center" }}>
+                          <Badge tone={selectedRunGate.tone}>{selectedRunGate.label}</Badge>
+                          <span>{selectedRunGate.summary}</span>
+                        </div>
+                        {selectedRunGate.checks.map((check) => (
+                          <span key={check} className="tableCellMuted">{check}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="detailRow"><div className="detailLabel">Next human step</div><div>{selectedRunHumanStep}</div></div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Módulo responsable", "Responsible module")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(selectedRunDesk.primaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(selectedRunDesk.primaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(selectedRunDesk.secondaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(selectedRunDesk.secondaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow"><div className="detailLabel">Why now</div><div>{selectedRunWhyNow}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Downstream effect</div><div>{selectedRunDownstreamEffect}</div></div>
+                    <div className="detailRow"><div className="detailLabel">Report back</div><div>{selectedRunReportBack}</div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Qué debe regresar confirmado", "What must return confirmed")}</div><div>{localizeText(selectedRunDesk.returnRule)}</div></div>
+                    <label className="stack">
+                      <span className="detailLabel">Next action</span>
+                      <textarea className="field" rows={4} value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} />
+                    </label>
+                    <div className="cluster">
+                      <button className="button" type="button" onClick={() => void handleUpdate("ready")}>{localizeText(paymentRunActionLabel("ready"))}</button>
+                      <button className="buttonGhost" type="button" onClick={() => void handleUpdate("blocked")}>{localizeText(paymentRunActionLabel("blocked"))}</button>
+                      <button className="button" type="button" onClick={() => void handleUpdate("executed")}>{localizeText(paymentRunActionLabel("executed"))}</button>
+                    </div>
+                    <div className="row gap wrap">
+                      {selectedRunLinks.map((link, index) => (
+                        <Link key={`${link.href}-${link.label}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>{localizeText(paymentRunLinkLabel(link.label))}</Link>
+                      ))}
+                    </div>
+                    {selectedRun.status !== "executed" ? (
+                      <div className="detailRow">
+                        <div className="detailLabel">Add eligible invoice</div>
+                        <div className="row gap wrap" style={{ flex: 1 }}>
+                          <select className="field" value={selectedEligibleInvoiceId} onChange={(event) => setSelectedEligibleInvoiceId(event.target.value)}>
+                            <option value="">Select eligible invoice</option>
+                            {eligibleInvoices.map((invoice) => (
+                              <option key={invoice.id} value={invoice.id}>
+                                {invoice.code} · {invoice.supplierName} · MXN {invoice.pendingAmount.toLocaleString()}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="button" type="button" disabled={!selectedEligibleInvoiceId} onClick={() => void handleAddInvoiceToRun()}>
+                            Add
+                          </button>
                         </div>
                       </div>
-                    ) : (
-                      <EmptyState title="Select a run" description="Choose a treasury batch to review invoice composition." />
-                    )}
-                  </Card>
+                    ) : null}
+                    <div className="stack">
+                      {selectedRun.invoices.map((invoice) => (
+                        <div key={invoice.invoiceId} className="detailRow">
+                          <div className="detailLabel">{invoice.invoiceCode}</div>
+                          <div className="tableCellStack" style={{ alignItems: "flex-start" }}>
+                            <span>{invoice.supplierName} · MXN {invoice.total.toLocaleString()}</span>
+                            <span className="tableCellMuted">{invoice.complementStatus} / {invoice.receiptEvidenceStatus}</span>
+                          </div>
+                          {selectedRun.status !== "executed" ? (
+                            <div className="row gap wrap">
+                              <button className="buttonGhost" type="button" onClick={() => void handleRemoveInvoice(invoice.invoiceId)}>
+                                Separate
+                              </button>
+                              {availableTargetRuns.length > 0 ? (
+                                <>
+                                  <select
+                                    className="field"
+                                    value={moveTargets[invoice.invoiceId] ?? ""}
+                                    onChange={(event) =>
+                                      setMoveTargets((current) => ({ ...current, [invoice.invoiceId]: event.target.value }))
+                                    }
+                                  >
+                                    <option value="">Move to run</option>
+                                    {availableTargetRuns.map((run) => (
+                                      <option key={run.id} value={run.id}>
+                                        {run.code} · MXN {run.totalAmount.toLocaleString()}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    className="button"
+                                    type="button"
+                                    disabled={!moveTargets[invoice.invoiceId]}
+                                    onClick={() => void handleMoveInvoice(invoice.invoiceId)}
+                                  >
+                                    Move
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                    {message ? <Badge tone="success">{message}</Badge> : null}
+                    {error ? <Badge tone="danger">{error}</Badge> : null}
+                  </div>
+                ) : (
+                  <EmptyState title="Select a run" description="Choose a treasury batch to inspect release conditions." />
+                )}
+              </Card>
 
-                  <Card title="Run risks" description="Current blockers on the selected payment run.">
-                    {selectedRisks.length > 0 ? (
-                      <DataTable
-                        rows={selectedRisks}
-                        columns={[
-                          { key: "risk", label: "Risk", render: (row) => row.title },
-                          { key: "category", label: "Category", render: (row) => row.category },
-                          { key: "severity", label: "Severity", render: (row) => <Badge tone={row.severity === "critical" ? "danger" : row.severity === "warning" ? "warning" : "info"}>{row.severity}</Badge> }
-                        ]}
-                      />
-                    ) : (
-                      <EmptyState title="No mapped risks" description="The selected run currently has no explicit treasury risk." />
-                    )}
-                  </Card>
-                </section>
+              <Card title="Run risks" description="Current blockers on the selected payment run.">
+                {selectedRisks.length > 0 ? (
+                  <DataTable
+                    rows={selectedRisks}
+                    columns={[
+                      { key: "risk", label: "Risk", render: (row) => row.title },
+                      { key: "category", label: "Category", render: (row) => row.category },
+                      { key: "severity", label: "Severity", render: (row) => <Badge tone={row.severity === "critical" ? "danger" : row.severity === "warning" ? "warning" : "info"}>{row.severity}</Badge> }
+                    ]}
+                  />
+                ) : (
+                  <EmptyState title="No mapped risks" description="The selected run currently has no explicit treasury risk." />
+                )}
+              </Card>
+            </section>
 
-                <section className="grid cols2">
-                  <Card title="Create payment run" description="Select payable invoices and create a treasury batch.">
+            <section className="grid cols2">
+              <Card title="Create payment run" description="Select payable invoices and create a treasury batch.">
                 <div className="detailGrid">
                   <label className="detailRow"><div className="detailLabel">Bank account</div><input className="field" value={form.bankAccountLabel} onChange={(event) => setForm((current) => ({ ...current, bankAccountLabel: event.target.value }))} /></label>
                   <label className="detailRow"><div className="detailLabel">Scheduled date</div><input className="field" type="date" value={form.scheduledDate} onChange={(event) => setForm((current) => ({ ...current, scheduledDate: event.target.value }))} /></label>
@@ -1289,58 +1263,56 @@ export default function TreasuryPaymentRunsPage() {
                     <div className="detailLabel">Creation gate</div>
                     <div className="tableCellStack">
                       <div className="row gap wrap" style={{ alignItems: "center" }}>
-                        <Badge tone={createPaymentRunGate.tone}>{localizeText(createPaymentRunGate.label)}</Badge>
-                        <span>{localizeText(createPaymentRunGate.summary)}</span>
+                        <Badge tone={createPaymentRunGate.tone}>{createPaymentRunGate.label}</Badge>
+                        <span>{createPaymentRunGate.summary}</span>
                       </div>
                       {createPaymentRunGate.checks.map((check) => (
-                        <span key={localizeText(check)} className="tableCellMuted">{localizeText(check)}</span>
+                        <span key={check} className="tableCellMuted">{check}</span>
                       ))}
                     </div>
                   </div>
                   <div className="detailRow">
                     <div className="detailLabel">Next human step</div>
-                    <div>{localizeText(createPaymentRunHumanStep)}</div>
+                    <div>{createPaymentRunHumanStep}</div>
                   </div>
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button className="button" type="button" onClick={() => void handleCreate()}>Create Run</button>
                   <button className="buttonGhost" type="button" onClick={() => setForm(createPaymentRunExample())}>Load demo example</button>
                   <button className="buttonGhost" type="button" onClick={() => { setForm(emptyCreateForm); setSelectedInvoiceIds([]); }}>Reset form</button>
-                  <Link className="buttonGhost" href="/accounts-payable">{t("Revisar CXP", "Review AP")}</Link>
-                  <Link className="buttonGhost" href="/supplier-master">{t("Revisar proveedores", "Review suppliers")}</Link>
+                  <Link className="buttonGhost" href="/accounts-payable">Review AP</Link>
+                  <Link className="buttonGhost" href="/supplier-master">Review suppliers</Link>
                 </div>
-                  </Card>
+              </Card>
 
-                  <Card title="Release rules" description="Treasury should not execute batches with fake readiness.">
-                    <div className="detailGrid">
-                      <div className="detailRow"><div className="detailLabel">Ready / executed</div><div>Runs cannot advance if any invoice remains critical, risky or with missing receipt evidence.</div></div>
-                      <div className="detailRow"><div className="detailLabel">Executed</div><div>A run must first be `ready` before it can be executed.</div></div>
-                      <div className="detailRow"><div className="detailLabel">Scope</div><div>The batch is linked directly to payable invoices already living in CXP.</div></div>
+              <Card title="Release rules" description="Treasury should not execute batches with fake readiness.">
+                <div className="detailGrid">
+                  <div className="detailRow"><div className="detailLabel">Ready / executed</div><div>Runs cannot advance if any invoice remains critical, risky or with missing receipt evidence.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Executed</div><div>A run must first be `ready` before it can be executed.</div></div>
+                  <div className="detailRow"><div className="detailLabel">Scope</div><div>The batch is linked directly to payable invoices already living in CXP.</div></div>
+                </div>
+                <div className="stack" style={{ marginTop: 16 }}>
+                  {unavailableInvoices.slice(0, 5).map((invoice) => (
+                    <div key={invoice.invoiceId} className="detailRow">
+                      <div className="detailLabel">
+                        <Badge tone={unavailableTone(invoice.reasonCode)}>{invoice.reasonCode}</Badge>
+                      </div>
+                      <div>
+                        {invoice.invoiceCode} · {invoice.supplierName} · {invoice.reasonLabel}
+                        {invoice.blockingRunCodes.length > 0 ? ` (${invoice.blockingRunCodes.join(", ")})` : ""}
+                      </div>
                     </div>
-                    <div className="stack" style={{ marginTop: 16 }}>
-                      {unavailableInvoices.slice(0, 5).map((invoice) => (
-                        <div key={invoice.invoiceId} className="detailRow">
-                          <div className="detailLabel">
-                            <Badge tone={unavailableTone(invoice.reasonCode)}>{invoice.reasonCode}</Badge>
-                          </div>
-                          <div>
-                            {invoice.invoiceCode} · {invoice.supplierName} · {invoice.reasonLabel}
-                            {invoice.blockingRunCodes.length > 0 ? ` (${invoice.blockingRunCodes.join(", ")})` : ""}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                </section>
-              </section>
-            ) : null}
+                  ))}
+                </div>
+              </Card>
+            </section>
           </>
         ) : (
           <EmptyState
-            title={t("Corridas de pago de tesorería no disponibles", "Treasury payment runs unavailable")}
-            description={error ?? t("No pudimos cargar las corridas de pago de tesorería para esta empresa.", "We could not load treasury payment runs for this company.")}
-            primaryAction={{ label: t("Ir a cuentas por pagar", "Go to accounts payable"), href: "/accounts-payable" }}
-            secondaryAction={{ label: t("Abrir finanzas", "Open finance"), href: "/finance" }}
+            title="Treasury payment runs unavailable"
+            description={error ?? "We could not load treasury payment runs for this company."}
+            primaryAction={{ label: "Go to accounts payable", href: "/accounts-payable" }}
+            secondaryAction={{ label: "Open finance", href: "/finance" }}
           />
         )}
       </ModuleGate>

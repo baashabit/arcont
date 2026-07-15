@@ -53,54 +53,52 @@ Si una tarea no cumple eso, no se asigna.
 
 ## Paquete Activo
 
-Vertical actual: `equipment + field continuity`
+Vertical actual: `cost-control + cash-flow liquidity`
 
 ### PC1 Luis
 
-- carril: `source/capture`
-- modulo: `/equipment`
+- carril: `source/control`
+- modulo: `/cost-control`
 - archivo permitido:
-  - `frontend/arcont-suite/app/equipment/page.tsx`
+  - `frontend/arcont-suite/app/cost-control/page.tsx`
 - enfoque:
-  - mejorar control de activos y despacho real por frente
-  - reforzar alta/edicion con continuidad hacia field, inventory y quality
-  - hacer que el modulo sirva para operar maquinaria, no solo para verla
+  - convertir la partida prioritaria en una mesa de desviación, compra y exposición de cobro
+  - reforzar la decisión de adjudicar, bloquear o volver a cotizar con restricciones existentes
+  - enlazar compras, flujo de efectivo, finanzas y proyecto sin duplicar el contexto
 
 ### PC2 Antonio
 
 - carril: `control/continuation`
-- modulo: `/field`
+- modulo: `/cash-flow`
 - archivo permitido:
-  - `frontend/arcont-suite/app/field/page.tsx`
+  - `frontend/arcont-suite/app/cash-flow/page.tsx`
 - enfoque:
-  - convertir field en la continuidad directa entre ejecucion, maquinaria y materiales
-  - consumir señales existentes y priorizar seguimiento hacia equipment, daily-log, requisitions y receiving
-  - mejorar practicidad, lectura y accion inmediata para pruebas humanas
+  - convertir la corriente seleccionada en una mesa de liquidez semanal con entradas, salidas y cobertura
+  - priorizar la ruta de tesorería, CXP, proveedores o finanzas según la presión real
+  - validar en Chrome PC2 los flujos e idiomas antes de conciliar
 
 ## Archivos Prohibidos En Este Ciclo
 
 ### PC1 no toca
 
-- `frontend/arcont-suite/app/field/page.tsx`
+- `frontend/arcont-suite/app/cash-flow/page.tsx`
 - `docs/coordination/antonio-live-task.txt`
 
 ### PC2 no toca
 
-- `frontend/arcont-suite/app/equipment/page.tsx`
+- `frontend/arcont-suite/app/cost-control/page.tsx`
 - `docs/coordination/luis-live-task.txt`
 
 ## Contrato De Integracion Entre Ambos
 
-- `equipment` debe exponer continuidad operativa clara:
-  - readiness de despacho
-  - bloqueos de mantenimiento o fallas
-  - siguiente accion
-  - enlaces a seguimiento
-- `field` debe consumir esas señales como trabajo accionable:
-  - frente afectado
-  - restriccion operativa
-  - owner o siguiente responsable
-  - modulo destino
+- `cost-control` debe exponer la partida accionable:
+  - presupuesto, pronóstico, desviación y exposición de cobro
+  - estado de compra, restricciones y siguiente acción de recuperación
+  - enlaces a compras, proyecto y flujo de efectivo
+- `cash-flow` debe consumir presión financiera como trabajo accionable:
+  - caja inicial, entradas, salidas, neto semanal y cobertura
+  - prioridad, siguiente paso humano y acciones de tesorería
+  - módulo destino para resolver CXP, proveedores o finanzas
 
 No se requiere tocar backend en este ciclo. La integracion es de experiencia y flujo usando endpoints ya existentes.
 
@@ -109,11 +107,11 @@ No se requiere tocar backend en este ciclo. La integracion es de experiencia y f
 Cada PC debe ejecutar:
 
 ```bash
-export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 20
-npm run build:web
+export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 24
+npx tsc --noEmit && npm run lint
 ```
 
-Si el build falla, no se concilia.
+`npm run build` es complementario: puede depender de fuentes externas y no debe bloquear la validación del código si la red de PC2 no está disponible.
 
 ## Cierre Del Ciclo
 
@@ -127,10 +125,10 @@ Antes de mover al siguiente vertical:
 
 ## Siguiente Vertical Sugerido
 
-Despues de este ciclo:
+Después de este ciclo:
 
-- `PC1`: `accounts-payable` para continuidad factura -> liberacion -> tesoreria
-- `PC2`: `treasury/payment-runs` para control final de salida financiera
+- `PC1`: `estimations` para control de avance valorizado, evidencia y cobro de estimación
+- `PC2`: `subcontracts` para alta, control contractual, entregables y continuidad de proveedor
 
 Ese siguiente ciclo mantiene el mismo patron:
 

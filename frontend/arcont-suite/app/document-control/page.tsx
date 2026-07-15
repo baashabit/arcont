@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
@@ -29,6 +29,154 @@ function healthTone(health: DocumentControlItemContract["health"]) {
       return "warning";
     default:
       return "danger";
+  }
+}
+
+function documentHealthLabel(health: DocumentControlItemContract["health"]) {
+  switch (health) {
+    case "healthy":
+      return { es: "Saludable", en: "Healthy" };
+    case "watch":
+      return { es: "En vigilancia", en: "Watch" };
+    default:
+      return { es: "Critico", en: "Critical" };
+  }
+}
+
+function documentStatusLabel(status: DocumentControlItemContract["status"]) {
+  switch (status) {
+    case "issued":
+      return { es: "Emitido", en: "Issued" };
+    case "in_review":
+      return { es: "En revision", en: "In review" };
+    case "awaiting_response":
+      return { es: "Esperando respuesta", en: "Awaiting response" };
+    case "blocked":
+      return { es: "Bloqueado", en: "Blocked" };
+    default:
+      return { es: "Aprobado", en: "Approved" };
+  }
+}
+
+function documentActionLabel(label: string) {
+  switch (label) {
+    case "Resume review":
+      return { es: "Retomar revision", en: "Resume review" };
+    case "Start review":
+      return { es: "Iniciar revision", en: "Start review" };
+    case "Request response":
+      return { es: "Solicitar respuesta", en: "Request response" };
+    case "Approve item":
+      return { es: "Aprobar item", en: "Approve item" };
+    case "Block item":
+      return { es: "Bloquear item", en: "Block item" };
+    case "Return to review":
+      return { es: "Volver a revision", en: "Return to review" };
+    case "Approve response":
+      return { es: "Aprobar respuesta", en: "Approve response" };
+    case "Block response":
+      return { es: "Bloquear respuesta", en: "Block response" };
+    default:
+      return { es: label, en: label };
+  }
+}
+
+function documentLinkLabel(label: string) {
+  switch (label) {
+    case "Open quality":
+      return { es: "Abrir calidad", en: "Open quality" };
+    case "Open compliance":
+      return { es: "Abrir compliance", en: "Open compliance" };
+    case "Open projects":
+      return { es: "Abrir proyectos", en: "Open projects" };
+    case "Open post-sale":
+      return { es: "Abrir postventa", en: "Open post-sale" };
+    default:
+      return { es: label, en: label };
+  }
+}
+
+function normalizeDocumentFeedbackCode(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function resolveDocumentFeedbackCopy(message: string | null) {
+  if (!message) {
+    return null;
+  }
+
+  switch (normalizeDocumentFeedbackCode(message)) {
+    case "DOCUMENT_NEXT_ACTION_TOO_SHORT":
+      return {
+        es: "La siguiente accion debe ser mas especifica antes de guardar este documento.",
+        en: "The next action must be more specific before saving this document item."
+      };
+    case "DOCUMENT_CREATE_FIELDS_INCOMPLETE":
+      return {
+        es: "Tipo, asunto, proyecto y responsable deben quedar claros antes de crear el item.",
+        en: "Type, subject, project and owner must be clear before creating the item."
+      };
+    case "DOCUMENT_CREATE_NUMBERS_INVALID":
+      return {
+        es: "Revisiones, dias de respuesta y comentarios abiertos deben ser cero o mayores.",
+        en: "Revisions, turnaround days and open comments must be zero or greater."
+      };
+    case "DOCUMENT_CREATE_APPROVED_BLOCKED":
+      return {
+        es: "Un item documental no puede nacer ya aprobado.",
+        en: "A document item cannot be created already approved."
+      };
+    case "DOCUMENT_CREATE_HEALTH_CONFLICT":
+      return {
+        es: "No puede quedar saludable mientras existan comentarios abiertos.",
+        en: "It cannot be marked healthy while open comments still exist."
+      };
+    case "DOCUMENT_CREATE_AWAITING_RESPONSE_REQUIRES_COMMENTS":
+      return {
+        es: "Esperando respuesta requiere al menos un comentario abierto.",
+        en: "Awaiting response requires at least one open comment."
+      };
+    case "DOCUMENT_ITEM_UPDATE_FAILED":
+      return {
+        es: "No fue posible actualizar el item documental. Revisa la conexion e intenta de nuevo.",
+        en: "The document item could not be updated. Check the connection and try again."
+      };
+    case "DOCUMENT_ITEM_CREATE_FAILED":
+      return {
+        es: "No fue posible crear el item documental. Revisa los datos e intenta de nuevo.",
+        en: "The document item could not be created. Review the details and try again."
+      };
+    case "DOCUMENT_ITEM_MOVED_TO_IN_REVIEW":
+      return {
+        es: "El item paso a revision tecnica.",
+        en: "The item moved into technical review."
+      };
+    case "DOCUMENT_ITEM_MOVED_TO_AWAITING_RESPONSE":
+      return {
+        es: "El item quedo esperando respuesta formal.",
+        en: "The item is now waiting for a formal response."
+      };
+    case "DOCUMENT_ITEM_MOVED_TO_BLOCKED":
+      return {
+        es: "El item quedo bloqueado para atencion inmediata.",
+        en: "The item is now blocked for immediate attention."
+      };
+    case "DOCUMENT_ITEM_MOVED_TO_APPROVED":
+      return {
+        es: "El item fue aprobado y puede continuar aguas abajo.",
+        en: "The item was approved and can continue downstream."
+      };
+    case "DOCUMENT_ITEM_CREATED":
+      return {
+        es: "El item documental se agrego correctamente a la bandeja operativa.",
+        en: "The document item was added successfully to the operating board."
+      };
+    default:
+      return { es: message, en: message };
   }
 }
 
@@ -96,22 +244,113 @@ type DocumentBridgeContext = {
   postSale: NonNullable<Awaited<ReturnType<typeof fetchPostSaleOverview>>>;
 } | null;
 
+type DocumentOperationalSeed = Pick<
+  DocumentControlItemContract,
+  "documentType" | "subject" | "projectName" | "owner" | "status" | "openComments" | "health" | "nextAction"
+>;
+
+type DocumentModuleHref = "/quality" | "/compliance" | "/projects" | "/post-sale";
+
+function findRelatedComplianceCase(seed: Pick<DocumentOperationalSeed, "projectName" | "subject">, bridge: DocumentBridgeContext) {
+  return (
+    bridge?.compliance.cases.find(
+      (candidate) =>
+        candidate.subject.includes(seed.projectName) ||
+        candidate.unitOrContract.includes(seed.projectName) ||
+        seed.subject.includes(candidate.queueName)
+    ) ??
+    bridge?.compliance.focusCase ??
+    null
+  );
+}
+
+function findRelatedPostSaleItem(seed: Pick<DocumentOperationalSeed, "projectName" | "subject">, bridge: DocumentBridgeContext) {
+  return (
+    bridge?.postSale.items.find(
+      (candidate) => candidate.projectName === seed.projectName || seed.subject.includes(candidate.assetLabel) || seed.subject.includes(candidate.customerName)
+    ) ??
+    bridge?.postSale.focusItem ??
+    null
+  );
+}
+
+function buildDocumentQualityArea(seed: DocumentOperationalSeed) {
+  if (seed.subject.trim().length >= 3) {
+    return seed.subject;
+  }
+
+  return `${seed.projectName} · ${seed.documentType}`;
+}
+
+function buildDocumentQualityChecklist(seed: DocumentOperationalSeed) {
+  if (seed.documentType.toLowerCase() === "rfi") {
+    return "Liberacion por RFI";
+  }
+
+  if (seed.documentType.toLowerCase() === "submittal") {
+    return "Liberacion por submittal";
+  }
+
+  return `${seed.documentType} operativo`;
+}
+
+function buildDocumentModuleHref(target: DocumentModuleHref, seed: DocumentOperationalSeed, bridge: DocumentBridgeContext) {
+  const params = new URLSearchParams();
+  const relatedCompliance = findRelatedComplianceCase(seed, bridge);
+  const relatedPostSale = findRelatedPostSaleItem(seed, bridge);
+
+  switch (target) {
+    case "/quality":
+      params.set("source", "document-control");
+      params.set("project", seed.projectName);
+      params.set("projectName", seed.projectName);
+      params.set("areaName", buildDocumentQualityArea(seed));
+      params.set("checklistName", buildDocumentQualityChecklist(seed));
+      params.set("contractorName", seed.owner);
+      params.set("nextAction", seed.nextAction);
+      break;
+    case "/compliance":
+      params.set("source", "document-control");
+      params.set("projectName", seed.projectName);
+      params.set("subject", relatedCompliance?.subject ?? seed.subject);
+      params.set("owner", relatedCompliance?.owner ?? seed.owner);
+      params.set("nextAction", seed.nextAction);
+      if (relatedPostSale) {
+        params.set("assetLabel", relatedPostSale.assetLabel);
+        params.set("customerName", relatedPostSale.customerName);
+      }
+      break;
+    case "/projects":
+      params.set("projectName", seed.projectName);
+      params.set("scheduleActivityName", seed.subject);
+      params.set("schedulePhase", seed.documentType);
+      params.set("scheduleOwner", seed.owner);
+      params.set("scheduleNextAction", seed.nextAction);
+      break;
+    case "/post-sale":
+      params.set("source", "document-control");
+      params.set("projectName", seed.projectName);
+      params.set("subject", seed.subject);
+      params.set("owner", seed.owner);
+      params.set("nextAction", seed.nextAction);
+      if (relatedPostSale) {
+        params.set("assetLabel", relatedPostSale.assetLabel);
+        params.set("customerName", relatedPostSale.customerName);
+      }
+      break;
+  }
+
+  const query = params.toString();
+  return query.length > 0 ? `${target}?${query}` : target;
+}
+
 function buildDocumentBridge(item: DocumentControlItemContract | null, bridge: DocumentBridgeContext) {
   if (!item) {
     return null;
   }
 
-  const relatedCompliance =
-    bridge?.compliance.cases.find(
-      (candidate) =>
-        candidate.subject.includes(item.projectName) ||
-        candidate.unitOrContract.includes(item.projectName) ||
-        item.subject.includes(candidate.queueName)
-    ) ??
-    bridge?.compliance.focusCase ??
-    null;
-  const relatedPostSale =
-    bridge?.postSale.items.find((candidate) => candidate.projectName === item.projectName) ?? bridge?.postSale.focusItem ?? null;
+  const relatedCompliance = findRelatedComplianceCase(item, bridge);
+  const relatedPostSale = findRelatedPostSaleItem(item, bridge);
 
   return {
     coordinationSignal:
@@ -140,27 +379,27 @@ function validateDocumentCreateForm(input: {
   health: DocumentControlItemContract["health"];
 }) {
   if ([input.documentType, input.subject, input.projectName, input.owner].some((value) => value.trim().length < 3)) {
-    return "Document type, subject, project and owner must be specific before creating the item.";
+    return "DOCUMENT_CREATE_FIELDS_INCOMPLETE";
   }
 
   if ([input.revisionCount, input.turnaroundDays, input.openComments].some((value) => !Number.isFinite(value) || value < 0)) {
-    return "Revisions, turnaround days and open comments must be zero or greater.";
+    return "DOCUMENT_CREATE_NUMBERS_INVALID";
   }
 
   if (input.nextAction.trim().length < 8) {
-    return "Next action must be more specific before creating the item.";
+    return "DOCUMENT_NEXT_ACTION_TOO_SHORT";
   }
 
   if (input.status === "approved") {
-    return "Document items cannot start as approved.";
+    return "DOCUMENT_CREATE_APPROVED_BLOCKED";
   }
 
   if (input.openComments > 0 && input.health === "healthy") {
-    return "Healthy status is blocked while open comments remain active.";
+    return "DOCUMENT_CREATE_HEALTH_CONFLICT";
   }
 
   if (input.status === "awaiting_response" && input.openComments === 0) {
-    return "Awaiting response requires at least one open comment.";
+    return "DOCUMENT_CREATE_AWAITING_RESPONSE_REQUIRES_COMMENTS";
   }
 
   return null;
@@ -326,7 +565,7 @@ function buildDocumentRouteSummary(item: DocumentControlItemContract | null) {
   return "This item can continue through compliance, projects or post-sale with the current controlled-document context intact.";
 }
 
-function buildDocumentOperationalLinks(item: DocumentControlItemContract | null) {
+function buildDocumentOperationalLinks(item: DocumentControlItemContract | null, bridge: DocumentBridgeContext) {
   if (!item) {
     return [
       { label: "Open quality", href: "/quality" },
@@ -337,24 +576,118 @@ function buildDocumentOperationalLinks(item: DocumentControlItemContract | null)
 
   if (item.status === "blocked" || item.health === "critical") {
     return [
-      { label: "Open quality", href: "/quality" },
-      { label: "Open projects", href: "/projects" },
-      { label: "Open compliance", href: "/compliance" }
+      { label: "Open quality", href: buildDocumentModuleHref("/quality", item, bridge) },
+      { label: "Open projects", href: buildDocumentModuleHref("/projects", item, bridge) },
+      { label: "Open compliance", href: buildDocumentModuleHref("/compliance", item, bridge) }
     ];
   }
 
   if (item.openComments > 0 || item.status === "awaiting_response") {
     return [
-      { label: "Open compliance", href: "/compliance" },
-      { label: "Open quality", href: "/quality" },
-      { label: "Open post-sale", href: "/post-sale" }
+      { label: "Open compliance", href: buildDocumentModuleHref("/compliance", item, bridge) },
+      { label: "Open quality", href: buildDocumentModuleHref("/quality", item, bridge) },
+      { label: "Open post-sale", href: buildDocumentModuleHref("/post-sale", item, bridge) }
     ];
   }
 
   return [
-    { label: "Open compliance", href: "/compliance" },
-    { label: "Open post-sale", href: "/post-sale" },
-    { label: "Open projects", href: "/projects" }
+    { label: "Open compliance", href: buildDocumentModuleHref("/compliance", item, bridge) },
+    { label: "Open post-sale", href: buildDocumentModuleHref("/post-sale", item, bridge) },
+    { label: "Open projects", href: buildDocumentModuleHref("/projects", item, bridge) }
+  ];
+}
+
+function buildDocumentRoutingDesk(item: DocumentControlItemContract | null) {
+  if (!item) {
+    return {
+      primaryLabel: { es: "Calidad", en: "Quality" },
+      primaryReason: {
+        es: "Selecciona un item para aclarar qué dominio debe absorber primero la presión documental.",
+        en: "Select an item to clarify which domain should absorb document pressure first."
+      },
+      secondaryLabel: { es: "Cumplimiento", en: "Compliance" },
+      secondaryReason: {
+        es: "Después del dominio fuente, la continuidad debe conservar cumplimiento y trazabilidad del expediente.",
+        en: "After the source domain, continuity should preserve compliance and dossier traceability."
+      },
+      returnRule: {
+        es: "Regresa con dueño, respuesta y condición de continuidad ya confirmados.",
+        en: "Return with owner, response and continuity condition already confirmed."
+      }
+    };
+  }
+
+  if (item.status === "blocked" || item.health === "critical") {
+    return {
+      primaryLabel: { es: "Calidad", en: "Quality" },
+      primaryReason: {
+        es: "El bloqueo documental primero debe aclararse contra la restricción técnica o de liberación que lo mantiene vivo.",
+        en: "The document blocker should first be clarified against the technical or release constraint keeping it alive."
+      },
+      secondaryLabel: { es: "Proyectos", en: "Projects" },
+      secondaryReason: {
+        es: "Después de calidad, proyecto debe proteger secuencia, frente y responsable operativo sin perder el mismo contexto.",
+        en: "After quality, projects should protect sequence, work front and operating owner without losing the same context."
+      },
+      returnRule: {
+        es: "Regresa con el bloqueo técnico contenido, el responsable activo y la ruta exacta para retomar revisión o respuesta.",
+        en: "Return with the technical blocker contained, the active owner confirmed and the exact path to resume review or response."
+      }
+    };
+  }
+
+  if (item.openComments > 0 || item.status === "awaiting_response") {
+    return {
+      primaryLabel: { es: "Cumplimiento", en: "Compliance" },
+      primaryReason: {
+        es: "Los comentarios abiertos o la respuesta pendiente ya comprometen la defensa del expediente y deben cerrarse con disciplina formal.",
+        en: "Open comments or a pending response are already compromising dossier defensibility and should close under formal discipline."
+      },
+      secondaryLabel: { es: "Calidad", en: "Quality" },
+      secondaryReason: {
+        es: "Después de cumplimiento, calidad debe confirmar que la respuesta técnica realmente cierra lo observado.",
+        en: "After compliance, quality should confirm the technical response actually closes what was observed."
+      },
+      returnRule: {
+        es: "Regresa con comentarios cerrados o con la respuesta formal recibida, responsable visible y siguiente revisión ya calendarizada.",
+        en: "Return with comments closed or the formal response received, the owner visible and the next review already scheduled."
+      }
+    };
+  }
+
+  return {
+    primaryLabel: { es: "Cumplimiento", en: "Compliance" },
+    primaryReason: {
+      es: "El paquete ya está estable y ahora la presión principal es sostener aprobación, expediente y liberación formal.",
+      en: "The package is already stable and the main pressure is now sustaining approval, dossier integrity and formal release."
+    },
+    secondaryLabel: { es: "Postventa", en: "Post-sale" },
+    secondaryReason: {
+      es: "Después de la liberación, postventa o entrega debe absorber la continuidad sin rehacer la historia documental.",
+      en: "After release, post-sale or handover should absorb continuity without rebuilding the document story."
+    },
+    returnRule: {
+      es: "Regresa con aprobación defendible, evidencia archivada y el siguiente frente receptor ya enterado.",
+      en: "Return with defensible approval, archived evidence and the next receiving lane already informed."
+    }
+  };
+}
+
+function buildCreateDocumentOperationalLinks(input: DocumentOperationalSeed, bridge: DocumentBridgeContext) {
+  const hasContext = [input.projectName, input.subject, input.owner].every((value) => value.trim().length >= 3) && input.nextAction.trim().length >= 8;
+
+  if (!hasContext) {
+    return [
+      { label: "Open projects", href: "/projects" },
+      { label: "Open quality", href: "/quality" },
+      { label: "Open compliance", href: "/compliance" }
+    ];
+  }
+
+  return [
+    { label: "Open projects", href: buildDocumentModuleHref("/projects", input, bridge) },
+    { label: "Open quality", href: buildDocumentModuleHref("/quality", input, bridge) },
+    { label: "Open compliance", href: buildDocumentModuleHref("/compliance", input, bridge) }
   ];
 }
 
@@ -450,11 +783,13 @@ function buildCreateDocumentHumanStep(input: {
 }
 
 function DocumentControlPageContent() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
+  const t = (es: string, en: string) => localizeText({ es, en });
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const prefillSignatureRef = useRef<string | null>(null);
   const [overview, setOverview] = useState<DocumentControlOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<DocumentBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -496,6 +831,46 @@ function DocumentControlPageContent() {
     const documentType = searchParams.get("documentType");
     setProjectFilter(project && project.length > 0 ? project : "all");
     setDocumentTypeFilter(documentType && documentType.length > 0 ? documentType : "all");
+  }, [searchParams]);
+
+  useEffect(() => {
+    const source = searchParams.get("source");
+    const projectName = searchParams.get("projectName")?.trim() ?? "";
+    const documentType = searchParams.get("documentType")?.trim() ?? "";
+    const subject = searchParams.get("subject")?.trim() ?? "";
+    const owner = searchParams.get("owner")?.trim() ?? "";
+    const nextAction = searchParams.get("nextAction")?.trim() ?? "";
+
+    if (source !== "quality" && source !== "post-sale") {
+      return;
+    }
+
+    const signature = JSON.stringify({
+      source,
+      projectName,
+      documentType,
+      subject,
+      owner,
+      nextAction
+    });
+
+    if (prefillSignatureRef.current === signature) {
+      return;
+    }
+
+    if (![projectName, documentType, subject, owner, nextAction].some((value) => value.length > 0)) {
+      return;
+    }
+
+    prefillSignatureRef.current = signature;
+    setCreateForm((current) => ({
+      ...current,
+      documentType: documentType || current.documentType,
+      subject: subject || current.subject,
+      projectName: projectName || current.projectName,
+      owner: owner || current.owner,
+      nextAction: nextAction || current.nextAction
+    }));
   }, [searchParams]);
 
   useEffect(() => {
@@ -662,7 +1037,11 @@ function DocumentControlPageContent() {
   const documentDownstreamEffect = useMemo(() => buildDocumentDownstreamEffect(selectedItem), [selectedItem]);
   const documentReportBack = useMemo(() => buildDocumentReportBack(selectedItem), [selectedItem]);
   const documentRouteSummary = useMemo(() => buildDocumentRouteSummary(selectedItem), [selectedItem]);
-  const documentOperationalLinks = useMemo(() => buildDocumentOperationalLinks(selectedItem), [selectedItem]);
+  const documentOperationalLinks = useMemo(() => buildDocumentOperationalLinks(selectedItem, bridgeContext), [bridgeContext, selectedItem]);
+  const documentRoutingDesk = useMemo(() => buildDocumentRoutingDesk(selectedItem), [selectedItem]);
+  const documentActionFeedback = useMemo(() => resolveDocumentFeedbackCopy(actionMessage), [actionMessage]);
+  const documentErrorFeedback = useMemo(() => resolveDocumentFeedbackCopy(actionError), [actionError]);
+  const documentCreateFeedback = useMemo(() => resolveDocumentFeedbackCopy(createMessage), [createMessage]);
   const createDocumentGate = useMemo(
     () =>
       buildCreateDocumentGate({
@@ -690,6 +1069,23 @@ function DocumentControlPageContent() {
       }),
     [createForm.health, createForm.nextAction, createForm.status, createFormNumbers]
   );
+  const createDocumentOperationalLinks = useMemo(
+    () =>
+      buildCreateDocumentOperationalLinks(
+        {
+          documentType: createForm.documentType,
+          subject: createForm.subject,
+          projectName: createForm.projectName,
+          owner: createForm.owner,
+          status: createForm.status,
+          openComments: createFormNumbers.openComments,
+          health: createForm.health,
+          nextAction: createForm.nextAction
+        },
+        bridgeContext
+      ),
+    [bridgeContext, createForm, createFormNumbers.openComments]
+  );
 
   const actionOptions = useMemo(() => (selectedItem ? documentActionOptions(selectedItem) : []), [selectedItem]);
 
@@ -706,7 +1102,7 @@ function DocumentControlPageContent() {
 
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
-      setActionError("Next action must be more specific before updating the item.");
+      setActionError("DOCUMENT_NEXT_ACTION_TOO_SHORT");
       return;
     }
 
@@ -728,7 +1124,7 @@ function DocumentControlPageContent() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Document item update failed.");
+      setActionError(response.error?.code ?? response.error?.message ?? "DOCUMENT_ITEM_UPDATE_FAILED");
       setIsSaving(false);
       return;
     }
@@ -759,7 +1155,7 @@ function DocumentControlPageContent() {
     });
 
     setNextActionDraft(response.data.nextAction);
-    setActionMessage(`Item moved to ${response.data.status}.`);
+    setActionMessage(`DOCUMENT_ITEM_MOVED_TO_${response.data.status.toUpperCase()}`);
     setIsSaving(false);
   }
 
@@ -820,7 +1216,7 @@ function DocumentControlPageContent() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? "Document-control item creation failed.");
+      setActionError(response.error?.code ?? response.error?.message ?? "DOCUMENT_ITEM_CREATE_FAILED");
       setIsCreating(false);
       return;
     }
@@ -852,7 +1248,7 @@ function DocumentControlPageContent() {
     });
     setSelectedItemId(created.id);
     setNextActionDraft(created.nextAction);
-    setCreateMessage(`${created.code} added to document control.`);
+    setCreateMessage("DOCUMENT_ITEM_CREATED");
     setCreateForm({
       documentType,
       subject: "",
@@ -870,50 +1266,66 @@ function DocumentControlPageContent() {
 
   return (
     <AppShell
-      title="Document control and RFI"
-      eyebrow="Project coordination"
-      description="Versions, RFIs, submittals and approvals tied to live field coordination and document traceability."
+      title={t("Control documental y RFI", "Document control and RFI")}
+      eyebrow={t("Coordinacion de proyecto", "Project coordination")}
+      description={t(
+        "Versiones, RFIs, submittals y aprobaciones conectadas con coordinacion real de obra y trazabilidad documental.",
+        "Versions, RFIs, submittals and approvals tied to live field coordination and document traceability."
+      )}
     >
-      <ModuleGate moduleKeys={["projects.control"]} requiredPermissions={["projects:*"]} title="Document Control">
+      <ModuleGate moduleKeys={["projects.control"]} requiredPermissions={["projects:*"]} title={t("Control documental", "Document control")}>
         {overview ? (
           <>
             <section className="grid cols4">
               <KpiCard
-                label="Open RFIs"
+                label={t("RFIs abiertos", "Open RFIs")}
                 value={String(filteredSummary.openRfis)}
-                footnote="RFIs still awaiting resolution or formal response."
+                footnote={t("RFIs todavia pendientes de resolucion o respuesta formal.", "RFIs still awaiting resolution or formal response.")}
               />
               <KpiCard
-                label="Active submittals"
+                label={t("Submittals activos", "Active submittals")}
                 value={String(filteredSummary.activeSubmittals)}
-                footnote="Technical submittals currently moving through review."
+                footnote={t("Submittals tecnicos hoy moviendose en revision.", "Technical submittals currently moving through review.")}
               />
               <KpiCard
-                label="Controlled versions"
+                label={t("Versiones controladas", "Controlled versions")}
                 value={String(filteredSummary.controlledVersions)}
-                footnote="Revision count representing active document control flow."
+                footnote={t("Conteo de revisiones que representa el flujo documental activo.", "Revision count representing active document control flow.")}
               />
               <KpiCard
-                label="Turnaround"
+                label={t("Respuesta", "Turnaround")}
                 value={`${filteredSummary.averageTurnaroundDays} d`}
-                footnote="Average current response time across document-control items."
+                footnote={t("Promedio actual de respuesta en la bandeja documental.", "Average current response time across document-control items.")}
               />
             </section>
 
             {isDemoMode ? (
               <Card
-                title="Operable demo mode"
-                description="Document-control items can be created and moved locally so coordination walkthroughs no longer depend on production auth."
-                aside={<Badge tone="warning">browser-persisted</Badge>}
+                title={t("Modo demo operable", "Operable demo mode")}
+                description={t(
+                  "Puedes crear y mover RFIs o submittals localmente para probar la coordinacion sin depender todavia del auth productivo.",
+                  "You can create and move RFIs or submittals locally to test coordination without depending on production auth yet."
+                )}
+                aside={<Badge tone="warning">{t("persistido en navegador", "browser persisted")}</Badge>}
               >
                 <div className="detailGrid">
                   <div className="detailRow">
-                    <div className="detailLabel">What works</div>
-                    <div>Create RFIs or submittals, move them through review states, and validate comment-driven coordination behavior.</div>
+                    <div className="detailLabel">{t("Que ya funciona", "What already works")}</div>
+                    <div>
+                      {t(
+                        "Crea RFIs o submittals, muevelos entre estados de revision y valida reglas de comentarios, respuesta y continuidad.",
+                        "Create RFIs or submittals, move them across review states, and validate comment, response and continuity rules."
+                      )}
+                    </div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Recommended test</div>
-                    <div>Create a new RFI for an active project, send it to review, then inspect its impact from Dashboard or Operations.</div>
+                    <div className="detailLabel">{t("Prueba recomendada", "Recommended test")}</div>
+                    <div>
+                      {t(
+                        "Crea un nuevo RFI para un proyecto activo, envialo a revision y luego verifica su impacto operativo desde Dashboard u Operations.",
+                        "Create a new RFI for an active project, send it to review, then inspect its operating impact from Dashboard or Operations."
+                      )}
+                    </div>
                   </div>
                 </div>
               </Card>
@@ -921,26 +1333,41 @@ function DocumentControlPageContent() {
 
             <section className="grid cols1">
               <Card
-                title="Technical coordination workflow"
-                description="This route should already let a coordinator raise, review and route a technical document issue into the right downstream lane."
+                title={t("Flujo de coordinacion tecnica", "Technical coordination flow")}
+                description={t(
+                  "Esta pantalla ya debe permitir levantar, revisar y enrutar un tema documental tecnico hacia el siguiente equipo responsable.",
+                  "This screen should already let a coordinator raise, review and route a technical document issue to the next responsible team."
+                )}
               >
                 <p className="sectionText">
-                  Create an RFI or submittal, move it through review and response states, then continue into `projects`,
-                  `quality`, `compliance` or `post-sale` depending on whether the unresolved issue is delaying execution,
-                  release or handover.
+                  {t(
+                    "Crea un RFI o submittal, muevelo por revision y respuesta, y despues continua hacia `projects`, `quality`, `compliance` o `post-sale` segun si el problema esta frenando ejecucion, liberacion o entrega.",
+                    "Create an RFI or submittal, move it through review and response, then continue into `projects`, `quality`, `compliance` or `post-sale` depending on whether the issue is delaying execution, release or handover."
+                  )}
                 </p>
               </Card>
             </section>
 
             <section className="grid cols2">
-              <Card title="Document board" description="Live RFIs, submittals, transmittals and meeting-note control.">
-                <FilterBar summary={`${filteredItems.length} document-control items match the current operating filters`}>
+              <Card
+                title={t("Bandeja documental", "Document board")}
+                description={t(
+                  "RFIs, submittals, transmittals y notas tecnicas activas con filtros de operacion.",
+                  "Live RFIs, submittals, transmittals and technical notes with operating filters."
+                )}
+              >
+                <FilterBar
+                  summary={localizeText({
+                    es: `${filteredItems.length} items documentales coinciden con los filtros operativos actuales`,
+                    en: `${filteredItems.length} document-control items match the current operating filters`
+                  })}
+                >
                   <Badge tone={isDemoMode ? "warning" : "success"}>
-                    {isDemoMode ? "demo operable" : "live backend"}
+                    {isDemoMode ? t("demo operable", "operable demo") : t("backend activo", "live backend")}
                   </Badge>
-                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? "refreshing" : "docs ready"}</Badge>
+                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? t("actualizando", "refreshing") : t("documentos listos", "docs ready")}</Badge>
                   <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-                    <option value="all">All projects</option>
+                    <option value="all">{t("Todos los proyectos", "All projects")}</option>
                     {projectOptions.map((project) => (
                       <option key={project} value={project}>
                         {project}
@@ -948,7 +1375,7 @@ function DocumentControlPageContent() {
                     ))}
                   </select>
                   <select className="selectField" value={documentTypeFilter} onChange={(event) => setDocumentTypeFilter(event.target.value)}>
-                    <option value="all">All types</option>
+                    <option value="all">{t("Todos los tipos", "All types")}</option>
                     {documentTypeOptions.map((documentType) => (
                       <option key={documentType} value={documentType}>
                         {documentType}
@@ -956,25 +1383,25 @@ function DocumentControlPageContent() {
                     ))}
                   </select>
                   <select className="selectField" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
-                    <option value="all">All health</option>
-                    <option value="critical">Critical</option>
-                    <option value="watch">Watch</option>
-                    <option value="healthy">Healthy</option>
+                    <option value="all">{t("Toda la salud", "All health")}</option>
+                    <option value="critical">{t("Critico", "Critical")}</option>
+                    <option value="watch">{t("En vigilancia", "Watch")}</option>
+                    <option value="healthy">{t("Saludable", "Healthy")}</option>
                   </select>
                   <input
                     className="field"
                     type="search"
                     value={searchFilter}
                     onChange={(event) => setSearchFilter(event.target.value)}
-                    placeholder="Subject, code, owner or next action"
+                    placeholder={t("Asunto, codigo, responsable o siguiente accion", "Subject, code, owner or next action")}
                     style={{ minWidth: 220 }}
                   />
                   <Badge tone={filteredItems.some((item) => item.health === "critical") ? "danger" : filteredItems.some((item) => item.health === "watch") ? "warning" : "success"}>
                     {filteredItems.some((item) => item.health === "critical")
-                      ? "critical items visible"
+                      ? t("hay items criticos visibles", "critical items visible")
                       : filteredItems.some((item) => item.health === "watch")
-                        ? "watch items visible"
-                        : "visible subset controlled"}
+                        ? t("hay items en vigilancia visibles", "watch items visible")
+                        : t("subset visible controlado", "visible subset controlled")}
                   </Badge>
                 </FilterBar>
                 <DataTable
@@ -982,7 +1409,7 @@ function DocumentControlPageContent() {
                   columns={[
                     {
                       key: "item",
-                      label: "Item",
+                      label: t("Item", "Item"),
                       render: (row) => (
                         <button
                           className="buttonGhost"
@@ -999,7 +1426,7 @@ function DocumentControlPageContent() {
                     },
                     {
                       key: "project",
-                      label: "Project",
+                      label: t("Proyecto", "Project"),
                       render: (row) => (
                         <div className="tableCellStack">
                           <strong>{row.projectName}</strong>
@@ -1009,48 +1436,55 @@ function DocumentControlPageContent() {
                     },
                     {
                       key: "flow",
-                      label: "Flow",
+                      label: t("Flujo", "Flow"),
                       render: (row) => (
                         <div className="tableCellStack">
-                          <strong>{row.revisionCount} revisions</strong>
-                          <span className="tableCellMuted">{row.openComments} comments</span>
+                          <strong>{localizeText({ es: `${row.revisionCount} revisiones`, en: `${row.revisionCount} revisions` })}</strong>
+                          <span className="tableCellMuted">{localizeText({ es: `${row.openComments} comentarios`, en: `${row.openComments} comments` })}</span>
                         </div>
                       )
                     },
                     {
                       key: "health",
-                      label: "Health",
-                      render: (row) => <Badge tone={healthTone(row.health)}>{row.health}</Badge>
+                      label: t("Salud", "Health"),
+                      render: (row) => <Badge tone={healthTone(row.health)}>{localizeText(documentHealthLabel(row.health))}</Badge>
                     }
                   ]}
                 />
               </Card>
 
               <Card
-                title="Selected item"
-                description="Focused traceability for the active RFI, submittal or controlled issue."
-                aside={selectedItem ? <Badge tone={healthTone(selectedItem.health)}>{selectedItem.health}</Badge> : null}
+                title={t("Item seleccionado", "Selected item")}
+                description={t(
+                  "Trazabilidad puntual para el RFI, submittal o incidencia documental activa.",
+                  "Focused traceability for the active RFI, submittal or controlled issue."
+                )}
+                aside={selectedItem ? <Badge tone={healthTone(selectedItem.health)}>{localizeText(documentHealthLabel(selectedItem.health))}</Badge> : null}
               >
                 {selectedItem ? (
                   <div className="detailGrid">
                     <div className="detailRow">
-                      <div className="detailLabel">Project</div>
+                      <div className="detailLabel">{t("Proyecto", "Project")}</div>
                       <div>{selectedItem.projectName}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Status</div>
-                      <div>{selectedItem.status}</div>
+                      <div className="detailLabel">{t("Estado", "Status")}</div>
+                      <div>
+                        <Badge tone={selectedItem.status === "blocked" ? "danger" : selectedItem.status === "approved" ? "success" : "info"}>
+                          {localizeText(documentStatusLabel(selectedItem.status))}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Turnaround</div>
-                      <div>{selectedItem.turnaroundDays} days</div>
+                      <div className="detailLabel">{t("Respuesta", "Turnaround")}</div>
+                      <div>{localizeText({ es: `${selectedItem.turnaroundDays} dias`, en: `${selectedItem.turnaroundDays} days` })}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Open comments</div>
+                      <div className="detailLabel">{t("Comentarios abiertos", "Open comments")}</div>
                       <div>{selectedItem.openComments}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Continuity gate</div>
+                      <div className="detailLabel">{t("Puerta de continuidad", "Continuity gate")}</div>
                       <div className="tableCellStack">
                         <Badge tone={documentContinuityGate.tone}>{documentContinuityGate.label}</Badge>
                         <span className="tableCellMuted">{documentContinuityGate.summary}</span>
@@ -1060,59 +1494,80 @@ function DocumentControlPageContent() {
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Next human step</div>
+                      <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
                       <div>{documentHumanStep}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Why now</div>
+                      <div className="detailLabel">{t("Modulo responsable", "Responsible module")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(documentRoutingDesk.primaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(documentRoutingDesk.primaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(documentRoutingDesk.secondaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(documentRoutingDesk.secondaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Por que importa ahora", "Why now")}</div>
                       <div>{documentWhyNow}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Downstream effect</div>
+                      <div className="detailLabel">{t("Impacto aguas abajo", "Downstream effect")}</div>
                       <div>{documentDownstreamEffect}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Route summary</div>
+                      <div className="detailLabel">{t("Resumen de ruta", "Route summary")}</div>
                       <div>{documentRouteSummary}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Report back</div>
+                      <div className="detailLabel">{t("Proximo reporte", "Report back")}</div>
                       <div>{documentReportBack}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Next action</div>
+                      <div className="detailLabel">{t("Que debe regresar confirmado", "What must return confirmed")}</div>
+                      <div>{localizeText(documentRoutingDesk.returnRule)}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Siguiente accion", "Next action")}</div>
                       <div>
                         <input
                           className="field"
                           value={nextActionDraft}
                           onChange={(event) => setNextActionDraft(event.target.value)}
-                          placeholder="Describe the next coordination or response action"
+                          placeholder={t(
+                            "Describe la siguiente accion de coordinacion o respuesta",
+                            "Describe the next coordination or response action"
+                          )}
                         />
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Updated</div>
+                      <div className="detailLabel">{t("Actualizado", "Updated")}</div>
                       <div>{new Date(selectedItem.updatedAt).toLocaleString()}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Business rules</div>
+                      <div className="detailLabel">{t("Reglas de negocio", "Business rules")}</div>
                       <div className="tableCellStack">
-                        <span className="tableCellMuted">Approval requires zero open comments.</span>
-                        <span className="tableCellMuted">Approval is blocked if turnaround exceeds 10 days without revalidation.</span>
+                        <span className="tableCellMuted">{t("La aprobacion requiere cero comentarios abiertos.", "Approval requires zero open comments.")}</span>
+                        <span className="tableCellMuted">{t("La aprobacion se bloquea si la respuesta supera 10 dias sin revalidacion.", "Approval is blocked if turnaround exceeds 10 days without revalidation.")}</span>
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Operational links</div>
+                      <div className="detailLabel">{t("Vinculos operativos", "Operational links")}</div>
                       <div className="row gap wrap">
                         {documentOperationalLinks.map((link, index) => (
                           <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
-                            {link.label}
+                            {localizeText(documentLinkLabel(link.label))}
                           </Link>
                         ))}
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">Actions</div>
+                      <div className="detailLabel">{t("Acciones", "Actions")}</div>
                       <div className="tableCellStack">
                         <div className="emptyActions">
                           {actionOptions.map((option) => (
@@ -1123,48 +1578,104 @@ function DocumentControlPageContent() {
                               disabled={isSaving}
                               onClick={() => void handleItemAction(option.status, option.nextAction)}
                             >
-                              {isSaving ? "Saving..." : option.label}
+                              {isSaving ? t("Guardando...", "Saving...") : localizeText(documentActionLabel(option.label))}
                             </button>
                           ))}
                         </div>
-                        {actionMessage ? <span className="tableCellMuted">{actionMessage}</span> : null}
-                        {actionError ? <span style={{ color: "var(--danger-700)" }}>{actionError}</span> : null}
+                        {documentActionFeedback ? <span className="tableCellMuted">{localizeText(documentActionFeedback)}</span> : null}
+                        {documentErrorFeedback ? <span style={{ color: "var(--danger-700)" }}>{localizeText(documentErrorFeedback)}</span> : null}
                       </div>
                     </div>
                   </div>
                 ) : (
                   <EmptyState
-                    title="No document-control item selected"
-                    description="Choose an item to inspect the current coordination trace and blockers."
-                    primaryAction={{ label: "Stay on document control", href: "/document-control" }}
+                    title={t("No hay item documental seleccionado", "No document-control item selected")}
+                    description={t(
+                      "Elige un item para revisar la trazabilidad actual, bloqueos y siguiente accion.",
+                      "Choose an item to inspect the current coordination trace, blockers and next action."
+                    )}
+                    primaryAction={{ label: t("Permanecer en control documental", "Stay on document control"), href: "/document-control" }}
                   />
                 )}
               </Card>
             </section>
 
             <section className="grid cols3">
-              <Card title="Coordination signal" description="Why the selected document still matters operationally.">
+              <Card title={t("Senal de coordinacion", "Coordination signal")} description={t("Por que el documento seleccionado sigue importando operativamente.", "Why the selected document still matters operationally.")}>
                 <p className="sectionText">
-                  {selectedStory?.coordinationSignal ?? "Choose an item to inspect coordination signal."}
+                  {selectedStory?.coordinationSignal ?? t("Elige un item para revisar la senal de coordinacion.", "Choose an item to inspect coordination signal.")}
                 </p>
               </Card>
-              <Card title="Compliance dependency" description="Folder or evidence posture still tied to this document.">
+              <Card title={t("Dependencia de compliance", "Compliance dependency")} description={t("Expediente o evidencia que sigue dependiendo de este documento.", "Folder or evidence posture still tied to this document.")}>
                 <p className="sectionText">
-                  {selectedStory?.complianceSignal ?? "Choose an item to inspect compliance dependency."}
+                  {selectedStory?.complianceSignal ?? t("Elige un item para revisar la dependencia de compliance.", "Choose an item to inspect compliance dependency.")}
                 </p>
               </Card>
-              <Card title="Delivery impact" description="Customer handover or warranty implication of the selected document.">
+              <Card title={t("Impacto en entrega", "Delivery impact")} description={t("Implicacion en entrega al cliente o garantia del documento seleccionado.", "Customer handover or warranty implication of the selected document.")}>
                 <p className="sectionText">
-                  {selectedStory?.deliverySignal ?? "Choose an item to inspect delivery impact."}
+                  {selectedStory?.deliverySignal ?? t("Elige un item para revisar el impacto en entrega.", "Choose an item to inspect delivery impact.")}
                 </p>
               </Card>
             </section>
 
             <section className="grid cols2">
-              <Card title="Register document item" description="Create a live RFI, submittal or controlled issue directly in the tenant backend.">
+              <Card
+                title={t("Registrar item documental", "Register document item")}
+                description={t(
+                  "Crea un RFI, submittal o incidencia documental operable directamente en el backend del tenant.",
+                  "Create a live RFI, submittal or controlled issue directly in the tenant backend."
+                )}
+                aside={
+                  searchParams.get("source") === "quality"
+                    ? <Badge tone="info">{t("Precargado desde calidad", "Prefilled from quality")}</Badge>
+                    : searchParams.get("source") === "post-sale"
+                      ? <Badge tone="info">{t("Precargado desde postventa", "Prefilled from post-sale")}</Badge>
+                      : null
+                }
+              >
                 <div className="row gap wrap" style={{ marginBottom: 16 }}>
                   <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDocumentExample())}>
-                    Load demo example
+                    {t("Cargar ejemplo demo", "Load demo example")}
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm({
+                        documentType: "RFI",
+                        subject: "Interferencia entre estructura e instalaciones en eje 4",
+                        projectName: "Proyecto central",
+                        owner: "Coordinacion de proyecto",
+                        status: "issued",
+                        revisionCount: "0",
+                        turnaroundDays: "2",
+                        openComments: "2",
+                        health: "watch",
+                        nextAction: "Emitir RFI consolidado y asignar respuesta antes del siguiente corte."
+                      })
+                    }
+                  >
+                    {t("Preset RFI", "RFI preset")}
+                  </button>
+                  <button
+                    type="button"
+                    className="buttonGhost"
+                    onClick={() =>
+                      setCreateForm({
+                        documentType: "Submittal",
+                        subject: "Submittal de canceleria para liberacion de fachada",
+                        projectName: "Proyecto central",
+                        owner: "Proveedor de canceleria",
+                        status: "in_review",
+                        revisionCount: "1",
+                        turnaroundDays: "4",
+                        openComments: "3",
+                        health: "watch",
+                        nextAction: "Concentrar observaciones del despacho y reenviar paquete corregido."
+                      })
+                    }
+                  >
+                    {t("Preset submittal", "Submittal preset")}
                   </button>
                   <button
                     type="button"
@@ -1184,65 +1695,98 @@ function DocumentControlPageContent() {
                       })
                     }
                   >
-                    Reset form
+                    {t("Reiniciar formulario", "Reset form")}
                   </button>
-                  <Link className="buttonGhost" href="/projects">Open projects</Link>
-                  <Link className="buttonGhost" href="/quality">Open quality</Link>
+                  {createDocumentOperationalLinks.map((link) => (
+                    <Link key={link.href + link.label} className="buttonGhost" href={link.href}>
+                      {localizeText(documentLinkLabel(link.label))}
+                    </Link>
+                  ))}
                 </div>
+                {searchParams.get("source") === "quality" ? (
+                  <p className="tableCellMuted" style={{ marginBottom: 16 }}>
+                    {t(
+                      "Esta captura llego desde calidad para no perder proyecto, responsable tecnico y la siguiente accion de liberacion.",
+                      "This intake came from quality so project, technical owner and the next release action stay in context."
+                    )}
+                  </p>
+                ) : null}
+                {searchParams.get("source") === "post-sale" ? (
+                  <p className="tableCellMuted" style={{ marginBottom: 16 }}>
+                    {t(
+                      "Esta captura llego desde postventa para mantener la trazabilidad de entrega, caso y evidencia documental pendiente.",
+                      "This intake came from post-sale to preserve handover, case and pending document evidence traceability."
+                    )}
+                  </p>
+                ) : null}
                 <div className="detailGrid">
                   <label className="detailRow">
-                    <div className="detailLabel">Type</div>
-                    <input className="field" value={createForm.documentType} onChange={(event) => setCreateForm((current) => ({ ...current, documentType: event.target.value }))} />
+                    <div className="detailLabel">{t("Tipo", "Type")}</div>
+                    <select className="selectField" value={createForm.documentType} onChange={(event) => setCreateForm((current) => ({ ...current, documentType: event.target.value }))}>
+                      <option value="RFI">RFI</option>
+                      <option value="Submittal">Submittal</option>
+                      <option value="Transmittal">Transmittal</option>
+                      <option value="Meeting note">{t("Nota de reunion", "Meeting note")}</option>
+                      <option value="Revision set">{t("Juego de revision", "Revision set")}</option>
+                    </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Subject</div>
-                    <input className="field" value={createForm.subject} onChange={(event) => setCreateForm((current) => ({ ...current, subject: event.target.value }))} />
+                    <div className="detailLabel">{t("Asunto", "Subject")}</div>
+                    <input className="field" value={createForm.subject} onChange={(event) => setCreateForm((current) => ({ ...current, subject: event.target.value }))} placeholder={t("Describe la interferencia, revision o entrega tecnica", "Describe the interference, review or technical deliverable")} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Project</div>
-                    <input className="field" value={createForm.projectName} onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))} />
+                    <div className="detailLabel">{t("Proyecto", "Project")}</div>
+                    <input className="field" value={createForm.projectName} onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))} placeholder={t("Proyecto, frente o paquete", "Project, front or package")} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Owner</div>
-                    <input className="field" value={createForm.owner} onChange={(event) => setCreateForm((current) => ({ ...current, owner: event.target.value }))} />
+                    <div className="detailLabel">{t("Responsable", "Owner")}</div>
+                    <input className="field" value={createForm.owner} onChange={(event) => setCreateForm((current) => ({ ...current, owner: event.target.value }))} placeholder={t("Coordinacion, proyectista, proveedor o supervision", "Coordination, designer, supplier or supervision")} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Status</div>
+                    <div className="detailLabel">{t("Estado", "Status")}</div>
                     <select className="selectField" value={createForm.status} onChange={(event) => setCreateForm((current) => ({ ...current, status: event.target.value as DocumentControlItemContract["status"] }))}>
-                      <option value="issued">issued</option>
-                      <option value="in_review">in_review</option>
-                      <option value="awaiting_response">awaiting_response</option>
-                      <option value="blocked">blocked</option>
+                      <option value="issued">{localizeText(documentStatusLabel("issued"))}</option>
+                      <option value="in_review">{localizeText(documentStatusLabel("in_review"))}</option>
+                      <option value="awaiting_response">{localizeText(documentStatusLabel("awaiting_response"))}</option>
+                      <option value="blocked">{localizeText(documentStatusLabel("blocked"))}</option>
                     </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Health</div>
+                    <div className="detailLabel">{t("Salud", "Health")}</div>
                     <select className="selectField" value={createForm.health} onChange={(event) => setCreateForm((current) => ({ ...current, health: event.target.value as DocumentControlItemContract["health"] }))}>
-                      <option value="healthy">healthy</option>
-                      <option value="watch">watch</option>
-                      <option value="critical">critical</option>
+                      <option value="healthy">{localizeText(documentHealthLabel("healthy"))}</option>
+                      <option value="watch">{localizeText(documentHealthLabel("watch"))}</option>
+                      <option value="critical">{localizeText(documentHealthLabel("critical"))}</option>
                     </select>
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Revisions</div>
+                    <div className="detailLabel">{t("Revisiones", "Revisions")}</div>
                     <input className="field" type="number" min="0" value={createForm.revisionCount} onChange={(event) => setCreateForm((current) => ({ ...current, revisionCount: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Turnaround days</div>
+                    <div className="detailLabel">{t("Dias de respuesta", "Turnaround days")}</div>
                     <input className="field" type="number" min="0" value={createForm.turnaroundDays} onChange={(event) => setCreateForm((current) => ({ ...current, turnaroundDays: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Open comments</div>
+                    <div className="detailLabel">{t("Comentarios abiertos", "Open comments")}</div>
                     <input className="field" type="number" min="0" value={createForm.openComments} onChange={(event) => setCreateForm((current) => ({ ...current, openComments: event.target.value }))} />
                   </label>
                   <label className="detailRow">
-                    <div className="detailLabel">Next action</div>
-                    <input className="field" value={createForm.nextAction} onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))} placeholder="Describe the next coordination or response action" />
+                    <div className="detailLabel">{t("Siguiente accion", "Next action")}</div>
+                    <input
+                      className="field"
+                      value={createForm.nextAction}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))}
+                      placeholder={t(
+                        "Describe la siguiente accion concreta de coordinacion o respuesta",
+                        "Describe the next concrete coordination or response action"
+                      )}
+                    />
                   </label>
                 </div>
                 <div className="detailGrid" style={{ marginTop: 16 }}>
                   <div className="detailRow">
-                    <div className="detailLabel">Creation gate</div>
+                    <div className="detailLabel">{t("Puerta de creacion", "Creation gate")}</div>
                     <div className="tableCellStack">
                       <div className="row gap wrap" style={{ alignItems: "center" }}>
                         <Badge tone={createDocumentGate.tone}>{createDocumentGate.label}</Badge>
@@ -1256,35 +1800,42 @@ function DocumentControlPageContent() {
                     </div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Next human step</div>
+                    <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
                     <div>{createDocumentHumanStep}</div>
                   </div>
                   <div className="detailRow">
-                    <div className="detailLabel">Immediate downstream</div>
+                    <div className="detailLabel">{t("Siguiente impacto inmediato", "Immediate downstream")}</div>
                     <div>
                       {createForm.status === "blocked"
-                        ? "This item should go back into technical coordination before any downstream team assumes continuity."
+                        ? t("Este item debe volver primero a coordinacion tecnica antes de que otro equipo asuma continuidad.", "This item should go back into technical coordination before any downstream team assumes continuity.")
                         : createForm.status === "awaiting_response"
-                          ? "This item should continue into the response owner path, not stay parked in document control."
+                          ? t("Este item debe continuar hacia el responsable de responder, no quedarse estacionado en control documental.", "This item should continue into the response owner path, not stay parked in document control.")
                           : createForm.health === "critical" || Number(createForm.openComments) > 0
-                            ? "This item should continue into projects, quality or compliance with explicit comment ownership."
-                            : "This item can continue into the next coordination lane with a clean enough technical story."}
+                            ? t("Este item debe continuar hacia proyectos, calidad o compliance con responsables explicitos para los comentarios.", "This item should continue into projects, quality or compliance with explicit comment ownership.")
+                            : t("Este item puede continuar al siguiente carril con una historia tecnica suficientemente limpia.", "This item can continue into the next coordination lane with a clean enough technical story.")}
                     </div>
                   </div>
                 </div>
                 <div className="row gap wrap" style={{ marginTop: 16 }}>
                   <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateItem()}>
-                    {isCreating ? "Saving..." : "Add document item"}
+                    {isCreating ? t("Guardando...", "Saving...") : t("Agregar item documental", "Add document item")}
                   </button>
-                  {createMessage ? <Badge tone="success">{createMessage}</Badge> : null}
+                  {documentCreateFeedback ? <Badge tone="success">{localizeText(documentCreateFeedback)}</Badge> : null}
+                  {documentErrorFeedback ? <span style={{ color: "var(--danger-700)" }}>{localizeText(documentErrorFeedback)}</span> : null}
                 </div>
               </Card>
 
-              <Card title="Document risks and blockers" description="Coordination, versioning and response issues affecting active work.">
+              <Card
+                title={t("Riesgos y bloqueos documentales", "Document risks and blockers")}
+                description={t(
+                  "Problemas de coordinacion, versionado y respuesta que hoy afectan la obra activa.",
+                  "Coordination, versioning and response issues affecting active work."
+                )}
+              >
                 <div className="detailGrid">
-                  <div className="detailRow"><div className="detailLabel">Capture gate</div><div>Items cannot start approved, and `awaiting_response` requires live comments.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Healthy gate</div><div>Healthy posture is blocked while comments or review debt remain open.</div></div>
-                  <div className="detailRow"><div className="detailLabel">Cross-domain flow</div><div>Use this lane when quality release, compliance folders or customer handover still depend on missing controlled documents.</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Regla de captura", "Capture gate")}</div><div>{t("Los items no pueden nacer aprobados y `awaiting_response` exige comentarios vivos.", "Items cannot start approved, and `awaiting_response` requires live comments.")}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Regla de salud", "Healthy gate")}</div><div>{t("La postura saludable se bloquea mientras existan comentarios o deuda de revision abierta.", "Healthy posture is blocked while comments or review debt remain open.")}</div></div>
+                  <div className="detailRow"><div className="detailLabel">{t("Flujo cruzado", "Cross-domain flow")}</div><div>{t("Usa este carril cuando la liberacion de calidad, expedientes o entrega al cliente sigan dependiendo de documentos controlados faltantes.", "Use this lane when quality release, compliance folders or customer handover still depend on missing controlled documents.")}</div></div>
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <DataTable
@@ -1292,7 +1843,7 @@ function DocumentControlPageContent() {
                     columns={[
                       {
                         key: "risk",
-                        label: "Risk",
+                        label: t("Riesgo", "Risk"),
                         render: (risk) => (
                           <div className="tableCellStack">
                             <strong>{risk.title}</strong>
@@ -1302,7 +1853,7 @@ function DocumentControlPageContent() {
                       },
                       {
                         key: "severity",
-                        label: "Severity",
+                        label: t("Severidad", "Severity"),
                         render: (risk) => (
                           <Badge tone={risk.severity === "critical" ? "danger" : risk.severity === "warning" ? "warning" : "info"}>
                             {risk.severity}
@@ -1311,12 +1862,12 @@ function DocumentControlPageContent() {
                       },
                       {
                         key: "owner",
-                        label: "Owner",
+                        label: t("Responsable", "Owner"),
                         render: (risk) => risk.owner
                       },
                       {
                         key: "status",
-                        label: "Current action",
+                        label: t("Accion actual", "Current action"),
                         render: (risk) => risk.status
                       }
                     ]}
@@ -1327,20 +1878,20 @@ function DocumentControlPageContent() {
           </>
         ) : error ? (
           <EmptyState
-            title="Document control overview unavailable"
+            title={t("Resumen de control documental no disponible", "Document control overview unavailable")}
             description={error}
-            primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
-            secondaryAction={{ label: "Open projects", href: "/projects" }}
+            primaryAction={{ label: t("Ir al dashboard", "Go to dashboard"), href: "/dashboard" }}
+            secondaryAction={{ label: t("Abrir proyectos", "Open projects"), href: "/projects" }}
           />
         ) : (
           <EmptyState
-            title={isLoading ? "Loading document control overview" : "Document control overview not loaded yet"}
+            title={isLoading ? t("Cargando resumen documental", "Loading document control overview") : t("El resumen documental aun no carga", "Document control overview not loaded yet")}
             description={
               isDemoMode
-                ? "This route should load demo or live document-control signals so technical coordination can be tested end to end."
-                : "This route is still waiting for enough document-control signals for the active tenant."
+                ? t("Esta ruta debe cargar senales demo o reales para probar la coordinacion tecnica de punta a punta.", "This route should load demo or live document-control signals so technical coordination can be tested end to end.")
+                : t("Esta ruta sigue esperando suficientes senales documentales para el tenant activo.", "This route is still waiting for enough document-control signals for the active tenant.")
             }
-            primaryAction={{ label: "Go to dashboard", href: "/dashboard" }}
+            primaryAction={{ label: t("Ir al dashboard", "Go to dashboard"), href: "/dashboard" }}
           />
         )}
       </ModuleGate>

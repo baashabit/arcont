@@ -24,7 +24,7 @@ Prioridad puntual en este ciclo:
 - subir utilidad real de prueba
 
 3. Ejecutar:
-- `npm run build:web`
+- `npx tsc --noEmit && npm run lint`
 
 4. Trabajar siempre en `main`.
 5. Reportar archivos tocados.

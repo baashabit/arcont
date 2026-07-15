@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { KpiCard } from "@/components/ui/kpi-card";
 import type { SubcontractLineContract, SubcontractOverviewContract } from "@/lib/contracts";
-import { fetchSubcontractOverview, updateSubcontractLine } from "@/lib/platform-api";
+import { createSubcontractLine, fetchSubcontractOverview, updateSubcontractLine } from "@/lib/platform-api";
 
 function healthTone(status: SubcontractLineContract["subcontractHealth"]) {
   switch (status) {
@@ -49,7 +49,7 @@ function subcontractHealthLabel(status: SubcontractLineContract["subcontractHeal
     case "watch":
       return { es: "En vigilancia", en: "Watch" };
     default:
-      return { es: "Crítico", en: "Critical" };
+      return { es: "Critico", en: "Critical" };
   }
 }
 
@@ -64,7 +64,7 @@ function projectStatusLabel(status: SubcontractLineContract["projectStatus"] | n
     case "closed":
       return { es: "Cerrada", en: "Closed" };
     case "planning":
-      return { es: "Planeación", en: "Planning" };
+      return { es: "Planeacion", en: "Planning" };
     default:
       return { es: "Sin asignar", en: "Unassigned" };
   }
@@ -75,7 +75,7 @@ function subcontractActionLabel(label: string) {
     case "Move to watch":
       return { es: "Mover a vigilancia", en: "Move to watch" };
     case "Escalate critical":
-      return { es: "Escalar a crítico", en: "Escalate critical" };
+      return { es: "Escalar a critico", en: "Escalate critical" };
     case "Mark controlled":
       return { es: "Marcar controlado", en: "Mark controlled" };
     default:
@@ -105,7 +105,7 @@ function riskSeverityLabel(severity: "info" | "warning" | "critical") {
     case "warning":
       return { es: "Alerta", en: "Warning" };
     default:
-      return { es: "Crítica", en: "Critical" };
+      return { es: "Critica", en: "Critical" };
   }
 }
 
@@ -146,34 +146,34 @@ function actionOptions(line: SubcontractLineContract) {
 function buildSubcontractWhyNow(line: SubcontractLineContract | null, t: (es: string, en: string) => string) {
   if (!line) {
     return t(
-      "Selecciona una línea de subcontrato para entender qué se debe contener antes de que la ejecución de obra se desvíe.",
+      "Selecciona una linea de subcontrato para entender que se debe contener antes de que la ejecucion de obra se desvie.",
       "Select a subcontract line to understand what must be contained before field execution drifts."
     );
   }
 
   if (line.subcontractHealth === "critical") {
     return t(
-      `El destajo pendiente de MXN ${line.pendingDestajo.toLocaleString()} más una brecha de ${line.progressGap}% ya puso a ${line.contractorName} bajo presión activa de ejecución.`,
+      `El destajo pendiente de MXN ${line.pendingDestajo.toLocaleString()} mas una brecha de ${line.progressGap}% ya puso a ${line.contractorName} bajo presion activa de ejecucion.`,
       `Pending destajo of MXN ${line.pendingDestajo.toLocaleString()} plus ${line.progressGap}% progress gap already put ${line.contractorName} under active execution pressure.`
     );
   }
 
   if (line.latestDailyLogStatus === "flagged" || line.qualityReleaseReadiness < 85) {
     return t(
-      `${line.frontName} sigue expuesto porque la última postura de campo o calidad aún no es suficientemente estable para dejar este subcontrato sin seguimiento.`,
+      `${line.frontName} sigue expuesto porque la ultima postura de campo o calidad aun no es suficientemente estable para dejar este subcontrato sin seguimiento.`,
       `${line.frontName} is still exposed because the latest field or quality posture is not stable enough to leave this subcontract unattended.`
     );
   }
 
   if (line.complianceExpirations > 0 || line.incidentCount > 0) {
     return t(
-      `${line.contractorName} todavía arrastra deuda de cumplimiento o incidentes que puede frenar la continuidad de la cuadrilla si nadie interviene ahora.`,
+      `${line.contractorName} todavia arrastra deuda de cumplimiento o incidentes que puede frenar la continuidad de la cuadrilla si nadie interviene ahora.`,
       `${line.contractorName} still has compliance or incident debt that can stop crew continuity if nobody intervenes now.`
     );
   }
 
   return t(
-    `${line.contractorName} está controlado por ahora, pero asistencia, destajo y liberación aún requieren seguimiento explícito para mantener estable el frente.`,
+    `${line.contractorName} esta controlado por ahora, pero asistencia, destajo y liberacion aun requieren seguimiento explicito para mantener estable el frente.`,
     `${line.contractorName} is currently controlled, but attendance, destajo and release readiness still need explicit follow-through to keep the front stable.`
   );
 }
@@ -181,34 +181,34 @@ function buildSubcontractWhyNow(line: SubcontractLineContract | null, t: (es: st
 function buildSubcontractDownstreamEffect(line: SubcontractLineContract | null, t: (es: string, en: string) => string) {
   if (!line) {
     return t(
-      "Selecciona una línea de subcontrato para revisar qué otros módulos absorberán el impacto.",
+      "Selecciona una linea de subcontrato para revisar que otros modulos absorberan el impacto.",
       "Select a subcontract line to inspect what other modules will absorb the impact."
     );
   }
 
   if (line.pendingDestajo > line.contractAmount * 0.1) {
     return t(
-      "Si el destajo sigue sin resolverse, finanzas, compras y control de obra heredarán ruido evitable en pagos y confianza de producción.",
+      "Si el destajo sigue sin resolverse, finanzas, compras y control de obra heredaran ruido evitable en pagos y confianza de produccion.",
       "If destajo remains unresolved, finance, procurement and project control will inherit preventable noise in payment timing and production confidence."
     );
   }
 
   if (line.latestDailyLogStatus === "flagged" || line.qualityReleaseReadiness < 85) {
     return t(
-      "Si campo y calidad no se recuperan, bitácora, control de liberaciones y preparación de cierre se degradarán detrás de este subcontrato.",
+      "Si campo y calidad no se recuperan, bitacora, control de liberaciones y preparacion de cierre se degradaran detras de este subcontrato.",
       "If field and quality posture do not recover, daily logs, release control and closeout readiness will degrade behind this subcontract."
     );
   }
 
   if (line.attendanceRate < 85) {
     return t(
-      "Si la asistencia sigue débil, el programa de obra y la planeación de cuadrillas absorberán primero el deslizamiento.",
+      "Si la asistencia sigue debil, el programa de obra y la planeacion de cuadrillas absorberan primero el deslizamiento.",
       "If attendance stays soft, the project schedule and workforce planning lanes will absorb the slippage first."
     );
   }
 
   return t(
-    "Si esta línea se mantiene bajo control, proyectos, RH y calidad pueden seguir operando sin retrabajo aguas abajo desde el carril del contratista.",
+    "Si esta linea se mantiene bajo control, proyectos, RH y calidad pueden seguir operando sin retrabajo aguas abajo desde el carril del contratista.",
     "If this line is kept under control, projects, HR and quality can keep operating without downstream rework from the subcontractor lane."
   );
 }
@@ -216,21 +216,21 @@ function buildSubcontractDownstreamEffect(line: SubcontractLineContract | null, 
 function buildSubcontractReportBack(line: SubcontractLineContract | null, t: (es: string, en: string) => string) {
   if (!line) {
     return t(
-      "Selecciona una línea de subcontrato para definir el siguiente punto de control operativo.",
+      "Selecciona una linea de subcontrato para definir el siguiente punto de control operativo.",
       "Select a subcontract line to define the next operational checkpoint."
     );
   }
 
   if (line.subcontractHealth === "critical") {
     return t(
-      "Reporta en el siguiente ciclo de supervisión una vez confirmados el control del destajo, la recuperación de asistencia y el responsable del bloqueo de campo.",
+      "Reporta en el siguiente ciclo de supervision una vez confirmados el control del destajo, la recuperacion de asistencia y el responsable del bloqueo de campo.",
       "Report back in the next supervisor cycle once destajo containment, attendance recovery and the field blocker owner are confirmed."
     );
   }
 
   if (line.latestDailyLogStatus === "flagged" || line.qualityReleaseReadiness < 85) {
     return t(
-      "Reporta después de la siguiente bitácora de campo y validación de calidad para reevaluar la postura de liberación con evidencia.",
+      "Reporta despues de la siguiente bitacora de campo y validacion de calidad para reevaluar la postura de liberacion con evidencia.",
       "Report back after the next field log and quality verification so the release posture can be re-evaluated with evidence."
     );
   }
@@ -243,154 +243,147 @@ function buildSubcontractReportBack(line: SubcontractLineContract | null, t: (es
   }
 
   return t(
-    "Reporta en la siguiente revisión programada del subcontrato para confirmar que este frente siguió controlado sin nuevo desvío de destajo o calidad.",
+    "Reporta en la siguiente revision programada del subcontrato para confirmar que este frente siguio controlado sin nuevo desvio de destajo o calidad.",
     "Report back at the next planned subcontract review to confirm this front stayed controlled without new destajo or quality drift."
   );
 }
 
-type SubcontractModuleKey = "field" | "quality" | "projects" | "hr" | "accounts-payable";
+function buildSubcontractSelectedStation(line: SubcontractLineContract | null) {
+  const pushLink = (
+    links: Array<{ label: { es: string; en: string }; href: string }>,
+    label: { es: string; en: string },
+    href: string
+  ) => {
+    if (!links.some((item) => item.href === href)) {
+      links.push({ label, href });
+    }
+  };
 
-function subcontractModuleMeta(module: SubcontractModuleKey) {
-  switch (module) {
-    case "field":
-      return {
-        href: "/field",
-        label: { es: "Campo", en: "Field" },
-        cta: { es: "Abrir campo", en: "Open field" }
-      };
-    case "quality":
-      return {
-        href: "/quality",
-        label: { es: "Calidad", en: "Quality" },
-        cta: { es: "Abrir calidad", en: "Open quality" }
-      };
-    case "projects":
-      return {
-        href: "/projects",
-        label: { es: "Proyectos", en: "Projects" },
-        cta: { es: "Abrir proyectos", en: "Open projects" }
-      };
-    case "hr":
-      return {
-        href: "/hr",
-        label: { es: "RH", en: "HR" },
-        cta: { es: "Abrir RH", en: "Open HR" }
-      };
-    default:
-      return {
-        href: "/accounts-payable",
-        label: { es: "Cuentas por pagar", en: "Accounts payable" },
-        cta: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }
-      };
-  }
-}
-
-function buildSelectedStation(line: SubcontractLineContract | null, t: (es: string, en: string) => string) {
   if (!line) {
-    return null;
-  }
-
-  if (line.latestDailyLogStatus === "flagged") {
+    const links: Array<{ label: { es: string; en: string }; href: string }> = [];
+    pushLink(links, { es: "Abrir campo", en: "Open field" }, "/field");
+    pushLink(links, { es: "Abrir proyectos", en: "Open projects" }, "/projects");
+    pushLink(links, { es: "Abrir calidad", en: "Open quality" }, "/quality");
     return {
-      responsibleModule: "field" as const,
-      responsibleReason: t(
-        "Campo debe contener primero la bitácora observada y dejar dueño explícito del bloqueo en frente.",
-        "Field must contain the flagged log first and assign an explicit owner to the front blocker."
-      ),
-      nextModule: line.qualityReleaseReadiness < 85 ? ("quality" as const) : ("projects" as const),
-      nextReason: line.qualityReleaseReadiness < 85
-        ? t(
-            "Después, calidad debe confirmar que la liberación vuelve a postura operable antes de soltar el frente.",
-            "Then quality must confirm release posture is operable again before the front is released."
-          )
-        : t(
-            "Después, proyectos debe validar que el frente puede retomar ritmo sin mover el programa.",
-            "Then projects must validate the front can resume pace without moving the schedule."
-          ),
-      returnConfirmation: t(
-        "Regresa con la bitácora ya contenida, el bloqueo de campo con responsable y la liberación de calidad lista o fechada.",
-        "Return with the log already contained, the field blocker assigned, and quality release ready or scheduled."
-      ),
-      lane: ["field", "quality", "projects", "hr", "accounts-payable"] as const
+      primaryLabel: { es: "Campo", en: "Field" },
+      primaryReason: {
+        es: "Selecciona un subcontrato para aclarar qué dominio debe absorber primero la presión del frente.",
+        en: "Select a subcontract to clarify which domain should first absorb front pressure."
+      },
+      secondaryLabel: { es: "Proyectos", en: "Projects" },
+      secondaryReason: {
+        es: "Después del primer dominio, la continuidad debe conservar programa y productividad del contratista.",
+        en: "After the first domain, continuity should preserve schedule and subcontractor productivity."
+      },
+      returnRule: {
+        es: "Regresa con responsable, frente y siguiente corte ya confirmados.",
+        en: "Return with owner, front and next checkpoint already confirmed."
+      },
+      links
     };
   }
 
-  if (line.qualityReleaseReadiness < 85) {
-    return {
-      responsibleModule: "quality" as const,
-      responsibleReason: t(
-        "Calidad toma el siguiente turno porque la liberación todavía no deja operar este subcontrato sin riesgo de retrabajo.",
-        "Quality owns the next turn because release readiness still does not let this subcontract operate without rework risk."
-      ),
-      nextModule: "field" as const,
-      nextReason: t(
-        "En cuanto calidad libere, campo debe confirmar que la cuadrilla puede seguir sin observaciones nuevas.",
-        "As soon as quality releases it, field must confirm the crew can continue without new observations."
-      ),
-      returnConfirmation: t(
-        "Regresa con el porcentaje de liberación confirmado, la evidencia de calidad cerrada y la siguiente bitácora de campo habilitada.",
-        "Return with confirmed release percentage, closed quality evidence, and the next field log enabled."
-      ),
-      lane: ["quality", "field", "projects", "hr", "accounts-payable"] as const
-    };
-  }
-
-  if (line.attendanceRate < 85 || line.complianceExpirations > 0 || line.incidentCount > 0) {
-    return {
-      responsibleModule: "hr" as const,
-      responsibleReason: t(
-        "RH es el dueño inmediato porque asistencia, cumplimiento o incidentes pueden cortar la continuidad real de la cuadrilla.",
-        "HR is the immediate owner because attendance, compliance, or incidents can cut actual crew continuity."
-      ),
-      nextModule: "field" as const,
-      nextReason: t(
-        "Luego campo debe confirmar que la dotación recuperada sí sostiene la ejecución en frente.",
-        "Then field must confirm the recovered staffing actually sustains front execution."
-      ),
-      returnConfirmation: t(
-        "Regresa con asistencia recuperada o plan cerrando la brecha, vencimientos resueltos y cuadrilla lista en campo.",
-        "Return with attendance recovered or a plan closing the gap, expirations resolved, and the crew ready in field."
-      ),
-      lane: ["hr", "field", "projects", "quality", "accounts-payable"] as const
-    };
-  }
+  const qualityHref = buildQualityPrefillHref({
+    projectName: line.projectName,
+    frontName: line.frontName,
+    contractorName: line.contractorName,
+    nextAction: line.nextAction
+  });
+  const accountsPayableHref = `/accounts-payable?source=subcontracts&supplierName=${encodeURIComponent(line.contractorName)}&projectName=${encodeURIComponent(line.projectName)}&purchaseOrderCode=${encodeURIComponent(line.code)}&nextAction=${encodeURIComponent(line.nextAction)}`;
+  const links: Array<{ label: { es: string; en: string }; href: string }> = [];
 
   if (line.pendingDestajo > line.contractAmount * 0.1) {
+    pushLink(links, { es: "Abrir CXP", en: "Open AP" }, accountsPayableHref);
+    pushLink(links, { es: "Abrir campo", en: "Open field" }, "/field");
+    pushLink(links, { es: "Abrir proyectos", en: "Open projects" }, "/projects");
+    pushLink(links, { es: "Abrir calidad", en: "Open quality" }, qualityHref);
     return {
-      responsibleModule: "accounts-payable" as const,
-      responsibleReason: t(
-        "Cuentas por pagar debe ordenar el carril inmediato porque el destajo pendiente ya compromete la continuidad económica del contratista.",
-        "Accounts payable must stabilize the immediate lane because pending destajo already threatens subcontractor economic continuity."
-      ),
-      nextModule: "projects" as const,
-      nextReason: t(
-        "Después, proyectos debe decidir si el frente puede seguir al mismo ritmo o necesita reprogramación puntual.",
-        "After that, projects must decide whether the front can keep the same pace or needs targeted rescheduling."
-      ),
-      returnConfirmation: t(
-        "Regresa con el destajo validado para pago, la ruta de liberación confirmada y la continuidad del frente respaldada por proyectos.",
-        "Return with destajo validated for payment, the release route confirmed, and front continuity backed by projects."
-      ),
-      lane: ["accounts-payable", "projects", "field", "quality", "hr"] as const
+      primaryLabel: { es: "Cuentas por pagar", en: "Accounts payable" },
+      primaryReason: {
+        es: "El destajo pendiente ya está presionando dinero y confianza del contratista; CXP debe contener primero ese carril.",
+        en: "Pending destajo is already pressuring money and subcontractor trust, so AP should contain that lane first."
+      },
+      secondaryLabel: { es: "Campo", en: "Field" },
+      secondaryReason: {
+        es: "Después del impacto económico, campo debe sostener el frente y confirmar quién absorbe la recuperación operativa.",
+        en: "After the economic impact, field should sustain the front and confirm who absorbs operational recovery."
+      },
+      returnRule: {
+        es: "Regresa con destajo contenido, responsable de frente confirmado y efecto de pago ya aclarado.",
+        en: "Return with destajo contained, front owner confirmed and payment impact already clarified."
+      },
+      links
     };
   }
 
+  if (line.latestDailyLogStatus === "flagged" || line.qualityReleaseReadiness < 85) {
+    pushLink(links, { es: "Abrir calidad", en: "Open quality" }, qualityHref);
+    pushLink(links, { es: "Abrir campo", en: "Open field" }, "/field");
+    pushLink(links, { es: "Abrir proyectos", en: "Open projects" }, "/projects");
+    pushLink(links, { es: "Abrir CXP", en: "Open AP" }, accountsPayableHref);
+    return {
+      primaryLabel: { es: "Calidad", en: "Quality" },
+      primaryReason: {
+        es: "La liberación de calidad o la última bitácora siguen observadas; calidad debe absorber primero la continuidad técnica.",
+        en: "Quality release or the latest field log is still flagged, so quality should absorb technical continuity first."
+      },
+      secondaryLabel: { es: "Campo", en: "Field" },
+      secondaryReason: {
+        es: "Después de calidad, campo debe resecuenciar el frente y proteger la ejecución real del contratista.",
+        en: "After quality, field should resequence the front and protect the subcontractor's real execution."
+      },
+      returnRule: {
+        es: "Regresa con liberación reevaluada, evidencia visible y siguiente frente operativo ya confirmado.",
+        en: "Return with release re-evaluated, evidence visible and the next operating front already confirmed."
+      },
+      links
+    };
+  }
+
+  if (line.complianceExpirations > 0 || line.incidentCount > 0 || line.attendanceRate < 85) {
+    pushLink(links, { es: "Abrir RH", en: "Open HR" }, "/hr");
+    pushLink(links, { es: "Abrir campo", en: "Open field" }, "/field");
+    pushLink(links, { es: "Abrir proyectos", en: "Open projects" }, "/projects");
+    pushLink(links, { es: "Abrir CXP", en: "Open AP" }, accountsPayableHref);
+    return {
+      primaryLabel: { es: "RH", en: "HR" },
+      primaryReason: {
+        es: "Asistencia, vencimientos o incidentes ya presionan la continuidad contractual y RH debe contener primero la disciplina del contratista.",
+        en: "Attendance, expirations or incidents are already pressuring contractual continuity, so HR should first contain subcontractor discipline."
+      },
+      secondaryLabel: { es: "Campo", en: "Field" },
+      secondaryReason: {
+        es: "Después de RH, campo debe confirmar cómo sigue el frente con la cuadrilla realmente disponible.",
+        en: "After HR, field should confirm how the front continues with the crew actually available."
+      },
+      returnRule: {
+        es: "Regresa con asistencia o cumplimiento regularizados y con el frente nuevamente sostenible.",
+        en: "Return with attendance or compliance regularized and the front sustainable again."
+      },
+      links
+    };
+  }
+
+  pushLink(links, { es: "Abrir proyectos", en: "Open projects" }, "/projects");
+  pushLink(links, { es: "Abrir campo", en: "Open field" }, "/field");
+  pushLink(links, { es: "Abrir CXP", en: "Open AP" }, accountsPayableHref);
+  pushLink(links, { es: "Abrir calidad", en: "Open quality" }, qualityHref);
   return {
-    responsibleModule: "projects" as const,
-    responsibleReason: t(
-      "Proyectos queda al frente porque debe sostener el ritmo, absorber la brecha de avance y proteger la continuidad del frente.",
-      "Projects leads because it must sustain pace, absorb the progress gap, and protect front continuity."
-    ),
-    nextModule: "field" as const,
-    nextReason: t(
-      "Luego campo confirma que el frente sigue ejecutable sin nuevas alertas de calidad, asistencia o destajo.",
-      "Then field confirms the front remains executable without new quality, attendance, or destajo alerts."
-    ),
-    returnConfirmation: t(
-      "Regresa con el siguiente hito de frente confirmado, sin desvío nuevo de destajo y con calidad y RH todavía en verde.",
-      "Return with the next front milestone confirmed, no new destajo drift, and quality plus HR still green."
-    ),
-    lane: ["projects", "field", "quality", "hr", "accounts-payable"] as const
+    primaryLabel: { es: "Proyectos", en: "Projects" },
+    primaryReason: {
+      es: "La línea está controlada y el siguiente turno útil es sostener programa, productividad y continuidad contractual.",
+      en: "The line is controlled and the next useful turn is sustaining schedule, productivity and contractual continuity."
+    },
+    secondaryLabel: { es: "Campo", en: "Field" },
+    secondaryReason: {
+      es: "Después de proyectos, campo debe absorber la ejecución diaria sin perder la misma trazabilidad del contratista.",
+      en: "After projects, field should absorb day-to-day execution without losing the same subcontractor traceability."
+    },
+    returnRule: {
+      es: "Regresa con programa, frente y seguimiento económico ya confirmados sobre el mismo subcontrato.",
+      en: "Return with schedule, front and economic follow-through already confirmed on the same subcontract."
+    },
+    links
   };
 }
 
@@ -408,6 +401,90 @@ function recomputeSummary(lines: SubcontractLineContract[]) {
   };
 }
 
+const emptyCreateForm = {
+  code: "",
+  contractorName: "",
+  projectName: "",
+  frontName: "",
+  activeHeadcount: "12",
+  attendanceRate: "92",
+  productivityRate: "86",
+  complianceExpirations: "0",
+  incidentCount: "0",
+  subcontractHealth: "controlled" as SubcontractLineContract["subcontractHealth"],
+  nextAction: ""
+};
+
+function normalizeFeedbackCode(value: string | null) {
+  return (value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function resolveSubcontractFeedbackCopy(message: string | null) {
+  switch (normalizeFeedbackCode(message)) {
+    case "SUBCONTRACT_CREATE_FIELDS_INCOMPLETE":
+      return {
+        es: "Proyecto, frente, contratista, codigo y siguiente accion deben quedar claros antes de dar de alta el subcontrato.",
+        en: "Project, front, contractor, code and next action must be clear before creating the subcontract."
+      };
+    case "SUBCONTRACT_CREATE_NUMBERS_INVALID":
+      return {
+        es: "Personal, asistencia, productividad, vencimientos e incidentes deben tener valores numericos validos.",
+        en: "Headcount, attendance, productivity, expirations and incidents must have valid numeric values."
+      };
+    case "SUBCONTRACT_CREATE_DUPLICATE_CODE":
+    case "SUBCONTRACTS_DUPLICATE_CODE":
+      return {
+        es: "La clave del subcontrato ya existe en la empresa activa.",
+        en: "The subcontract code already exists in the active company."
+      };
+    case "SUBCONTRACTS_CONTROLLED_WITH_OPEN_ISSUES":
+      return {
+        es: "No abras un subcontrato como controlado si todavia trae vencimientos o incidentes abiertos.",
+        en: "Do not create a controlled subcontract while expirations or incidents are still open."
+      };
+    case "SUBCONTRACTS_CONTROLLED_WITH_LOW_ATTENDANCE":
+      return {
+        es: "No abras un subcontrato como controlado si la asistencia todavia es menor a 85%.",
+        en: "Do not create a controlled subcontract while attendance is still below 85%."
+      };
+    case "SUBCONTRACT_CREATED":
+      return {
+        es: "El subcontrato ya quedo disponible en la mesa operativa.",
+        en: "The subcontract is now available on the operating board."
+      };
+    case "SUBCONTRACT_CREATE_FAILED":
+      return {
+        es: "No fue posible crear el subcontrato. Revisa la captura e intenta de nuevo.",
+        en: "The subcontract could not be created. Review the capture and try again."
+      };
+    default:
+      return message ? { es: message, en: message } : null;
+  }
+}
+
+function buildQualityPrefillHref(input: {
+  projectName: string;
+  frontName: string;
+  contractorName: string;
+  nextAction: string;
+}) {
+  const params = new URLSearchParams({
+    source: "subcontracts",
+    project: input.projectName,
+    projectName: input.projectName,
+    areaName: input.frontName,
+    contractorName: input.contractorName,
+    checklistName: `Liberacion ${input.frontName}`,
+    nextAction: input.nextAction
+  });
+
+  return `/quality?${params.toString()}`;
+}
+
 export default function SubcontractsPage() {
   const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const t = (es: string, en: string) => localizeText({ es, en });
@@ -422,13 +499,12 @@ export default function SubcontractsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    if (!session.authenticated || !session.accessToken) {
-      setOverview(null);
-      return;
-    }
-
     let cancelled = false;
     setIsLoading(true);
     setError(null);
@@ -505,13 +581,101 @@ export default function SubcontractsPage() {
   const selectedWhyNow = buildSubcontractWhyNow(selectedLine, t);
   const selectedDownstreamEffect = buildSubcontractDownstreamEffect(selectedLine, t);
   const selectedReportBack = buildSubcontractReportBack(selectedLine, t);
-  const selectedStation = buildSelectedStation(selectedLine, t);
-  const orderedOperationalLinks = selectedStation
-    ? selectedStation.lane.map((module) => ({
-        module,
-        ...subcontractModuleMeta(module)
-      }))
-    : [];
+  const selectedStation = useMemo(() => buildSubcontractSelectedStation(selectedLine), [selectedLine]);
+  const createGateChecks = useMemo(() => {
+    const checks: string[] = [];
+    if (
+      [
+        createForm.code,
+        createForm.contractorName,
+        createForm.projectName,
+        createForm.frontName,
+        createForm.nextAction
+      ].some((value) => value.trim().length < 3)
+    ) {
+      checks.push(
+        localizeText({
+          es: "Completa proyecto, frente, contratista, clave y siguiente accion con suficiente detalle.",
+          en: "Complete project, front, contractor, code and next action with enough detail."
+        })
+      );
+    }
+
+    const numericValues = [
+      Number.parseInt(createForm.activeHeadcount, 10),
+      Number.parseFloat(createForm.attendanceRate),
+      Number.parseFloat(createForm.productivityRate),
+      Number.parseInt(createForm.complianceExpirations, 10),
+      Number.parseInt(createForm.incidentCount, 10)
+    ];
+    if (numericValues.some((value) => Number.isNaN(value))) {
+      checks.push(
+        localizeText({
+          es: "Asegura que personal, asistencia, productividad, vencimientos e incidentes tengan valores numericos validos.",
+          en: "Make sure headcount, attendance, productivity, expirations and incidents use valid numeric values."
+        })
+      );
+    }
+
+    const attendanceRate = Number.parseFloat(createForm.attendanceRate);
+    const complianceExpirations = Number.parseInt(createForm.complianceExpirations, 10);
+    const incidentCount = Number.parseInt(createForm.incidentCount, 10);
+    if (
+      createForm.subcontractHealth === "controlled" &&
+      ((Number.isFinite(complianceExpirations) && complianceExpirations > 0) ||
+        (Number.isFinite(incidentCount) && incidentCount > 0))
+    ) {
+      checks.push(
+        localizeText({
+          es: "Controlado se bloquea si todavia hay vencimientos o incidentes abiertos.",
+          en: "Controlled is blocked while expirations or incidents are still open."
+        })
+      );
+    }
+    if (
+      createForm.subcontractHealth === "controlled" &&
+      Number.isFinite(attendanceRate) &&
+      attendanceRate < 85
+    ) {
+      checks.push(
+        localizeText({
+          es: "Controlado se bloquea si la asistencia inicial esta por debajo de 85%.",
+          en: "Controlled is blocked if initial attendance is below 85%."
+        })
+      );
+    }
+
+    return checks;
+  }, [createForm, localizeText]);
+  const createGateTone =
+    createGateChecks.length === 0 ? "success" : createForm.subcontractHealth === "critical" ? "warning" : "danger";
+  const createGateLabel =
+    createGateChecks.length === 0
+      ? t("Listo para alta", "Ready to create")
+      : createForm.subcontractHealth === "critical"
+        ? t("Crear con contencion", "Create with containment")
+        : t("No crear todavia", "Do not create yet");
+  const createHumanStep =
+    createForm.subcontractHealth === "critical"
+      ? t(
+          "Abre el subcontrato solo si ya sabes quien va a contener el destajo, la asistencia o el incidente en el mismo ciclo.",
+          "Create the subcontract only if you already know who will contain destajo, attendance or the incident in the same cycle."
+        )
+      : createForm.subcontractHealth === "watch"
+        ? t(
+            "Crea el subcontrato y continua hacia campo, calidad o RH antes de que la desviacion escale.",
+            "Create the subcontract and continue into field, quality or HR before the drift escalates."
+          )
+        : t(
+            "Crea el subcontrato y continua directo a seguimiento de campo, calidad y control de obra.",
+            "Create the subcontract and continue directly into field, quality and project-control follow-through."
+          );
+  const createNextModule =
+    createForm.subcontractHealth === "critical"
+      ? t("Campo + calidad + cuentas por pagar", "Field + quality + accounts payable")
+      : createForm.subcontractHealth === "watch"
+        ? t("Campo + calidad", "Field + quality")
+        : t("Proyectos + campo + RH", "Projects + field + HR");
 
   const lineActions = useMemo(() => (selectedLine ? actionOptions(selectedLine) : []), [selectedLine]);
 
@@ -537,17 +701,27 @@ export default function SubcontractsPage() {
     setActionMessage(null);
   }, [selectedLineId, selectedLine?.id, selectedLine?.nextAction]);
 
+  useEffect(() => {
+    if (projectOptions.length === 0) {
+      return;
+    }
+
+    setCreateForm((current) =>
+      current.projectName.trim().length > 0 ? current : { ...current, projectName: projectOptions[0] }
+    );
+  }, [projectOptions]);
+
   async function handleAction(
     subcontractHealth: SubcontractLineContract["subcontractHealth"],
     suggestedNextAction: string
   ) {
-    if (!selectedLine || !session.accessToken) {
+    if (!selectedLine) {
       return;
     }
 
     const nextAction = nextActionDraft.trim() || suggestedNextAction;
     if (nextAction.length < 8) {
-      setActionError(t("La siguiente acción debe ser más específica antes de actualizar el subcontrato.", "Next action must be more specific before updating the subcontract."));
+      setActionError(t("La siguiente accion debe ser mas especifica antes de actualizar el subcontrato.", "Next action must be more specific before updating the subcontract."));
       return;
     }
 
@@ -569,7 +743,7 @@ export default function SubcontractsPage() {
     );
 
     if (!response.data) {
-      setActionError(response.error?.message ?? t("La actualización del subcontrato falló.", "Subcontract update failed."));
+      setActionError(response.error?.message ?? t("La actualizacion del subcontrato fallo.", "Subcontract update failed."));
       setIsSaving(false);
       return;
     }
@@ -605,17 +779,120 @@ export default function SubcontractsPage() {
     setNextActionDraft(response.data.nextAction);
     setActionMessage(
       t(
-        `El subcontrato cambió a ${localizeText(subcontractHealthLabel(response.data.subcontractHealth)).toLowerCase()}.`,
+        `El subcontrato cambio a ${localizeText(subcontractHealthLabel(response.data.subcontractHealth)).toLowerCase()}.`,
         `Subcontract moved to ${response.data.subcontractHealth}.`
       )
     );
     setIsSaving(false);
   }
 
+  async function handleCreateSubcontract() {
+    const code = createForm.code.trim().toUpperCase();
+    const contractorName = createForm.contractorName.trim();
+    const projectName = createForm.projectName.trim();
+    const frontName = createForm.frontName.trim();
+    const nextAction = createForm.nextAction.trim();
+
+    if ([code, contractorName, projectName, frontName, nextAction].some((value) => value.length < 3)) {
+      setCreateError(localizeText(resolveSubcontractFeedbackCopy("SUBCONTRACT_CREATE_FIELDS_INCOMPLETE")!));
+      setCreateMessage(null);
+      return;
+    }
+
+    if (overview?.lines.some((line) => line.code.trim().toUpperCase() === code)) {
+      setCreateError(localizeText(resolveSubcontractFeedbackCopy("SUBCONTRACT_CREATE_DUPLICATE_CODE")!));
+      setCreateMessage(null);
+      return;
+    }
+
+    const activeHeadcount = Number.parseInt(createForm.activeHeadcount, 10);
+    const attendanceRate = Number.parseFloat(createForm.attendanceRate);
+    const productivityRate = Number.parseFloat(createForm.productivityRate);
+    const complianceExpirations = Number.parseInt(createForm.complianceExpirations, 10);
+    const incidentCount = Number.parseInt(createForm.incidentCount, 10);
+
+    if (
+      [activeHeadcount, attendanceRate, productivityRate, complianceExpirations, incidentCount].some((value) => Number.isNaN(value))
+    ) {
+      setCreateError(localizeText(resolveSubcontractFeedbackCopy("SUBCONTRACT_CREATE_NUMBERS_INVALID")!));
+      setCreateMessage(null);
+      return;
+    }
+
+    setIsCreating(true);
+    setCreateError(null);
+    setCreateMessage(null);
+
+    const response = await createSubcontractLine(
+      activeCompany.id,
+      {
+        code,
+        contractorName,
+        projectName,
+        frontName,
+        activeHeadcount,
+        attendanceRate,
+        productivityRate,
+        complianceExpirations,
+        incidentCount,
+        subcontractHealth: createForm.subcontractHealth,
+        nextAction
+      },
+      {
+        apiBaseUrl,
+        accessToken: session.accessToken
+      }
+    );
+
+    if (!response.data) {
+      const feedback =
+        resolveSubcontractFeedbackCopy(response.error?.code ?? response.error?.message ?? null) ??
+        resolveSubcontractFeedbackCopy("SUBCONTRACT_CREATE_FAILED");
+      setCreateError(localizeText(feedback ?? { es: "No fue posible crear el subcontrato.", en: "Subcontract creation failed." }));
+      setIsCreating(false);
+      return;
+    }
+
+    setOverview((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const lines = [response.data!, ...current.lines.filter((item) => item.id !== response.data!.id)];
+      return {
+        ...current,
+        summary: recomputeSummary(lines),
+        lines,
+        focusLine:
+          lines
+            .slice()
+            .sort((left, right) => {
+              if (left.subcontractHealth === "critical" && right.subcontractHealth !== "critical") {
+                return -1;
+              }
+              if (left.subcontractHealth !== "critical" && right.subcontractHealth === "critical") {
+                return 1;
+              }
+              return right.pendingDestajo - left.pendingDestajo;
+            })[0] ?? null
+      };
+    });
+    setSelectedLineId(response.data.id);
+    setProjectFilter("all");
+    setHealthFilter("all");
+    setSearchFilter("");
+    setCreateForm((current) => ({
+      ...emptyCreateForm,
+      projectName: current.projectName
+    }));
+    setCreateMessage(localizeText(resolveSubcontractFeedbackCopy("SUBCONTRACT_CREATED")!));
+    setIsCreating(false);
+  }
+
   return (
     <AppShell
       title={t("Subcontratos y destajo", "Subcontracts and destajo")}
-      eyebrow={t("Ejecución de cuadrillas", "Workforce execution")}
+      eyebrow={t("Ejecucion de cuadrillas", "Workforce execution")}
       description={t("Avance de contratistas, backlog de destajo y postura de campo conectados con frentes activos.", "Contractor advance, destajo backlog and field readiness connected to active fronts.")}
     >
       <ModuleGate moduleKeys={["hr.workforce"]} requiredPermissions={["hr:*"]} title={t("Subcontratos", "Subcontracts")}>
@@ -625,33 +902,33 @@ export default function SubcontractsPage() {
               <KpiCard
                 label={t("Subcontratos activos", "Active subcontracts")}
                 value={String(filteredSummary.activeSubcontracts)}
-                footnote={t("Frentes de contratista hoy seguidos en ejecución real.", "Contractor fronts currently tracked in live execution.")}
+                footnote={t("Frentes de contratista hoy seguidos en ejecucion real.", "Contractor fronts currently tracked in live execution.")}
               />
               <KpiCard
                 label={t("Contratado", "Contracted")}
                 value={`MXN ${filteredSummary.contractedAmount.toLocaleString()}`}
-                footnote={t("Valor base hoy bajo ejecución de contratistas.", "Baseline value currently under contractor execution.")}
+                footnote={t("Valor base hoy bajo ejecucion de contratistas.", "Baseline value currently under contractor execution.")}
               />
               <KpiCard
                 label={t("Ganado", "Earned")}
                 value={`MXN ${filteredSummary.earnedAmount.toLocaleString()}`}
-                footnote={t("Valor ganado según avance de campo y productividad actual.", "Earned value implied by field advance and current productivity.")}
+                footnote={t("Valor ganado segun avance de campo y productividad actual.", "Earned value implied by field advance and current productivity.")}
               />
               <KpiCard
                 label={t("Destajo pendiente", "Pending destajo")}
                 value={`MXN ${filteredSummary.pendingDestajo.toLocaleString()}`}
-                footnote={t("Monto aún pendiente por conciliar entre avance pagado y estimado.", "Value still pending to settle between invoiced and paid progress.")}
+                footnote={t("Monto aun pendiente por conciliar entre avance pagado y estimado.", "Value still pending to settle between invoiced and paid progress.")}
               />
               <KpiCard
-                label={t("Riesgo de ejecución", "Execution risk")}
+                label={t("Riesgo de ejecucion", "Execution risk")}
                 value={String(filteredSummary.executionRiskSubcontracts)}
-                footnote={t("Subcontratos ya afectados por bitácora observada, baja liberación de calidad o postura crítica.", "Subcontracts already under flagged field logs, poor quality readiness or critical posture.")}
+                footnote={t("Subcontratos ya afectados por bitacora observada, baja liberacion de calidad o postura critica.", "Subcontracts already under flagged field logs, poor quality readiness or critical posture.")}
               />
             </section>
 
             <section className="grid cols2">
               <Card title={t("Mesa de subcontratos", "Subcontract board")} description={t("Destajo, avance y postura operativa del contratista sobre frentes activos.", "Destajo, progress and contractor operating posture across active fronts.")}>
-                <FilterBar summary={t(`${filteredLines.length} líneas de subcontrato en la empresa activa`, `${filteredLines.length} subcontract lines in the active tenant`)}>
+                <FilterBar summary={t(`${filteredLines.length} lineas de subcontrato en la empresa activa`, `${filteredLines.length} subcontract lines in the active tenant`)}>
                   <select className="selectField" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
                     <option value="all">{t("Todos los proyectos", "All projects")}</option>
                     {projectOptions.map((projectName) => (
@@ -732,41 +1009,11 @@ export default function SubcontractsPage() {
 
               <Card
                 title={t("Subcontrato seleccionado", "Selected subcontract")}
-                description={t("Estación operable para decidir quién toma el siguiente turno, a dónde saltar y con qué evidencia debe regresar este subcontrato.", "Operable station to decide who takes the next turn, where to jump next, and what evidence this subcontract must bring back.")}
+                description={t("Postura de campo, economia del contrato y siguiente movimiento del contratista.", "Field posture, contract economics and next subcontractor action.")}
                 aside={selectedLine ? <Badge tone={healthTone(selectedLine.subcontractHealth)}>{localizeText(subcontractHealthLabel(selectedLine.subcontractHealth))}</Badge> : null}
               >
                 {selectedLine ? (
                   <div className="detailGrid">
-                    {selectedStation ? (
-                      <>
-                        <div className="detailRow">
-                          <div className="detailLabel">{t("Importa ahora", "Why it matters now")}</div>
-                          <div className="tableCellStack">
-                            <strong>{selectedWhyNow}</strong>
-                            <span className="tableCellMuted">{selectedDownstreamEffect}</span>
-                          </div>
-                        </div>
-                        <div className="detailRow">
-                          <div className="detailLabel">{t("Módulo responsable ahora", "Responsible module now")}</div>
-                          <div className="tableCellStack">
-                            <div className="tagRow">
-                              <Badge tone="warning">{localizeText(subcontractModuleMeta(selectedStation.responsibleModule).label)}</Badge>
-                              <span>{selectedStation.responsibleReason}</span>
-                            </div>
-                            <span className="tableCellMuted">
-                              {t("Siguiente salto:", "Next hop:")} {localizeText(subcontractModuleMeta(selectedStation.nextModule).label)}. {selectedStation.nextReason}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="detailRow">
-                          <div className="detailLabel">{t("Debe regresar confirmado", "Must return confirmed")}</div>
-                          <div className="tableCellStack">
-                            <strong>{selectedStation.returnConfirmation}</strong>
-                            <span className="tableCellMuted">{selectedReportBack}</span>
-                          </div>
-                        </div>
-                      </>
-                    ) : null}
                     <div className="detailRow">
                       <div className="detailLabel">{t("Proyecto", "Project")}</div>
                       <div className="tagRow">
@@ -799,16 +1046,16 @@ export default function SubcontractsPage() {
                     <div className="detailRow">
                       <div className="detailLabel">{t("Postura campo / calidad", "Field / quality posture")}</div>
                       <div className="tableCellStack">
-                        <span className="tableCellMuted">{t("última bitácora", "latest log")} {localizeText(dailyLogStatusLabel(selectedLine.latestDailyLogStatus))}</span>
-                        <span className="tableCellMuted">{t("liberación de calidad", "quality release readiness")} {selectedLine.qualityReleaseReadiness}%</span>
+                        <span className="tableCellMuted">{t("ultima bitacora", "latest log")} {localizeText(dailyLogStatusLabel(selectedLine.latestDailyLogStatus))}</span>
+                        <span className="tableCellMuted">{t("liberacion de calidad", "quality release readiness")} {selectedLine.qualityReleaseReadiness}%</span>
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">{t("Retención", "Retention")}</div>
+                      <div className="detailLabel">{t("Retencion", "Retention")}</div>
                       <div>MXN {selectedLine.retentionAmount.toLocaleString()}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">{t("Por qué ahora", "Why now")}</div>
+                      <div className="detailLabel">{t("Por que ahora", "Why now")}</div>
                       <div>{selectedWhyNow}</div>
                     </div>
                     <div className="detailRow">
@@ -816,30 +1063,44 @@ export default function SubcontractsPage() {
                       <div>{selectedDownstreamEffect}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">{t("Próximo reporte", "Report back")}</div>
+                      <div className="detailLabel">{t("Módulo responsable", "Responsible module")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(selectedStation.primaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(selectedStation.primaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(selectedStation.secondaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(selectedStation.secondaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Proximo reporte", "Report back")}</div>
                       <div>{selectedReportBack}</div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">{t("Siguiente acción", "Next action")}</div>
+                      <div className="detailLabel">{t("Que debe regresar confirmado", "What must return confirmed")}</div>
+                      <div>{localizeText(selectedStation.returnRule)}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Siguiente accion", "Next action")}</div>
                       <div>
                         <input
                           className="field"
                           value={nextActionDraft}
                           onChange={(event) => setNextActionDraft(event.target.value)}
-                          placeholder={t("Describe la siguiente acción de contratista, destajo o cumplimiento", "Describe the next subcontractor, destajo or compliance action")}
+                          placeholder={t("Describe la siguiente accion de contratista, destajo o cumplimiento", "Describe the next subcontractor, destajo or compliance action")}
                         />
                       </div>
                     </div>
                     <div className="detailRow">
-                      <div className="detailLabel">{t("Vínculos operativos", "Operational links")}</div>
+                      <div className="detailLabel">{t("Vinculos operativos", "Operational links")}</div>
                       <div className="row gap wrap">
-                        {orderedOperationalLinks.map((link, index) => (
-                          <Link
-                            key={link.module}
-                            className={index === 0 ? "button" : "buttonGhost"}
-                            href={link.href}
-                          >
-                            {localizeText(link.cta)}
+                        {selectedStation.links.map((link, index) => (
+                          <Link key={`${link.href}-${link.label.en}`} className={index === 0 ? "button" : "buttonGhost"} href={link.href}>
+                            {index === 0 ? t(`Ir primero a ${localizeText(selectedStation.primaryLabel)}`, `Go first to ${localizeText(selectedStation.primaryLabel)}`) : localizeText(link.label)}
                           </Link>
                         ))}
                       </div>
@@ -849,8 +1110,8 @@ export default function SubcontractsPage() {
                       <div className="tableCellStack">
                         <span className="tableCellMuted">{t("Controlado se bloquea mientras el destajo pendiente siga alto.", "Controlled is blocked while pending destajo remains high.")}</span>
                         <span className="tableCellMuted">{t("Controlado se bloquea mientras existan vencimientos o incidentes abiertos.", "Controlled is blocked while expirations or incidents remain open.")}</span>
-                        <span className="tableCellMuted">{t("Controlado ahora también exige al menos 85% de liberación de calidad.", "Controlled now also requires quality readiness of at least 85%.")}</span>
-                        <span className="tableCellMuted">{t("Vigilancia se bloquea si la asistencia baja de 85% o la última bitácora sigue observada.", "Watch is blocked while attendance is below 85% or the latest field log remains flagged.")}</span>
+                        <span className="tableCellMuted">{t("Controlado ahora tambien exige al menos 85% de liberacion de calidad.", "Controlled now also requires quality readiness of at least 85%.")}</span>
+                        <span className="tableCellMuted">{t("Vigilancia se bloquea si la asistencia baja de 85% o la ultima bitacora sigue observada.", "Watch is blocked while attendance is below 85% or the latest field log remains flagged.")}</span>
                       </div>
                     </div>
                     <div className="detailRow">
@@ -863,7 +1124,7 @@ export default function SubcontractsPage() {
                             disabled={isSaving}
                             onClick={() => void handleAction(selectedLine.subcontractHealth, selectedLine.nextAction)}
                           >
-                            {isSaving ? t("Guardando...", "Saving...") : t("Guardar siguiente acción", "Save next action")}
+                            {isSaving ? t("Guardando...", "Saving...") : t("Guardar siguiente accion", "Save next action")}
                           </button>
                           {lineActions.map((option) => (
                             <button
@@ -894,10 +1155,209 @@ export default function SubcontractsPage() {
                 ) : (
                   <EmptyState
                     title={t("Sin subcontrato seleccionado", "No subcontract selected")}
-                    description={t("Elige una línea de subcontrato para revisar avance, destajo y postura del contratista.", "Choose a subcontract line to inspect progress, destajo and contractor posture.")}
+                    description={t("Elige una linea de subcontrato para revisar avance, destajo y postura del contratista.", "Choose a subcontract line to inspect progress, destajo and contractor posture.")}
                     primaryAction={{ label: t("Seguir en subcontratos", "Stay on subcontracts"), href: "/subcontracts" }}
                   />
                 )}
+              </Card>
+
+              <Card
+                title={t("Alta operable de subcontrato", "Operable subcontract intake")}
+                description={t("Captura un nuevo frente de contratista y dejalo listo para seguimiento inmediato.", "Capture a new contractor front and make it ready for immediate follow-through.")}
+                aside={<Badge tone={createGateTone}>{createGateLabel}</Badge>}
+              >
+                <div className="captureCompactGrid">
+                  <label className="captureField">
+                    <span>{t("Proyecto", "Project")}</span>
+                    {projectOptions.length > 0 ? (
+                      <select
+                        className="selectField"
+                        value={createForm.projectName}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                      >
+                        <option value="">{t("Selecciona proyecto", "Select project")}</option>
+                        {projectOptions.map((projectName) => (
+                          <option key={projectName} value={projectName}>
+                            {projectName}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="field"
+                        value={createForm.projectName}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, projectName: event.target.value }))}
+                        placeholder={t("Nombre del proyecto", "Project name")}
+                      />
+                    )}
+                  </label>
+                  <label className="captureField">
+                    <span>{t("Clave", "Code")}</span>
+                    <input
+                      className="field"
+                      value={createForm.code}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
+                      placeholder="SUB-EST-03"
+                    />
+                  </label>
+                  <label className="captureField" style={{ gridColumn: "1 / -1" }}>
+                    <span>{t("Contratista", "Contractor")}</span>
+                    <input
+                      className="field"
+                      value={createForm.contractorName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, contractorName: event.target.value }))}
+                      placeholder={t("Ej. Concretos y Estructuras del Caribe", "E.g. Caribbean concrete and structures")}
+                    />
+                  </label>
+                  <label className="captureField" style={{ gridColumn: "1 / -1" }}>
+                    <span>{t("Frente", "Front")}</span>
+                    <input
+                      className="field"
+                      value={createForm.frontName}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, frontName: event.target.value }))}
+                      placeholder={t("Ej. Torre 2 · estructura nivel 9", "E.g. Tower 2 · structure level 9")}
+                    />
+                  </label>
+                  <label className="captureField">
+                    <span>{t("Personal activo", "Active headcount")}</span>
+                    <input
+                      className="field"
+                      type="number"
+                      min="1"
+                      value={createForm.activeHeadcount}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, activeHeadcount: event.target.value }))}
+                    />
+                  </label>
+                  <label className="captureField">
+                    <span>{t("Salud inicial", "Initial health")}</span>
+                    <select
+                      className="selectField"
+                      value={createForm.subcontractHealth}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({
+                          ...current,
+                          subcontractHealth: event.target.value as SubcontractLineContract["subcontractHealth"]
+                        }))
+                      }
+                    >
+                      <option value="controlled">{localizeText(subcontractHealthLabel("controlled"))}</option>
+                      <option value="watch">{localizeText(subcontractHealthLabel("watch"))}</option>
+                      <option value="critical">{localizeText(subcontractHealthLabel("critical"))}</option>
+                    </select>
+                  </label>
+                  <label className="captureField">
+                    <span>{t("Asistencia %", "Attendance %")}</span>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={createForm.attendanceRate}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, attendanceRate: event.target.value }))}
+                    />
+                  </label>
+                  <label className="captureField">
+                    <span>{t("Productividad %", "Productivity %")}</span>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={createForm.productivityRate}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, productivityRate: event.target.value }))}
+                    />
+                  </label>
+                  <label className="captureField">
+                    <span>{t("Vencimientos", "Expirations")}</span>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.complianceExpirations}
+                      onChange={(event) =>
+                        setCreateForm((current) => ({ ...current, complianceExpirations: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="captureField">
+                    <span>{t("Incidentes", "Incidents")}</span>
+                    <input
+                      className="field"
+                      type="number"
+                      min="0"
+                      value={createForm.incidentCount}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, incidentCount: event.target.value }))}
+                    />
+                  </label>
+                  <label className="captureField" style={{ gridColumn: "1 / -1" }}>
+                    <span>{t("Siguiente accion", "Next action")}</span>
+                    <input
+                      className="field"
+                      value={createForm.nextAction}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, nextAction: event.target.value }))}
+                      placeholder={t("Ej. Liberar frente, validar calidad y alinear destajo con control de obra", "E.g. Release front, validate quality and align destajo with project control")}
+                    />
+                  </label>
+                </div>
+
+                <div className="detailGrid" style={{ marginTop: 18 }}>
+                  <div className="detailRow">
+                    <div className="detailLabel">{t("Paso humano", "Human step")}</div>
+                    <div>{createHumanStep}</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">{t("Siguiente modulo", "Next module")}</div>
+                    <div>{createNextModule}</div>
+                  </div>
+                  <div className="detailRow">
+                    <div className="detailLabel">{t("Checklist de alta", "Intake checklist")}</div>
+                    <div className="tableCellStack">
+                      {createGateChecks.length > 0 ? (
+                        createGateChecks.map((check) => (
+                          <span key={check} className="tableCellMuted">
+                            {check}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="tableCellMuted">
+                          {t(
+                            "El subcontrato puede darse de alta y brincar de inmediato a seguimiento operativo.",
+                            "The subcontract can be created and moved directly into operating follow-through."
+                          )}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="row gap wrap" style={{ marginTop: 18 }}>
+                  <button type="button" className="button" disabled={isCreating} onClick={() => void handleCreateSubcontract()}>
+                    {isCreating ? t("Creando...", "Creating...") : t("Dar de alta subcontrato", "Create subcontract")}
+                  </button>
+                  <Link className="buttonGhost" href="/projects">
+                    {t("Abrir proyectos", "Open projects")}
+                  </Link>
+                  <Link
+                    className="buttonGhost"
+                    href={buildQualityPrefillHref({
+                      projectName: createForm.projectName,
+                      frontName: createForm.frontName,
+                      contractorName: createForm.contractorName,
+                      nextAction: createForm.nextAction
+                    })}
+                  >
+                    {t("Abrir calidad", "Open quality")}
+                  </Link>
+                  <Link
+                    className="buttonGhost"
+                    href={`/accounts-payable?source=subcontracts&supplierName=${encodeURIComponent(createForm.contractorName)}&projectName=${encodeURIComponent(createForm.projectName)}&purchaseOrderCode=${encodeURIComponent(createForm.code)}&nextAction=${encodeURIComponent(createForm.nextAction)}`}
+                  >
+                    {t("Abrir cuentas por pagar", "Open accounts payable")}
+                  </Link>
+                </div>
+
+                {createMessage ? <p className="formSuccess">{createMessage}</p> : null}
+                {createError ? <p className="formError">{createError}</p> : null}
               </Card>
             </section>
 
@@ -931,7 +1391,7 @@ export default function SubcontractsPage() {
                   },
                   {
                     key: "status",
-                    label: t("Acción actual", "Current action"),
+                    label: t("Accion actual", "Current action"),
                     render: (risk) => risk.status
                   }
                 ]}
@@ -947,8 +1407,8 @@ export default function SubcontractsPage() {
           />
         ) : (
           <EmptyState
-            title={isLoading ? t("Cargando vista de subcontratos", "Loading subcontracts overview") : t("La vista de subcontratos aún no carga", "Subcontracts overview not loaded yet")}
-            description={t("Esta ruta espera una respuesta viva del backend de subcontratos para la empresa activa.", "This route expects a live backend subcontract response for the active tenant.")}
+            title={isLoading ? t("Cargando vista de subcontratos", "Loading subcontracts overview") : t("La vista de subcontratos aun no carga", "Subcontracts overview not loaded yet")}
+            description={t("Esta ruta puede cargar subcontratos del backend o desde los datos de respaldo disponibles.", "This route can load tenant subcontract data from the backend or available fallback data.")}
             primaryAction={{ label: t("Ir al tablero", "Go to dashboard"), href: "/dashboard" }}
           />
         )}

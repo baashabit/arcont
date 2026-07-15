@@ -1596,6 +1596,20 @@ export const SubcontractOverviewSchema = z.object({
   focusLine: SubcontractLineSchema.nullable()
 });
 
+export const CreateSubcontractLineRequestSchema = z.object({
+  code: z.string().min(3),
+  contractorName: z.string().min(3),
+  projectName: z.string().min(3),
+  frontName: z.string().min(3),
+  activeHeadcount: z.number().int().positive(),
+  attendanceRate: z.number().min(0).max(100),
+  productivityRate: z.number().min(0).max(100),
+  complianceExpirations: z.number().int().nonnegative(),
+  incidentCount: z.number().int().nonnegative(),
+  subcontractHealth: z.enum(["controlled", "watch", "critical"]),
+  nextAction: z.string().min(8)
+});
+
 export const UpdateSubcontractLineRequestSchema = z.object({
   subcontractHealth: z.enum(["controlled", "watch", "critical"]),
   nextAction: z.string().min(8)
@@ -2114,6 +2128,7 @@ export type UpdateHrWorkforceItemRequestContract = z.infer<typeof UpdateHrWorkfo
 export type SubcontractRiskContract = z.infer<typeof SubcontractRiskSchema>;
 export type SubcontractLineContract = z.infer<typeof SubcontractLineSchema>;
 export type SubcontractOverviewContract = z.infer<typeof SubcontractOverviewSchema>;
+export type CreateSubcontractLineRequestContract = z.infer<typeof CreateSubcontractLineRequestSchema>;
 export type UpdateSubcontractLineRequestContract = z.infer<typeof UpdateSubcontractLineRequestSchema>;
 export type PostSaleRiskContract = z.infer<typeof PostSaleRiskSchema>;
 export type PostSaleCaseContract = z.infer<typeof PostSaleCaseSchema>;

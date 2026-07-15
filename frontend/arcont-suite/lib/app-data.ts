@@ -55,9 +55,13 @@ const mockCompanies: CompanyContract[] = [
       "projects.daily-log",
       "procurement.purchasing",
       "inventory.warehouse",
+      "inventory.receiving",
+      "inventory.movements",
+      "inventory.equipment",
       "finance.accounting",
       "compliance.postsale",
-      "hr.workforce"
+      "hr.workforce",
+      "integrations.field-data"
     ]
   },
   {

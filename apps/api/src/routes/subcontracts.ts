@@ -1,4 +1,7 @@
-import { UpdateSubcontractLineRequestSchema } from "@arcont/contracts";
+import {
+  CreateSubcontractLineRequestSchema,
+  UpdateSubcontractLineRequestSchema
+} from "@arcont/contracts";
 import type { FastifyInstance } from "fastify";
 import { authError } from "../lib/domain-error.js";
 
@@ -27,6 +30,33 @@ export async function registerSubcontractsRoutes(app: FastifyInstance) {
       session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
 
     return app.container.subcontractsService.getOverview(companyId);
+  });
+
+  app.post<{ Body: unknown; Querystring: { companyId?: string } }>("/subcontracts/lines", async (request) => {
+    const accessToken = getBearerToken(request.headers.authorization);
+    const session = await app.container.authService.authorize(accessToken, {
+      requiredPermissions: ["hr:*"],
+      companyId: request.query.companyId
+    });
+    const input = CreateSubcontractLineRequestSchema.parse(request.body);
+
+    const companyId =
+      session.role.scope === "platform" ? request.query.companyId ?? session.company.id : session.company.id;
+
+    return app.container.subcontractsService.createLine({
+      companyId,
+      code: input.code,
+      contractorName: input.contractorName,
+      projectName: input.projectName,
+      frontName: input.frontName,
+      activeHeadcount: input.activeHeadcount,
+      attendanceRate: input.attendanceRate,
+      productivityRate: input.productivityRate,
+      complianceExpirations: input.complianceExpirations,
+      incidentCount: input.incidentCount,
+      subcontractHealth: input.subcontractHealth,
+      nextAction: input.nextAction
+    });
   });
 
   app.patch<{ Params: { lineId: string }; Body: unknown; Querystring: { companyId?: string } }>(

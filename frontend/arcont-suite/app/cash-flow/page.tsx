@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -31,48 +32,14 @@ function healthTone(status: CashFlowLineContract["health"]) {
   }
 }
 
-function lineActionOptions(line: CashFlowLineContract) {
-  switch (line.health) {
-    case "critical":
-      return [
-        {
-          label: { es: "Mover a atencion", en: "Move to watch" },
-          health: "watch" as const,
-          nextAction: "Contain the short-term gap and keep treasury monitoring active while backlog clears"
-        }
-      ];
-    case "watch":
-      return [
-        {
-          label: { es: "Escalar a critica", en: "Escalate critical" },
-          health: "critical" as const,
-          nextAction: "Escalate the stream because short-term liquidity pressure remains unresolved"
-        },
-        {
-          label: { es: "Marcar controlada", en: "Mark controlled" },
-          health: "controlled" as const,
-          nextAction: "Collections, payables and evidence now support a stable weekly cash outlook"
-        }
-      ];
-    default:
-      return [
-        {
-          label: { es: "Mover a atencion", en: "Move to watch" },
-          health: "watch" as const,
-          nextAction: "Monitor this stream before treasury drift impacts the next disbursement cycle"
-        }
-      ];
-  }
-}
-
 function cashFlowHealthLabel(status: CashFlowLineContract["health"]) {
   switch (status) {
     case "controlled":
-      return { es: "Controlada", en: "Controlled" };
+      return { es: "Controlado", en: "Controlled" };
     case "watch":
-      return { es: "Atencion", en: "Watch" };
+      return { es: "Vigilancia", en: "Watch" };
     default:
-      return { es: "Critica", en: "Critical" };
+      return { es: "Crítico", en: "Critical" };
   }
 }
 
@@ -85,22 +52,92 @@ function cashFlowSourceLabel(sourceType: CashFlowLineContract["sourceType"]) {
     case "collections":
       return { es: "Cobranza", en: "Collections" };
     case "tax":
-      return { es: "Impuestos", en: "Tax" };
+      return { es: "Fiscal", en: "Tax" };
     default:
       return { es: "Cierre", en: "Close" };
   }
 }
 
-function cashFlowStreamLabel(streamName: string) {
-  switch (streamName) {
-    case "Accounts payable release":
-      return { es: "Liberacion de cuentas por pagar", en: "Accounts payable release" };
-    case "Operating cash lane":
-      return { es: "Carril operativo de caja", en: "Operating cash lane" };
-    case "Fiscal commitments":
-      return { es: "Compromisos fiscales", en: "Fiscal commitments" };
+type CashFlowQueueInsight = {
+  line: CashFlowLineContract;
+  lane: {
+    tone: "success" | "warning" | "danger" | "info";
+    label: { es: string; en: string };
+    helper: { es: string; en: string };
+  };
+};
+
+function buildCashFlowLane(line: CashFlowLineContract): CashFlowQueueInsight["lane"] {
+  if (line.health === "critical") {
+    return {
+      tone: "danger",
+      label: { es: "Contención inmediata", en: "Immediate containment" },
+      helper: { es: "La secuencia semanal ya está bajo presión real.", en: "Weekly sequencing is already under real pressure." }
+    };
+  }
+
+  if (line.weeklyNet < 0) {
+    return {
+      tone: "warning",
+      label: { es: "Gap semanal", en: "Weekly gap" },
+      helper: { es: "Reordena salida o recupera entrada antes del siguiente corte.", en: "Resequence outflow or recover inflow before the next cutoff." }
+    };
+  }
+
+  if (line.confidencePercent < 75) {
+    return {
+      tone: "warning",
+      label: { es: "Pronóstico débil", en: "Weak forecast" },
+      helper: { es: "Tesorería no debería confiar todavía en esta proyección.", en: "Treasury should not trust this projection yet." }
+    };
+  }
+
+  if (line.openPressureItems > 0) {
+    return {
+      tone: "info",
+      label: { es: "Seguimiento activo", en: "Active follow-up" },
+      helper: { es: "Sigue vivo por pendientes operativos, aunque no esté crítico.", en: "Still active because of open operating items, even if not critical." }
+    };
+  }
+
+  return {
+    tone: "success",
+    label: { es: "Listo para continuidad", en: "Ready for continuity" },
+    helper: { es: "Puede continuar sin reconstruir el contexto financiero.", en: "Can continue without rebuilding the financial context." }
+  };
+}
+
+function lineActionOptions(line: CashFlowLineContract) {
+  switch (line.health) {
+    case "critical":
+      return [
+        {
+          label: "Move to watch",
+          health: "watch" as const,
+          nextAction: "Contain the short-term gap and keep treasury monitoring active while backlog clears"
+        }
+      ];
+    case "watch":
+      return [
+        {
+          label: "Escalate critical",
+          health: "critical" as const,
+          nextAction: "Escalate the stream because short-term liquidity pressure remains unresolved"
+        },
+        {
+          label: "Mark controlled",
+          health: "controlled" as const,
+          nextAction: "Collections, payables and evidence now support a stable weekly cash outlook"
+        }
+      ];
     default:
-      return { es: streamName, en: streamName };
+      return [
+        {
+          label: "Move to watch",
+          health: "watch" as const,
+          nextAction: "Monitor this stream before treasury drift impacts the next disbursement cycle"
+        }
+      ];
   }
 }
 
@@ -219,46 +256,28 @@ function buildCashFlowReportBack(line: CashFlowLineContract | null) {
   return "Report back on the next treasury refresh confirming the stream stayed controlled and predictable.";
 }
 
-function buildCashFlowHumanStepLabel(line: CashFlowLineContract | null) {
+function buildCashFlowHumanStep(line: CashFlowLineContract | null) {
   if (!line) {
-    return {
-      es: "Selecciona una corriente para ver el siguiente movimiento de tesoreria.",
-      en: "Choose a stream to see the next treasury move."
-    };
+    return "Choose a stream to see the next treasury move.";
   }
 
   if (line.health === "critical") {
-    return {
-      es: "Conten ahora la salida o cobranza de mayor presion y asigna un responsable antes de que tesoreria secuencie cualquier otro movimiento alrededor de esta corriente.",
-      en: "Contain the highest-pressure disbursement or collection item now and assign an owner before treasury sequences anything else around this stream."
-    };
+    return "Contain the highest-pressure disbursement or collection item now and assign an owner before treasury sequences anything else around this stream.";
   }
 
   if (line.weeklyNet < 0) {
-    return {
-      es: "Re-secuencia la presion inmediata de salidas y confirma si cuentas por pagar o tesoreria pueden diferir, dividir o repriorizar el siguiente evento de caja.",
-      en: "Re-sequence the immediate outflow pressure and confirm whether AP or treasury can delay, split or re-prioritize the next cash event."
-    };
+    return "Re-sequence the immediate outflow pressure and confirm whether AP or treasury can delay, split or re-prioritize the next cash event.";
   }
 
   if (line.confidencePercent < 75) {
-    return {
-      es: "Actualiza primero los insumos del pronostico para que tesoreria no opere sobre una corriente que aun cambia demasiado de una semana a otra.",
-      en: "Refresh the forecast inputs first so treasury is not acting on a stream that still moves too much week to week."
-    };
+    return "Refresh the forecast inputs first so treasury is not acting on a stream that still moves too much week to week.";
   }
 
   if (line.openPressureItems > 0) {
-    return {
-      es: "Resuelve ahora los puntos de presion nombrados y confirma cual de ellos sigue bloqueando una decision limpia de tesoreria o finanzas.",
-      en: "Clear the named pressure items now and confirm which one still blocks a clean treasury or finance decision."
-    };
+    return "Clear the named pressure items now and confirm which one still blocks a clean treasury or finance decision.";
   }
 
-  return {
-    es: "Manten la corriente en revision semanal y pasa directo a la ejecucion de tesoreria o finanzas sin reconstruir el contexto de liquidez.",
-    en: "Keep the stream under weekly review and move directly into treasury or finance execution without rebuilding the liquidity context."
-  };
+  return "Keep the stream under weekly review and move directly into treasury or finance execution without rebuilding the liquidity context.";
 }
 
 function buildCashFlowRouteSummary(line: CashFlowLineContract | null) {
@@ -288,209 +307,157 @@ function buildCashFlowRouteSummary(line: CashFlowLineContract | null) {
 function buildCashFlowOperationalLinks(line: CashFlowLineContract | null) {
   if (!line) {
     return [
-      { label: { es: "Abrir tesoreria", en: "Open treasury" }, href: "/treasury/payment-runs" },
-      { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" },
-      { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" }
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open finance", href: "/finance" }
     ];
   }
 
   if (line.health === "critical") {
     return [
-      { label: { es: "Abrir tesoreria", en: "Open treasury" }, href: "/treasury/payment-runs" },
-      { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" },
-      { label: { es: "Abrir catalogo de proveedores", en: "Open supplier master" }, href: "/supplier-master" }
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open accounts payable", href: "/accounts-payable" },
+      { label: "Open supplier master", href: "/supplier-master" }
     ];
   }
 
   if (line.weeklyNet < 0) {
     return [
-      { label: { es: "Abrir tesoreria", en: "Open treasury" }, href: "/treasury/payment-runs" },
-      { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" },
-      { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" }
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open finance", href: buildCashFlowFinanceHref(line) },
+      { label: "Open accounts payable", href: "/accounts-payable" }
     ];
   }
 
   if (line.confidencePercent < 75) {
     return [
-      { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" },
-      { label: { es: "Abrir tesoreria", en: "Open treasury" }, href: "/treasury/payment-runs" },
-      { label: { es: "Abrir catalogo de proveedores", en: "Open supplier master" }, href: "/supplier-master" }
+      { label: "Open finance", href: buildCashFlowFinanceHref(line) },
+      { label: "Open treasury", href: "/treasury/payment-runs" },
+      { label: "Open supplier master", href: "/supplier-master" }
     ];
   }
 
   return [
-    { label: { es: "Abrir tesoreria", en: "Open treasury" }, href: "/treasury/payment-runs" },
-    { label: { es: "Abrir finanzas", en: "Open finance" }, href: "/finance" },
-    { label: { es: "Abrir cuentas por pagar", en: "Open accounts payable" }, href: "/accounts-payable" }
+    { label: "Open treasury", href: "/treasury/payment-runs" },
+    { label: "Open finance", href: buildCashFlowFinanceHref(line) },
+    { label: "Open accounts payable", href: "/accounts-payable" }
   ];
 }
 
-function buildCashFlowSelectedStation(
-  line: CashFlowLineContract | null,
-  treasuryChainPressure: number
-) {
+function buildCashFlowFinanceHref(line: CashFlowLineContract | null) {
   if (!line) {
+    return "/finance";
+  }
+
+  const query = new URLSearchParams({
+    source: "cash-flow",
+    lineCode: line.code,
+    streamName: line.streamName,
+    sourceType: line.sourceType,
+    health: line.health,
+    weeklyNet: String(line.weeklyNet),
+    openPressureItems: String(line.openPressureItems),
+    nextAction: line.nextAction
+  });
+
+  return `/finance?${query.toString()}`;
+}
+
+function cashFlowLinkLabel(href: string) {
+  switch (href) {
+    case "/treasury/payment-runs":
+      return { es: "Abrir tesorería", en: "Open treasury" };
+    case "/accounts-payable":
+      return { es: "Abrir CXP", en: "Open accounts payable" };
+    case "/supplier-master":
+      return { es: "Abrir proveedores", en: "Open supplier master" };
+    default:
+      return { es: "Abrir finanzas", en: "Open finance" };
+  }
+}
+
+type PaymentRunCashFlowContext = {
+  source: "payment-runs";
+  runCode: string;
+  runStatus: string;
+  runOwner: string;
+  criticalInvoices: number;
+  totalAmount: number;
+  nextAction: string;
+};
+
+function buildPaymentRunCashFlowContext(
+  searchParams: ReturnType<typeof useSearchParams>
+): PaymentRunCashFlowContext | null {
+  if (searchParams.get("source") !== "payment-runs") {
     return null;
   }
 
-  const treasuryCta = {
-    label: { es: "Ir a tesoreria ahora", en: "Go to treasury now" },
-    href: "/treasury/payment-runs"
-  };
-  const accountsPayableCta = {
-    label: { es: "Ir a cuentas por pagar", en: "Go to accounts payable" },
-    href: "/accounts-payable"
-  };
-  const supplierMasterCta = {
-    label: { es: "Ir a catalogo de proveedores", en: "Go to supplier master" },
-    href: "/supplier-master"
-  };
-  const financeCta = {
-    label: { es: "Ir a finanzas", en: "Go to finance" },
-    href: "/finance"
+  const criticalInvoicesValue = Number(searchParams.get("criticalInvoices") ?? "0");
+  const totalAmountValue = Number(searchParams.get("totalAmount") ?? "0");
+
+  const context = {
+    source: "payment-runs" as const,
+    runCode: searchParams.get("runCode")?.trim() ?? "",
+    runStatus: searchParams.get("runStatus")?.trim() ?? "",
+    runOwner: searchParams.get("runOwner")?.trim() ?? "",
+    criticalInvoices: Number.isFinite(criticalInvoicesValue) ? criticalInvoicesValue : 0,
+    totalAmount: Number.isFinite(totalAmountValue) ? totalAmountValue : 0,
+    nextAction: searchParams.get("nextAction")?.trim() ?? ""
   };
 
-  if (line.health === "critical" || line.weeklyNet < 0 || treasuryChainPressure >= 8) {
-    return {
-      immediateModule: {
-        es: "Tesoreria debe tomar esta corriente de inmediato para contener la salida, ajustar secuencia y proteger la siguiente corrida.",
-        en: "Treasury should take this stream immediately to contain the outflow, resequence timing and protect the next run."
-      },
-      secondHop:
-        line.sourceType === "payables"
-          ? {
-              es: "Segundo salto operativo: cuentas por pagar para re-priorizar o dividir facturas antes de liberar.",
-              en: "Second operating hop: accounts payable to reprioritize or split invoices before release."
-            }
-          : {
-              es: "Segundo salto operativo: finanzas para validar el supuesto de caja que respalda la nueva secuencia.",
-              en: "Second operating hop: finance to validate the cash assumption backing the new sequence."
-            },
-      returnConfirmed: {
-        es: "Debe regresar confirmado el monto contenido, la fecha re-secuenciada y quien queda responsable hasta el siguiente ciclo de desembolso.",
-        en: "It should come back with the contained amount, the resequenced date and the named owner through the next disbursement cycle confirmed."
-      },
-      primaryCta: treasuryCta,
-      ctaReason: {
-        es: "CTA principal recomendado: contener liquidez antes de prometer otra salida.",
-        en: "Recommended primary CTA: contain liquidity before committing another outflow."
-      }
-    };
-  }
+  return Object.values(context).some((value) => (typeof value === "string" ? value.length > 0 : value > 0)) ? context : null;
+}
 
-  if (line.sourceType === "payables") {
-    return {
-      immediateModule: {
-        es: "Cuentas por pagar es el responsable inmediato para limpiar bloqueo, prioridad y elegibilidad de factura en esta corriente.",
-        en: "Accounts payable is the immediate owner to clear invoice blockage, priority and release readiness for this stream."
-      },
-      secondHop: {
-        es: "Segundo salto operativo: tesoreria para ejecutar la corrida con la nueva prioridad ya depurada.",
-        en: "Second operating hop: treasury to run the disbursement with the cleaned priority set."
-      },
-      returnConfirmed: {
-        es: "Debe regresar confirmado que facturas salen, cuales se difieren y que monto queda listo para liberacion real.",
-        en: "It should come back confirming which invoices move, which ones are deferred and what amount is actually ready for release."
-      },
-      primaryCta: accountsPayableCta,
-      ctaReason: {
-        es: "CTA principal recomendado: resolver el bloqueo operativo donde nace la presion.",
-        en: "Recommended primary CTA: clear the operating blocker where the pressure starts."
-      }
-    };
-  }
+function findBestMatchingCashFlowLine(
+  overview: CashFlowOverviewContract,
+  context: PaymentRunCashFlowContext
+) {
+  return (
+    overview.lines
+      .map((line) => {
+        let score = 0;
 
-  if (line.sourceType === "tax") {
-    return {
-      immediateModule: {
-        es: "Finanzas es el responsable inmediato para confirmar calendario fiscal, monto comprometido y margen real de maniobra.",
-        en: "Finance is the immediate owner to confirm the tax calendar, committed amount and actual room to maneuver."
-      },
-      secondHop: {
-        es: "Segundo salto operativo: tesoreria para secuenciar el pago fiscal ya confirmado contra el resto de salidas.",
-        en: "Second operating hop: treasury to sequence the confirmed tax payment against the rest of the outflows."
-      },
-      returnConfirmed: {
-        es: "Debe regresar confirmado el vencimiento valido, el monto final y si el flujo semanal sigue sosteniendo ese compromiso.",
-        en: "It should come back confirming the valid due date, the final amount and whether the weekly flow still supports that commitment."
-      },
-      primaryCta: financeCta,
-      ctaReason: {
-        es: "CTA principal recomendado: fijar el compromiso fiscal antes de que tesoreria confie la secuencia.",
-        en: "Recommended primary CTA: lock the tax commitment before treasury trusts the sequence."
-      }
-    };
-  }
+        if (context.runStatus === "blocked" || context.runStatus === "draft" || context.criticalInvoices > 0) {
+          if (line.sourceType === "payables") {
+            score += 8;
+          }
+          if (line.health !== "controlled") {
+            score += 2;
+          }
+        }
 
-  if (line.confidencePercent < 75 || line.sourceType === "collections" || line.sourceType === "close") {
-    return {
-      immediateModule: {
-        es: "Finanzas debe tomar esta corriente primero para corregir el supuesto, fecha o evidencia que sigue moviendo el pronostico.",
-        en: "Finance should take this stream first to correct the assumption, date or evidence still moving the forecast."
-      },
-      secondHop: {
-        es: "Segundo salto operativo: tesoreria para volver a secuenciar con el pronostico ya estabilizado.",
-        en: "Second operating hop: treasury to resequence once the forecast is stabilized."
-      },
-      returnConfirmed: {
-        es: "Debe regresar confirmado el dato corregido, la nueva confianza del pronostico y el impacto neto semanal esperado.",
-        en: "It should come back with the corrected input, the refreshed forecast confidence and the expected weekly net impact confirmed."
-      },
-      primaryCta: financeCta,
-      ctaReason: {
-        es: "CTA principal recomendado: arreglar el supuesto antes de ejecutar caja con ruido.",
-        en: "Recommended primary CTA: fix the assumption before executing cash on noisy inputs."
-      }
-    };
-  }
+        if ((context.runStatus === "ready" || context.runStatus === "executed") && context.criticalInvoices === 0) {
+          if (line.sourceType === "cash") {
+            score += 8;
+          }
+          if (line.health === "controlled" || line.health === "watch") {
+            score += 2;
+          }
+        }
 
-  if (line.openPressureItems > 0) {
-    return {
-      immediateModule: {
-        es: "Catalogo de proveedores debe tomar el frente inmediato para limpiar expediente o friccion documental que sigue arrastrando la corriente.",
-        en: "Supplier master should take the immediate front to clear the supplier packet or document friction still dragging this stream."
-      },
-      secondHop: {
-        es: "Segundo salto operativo: tesoreria para ejecutar una vez que el proveedor deje de bloquear la liberacion.",
-        en: "Second operating hop: treasury to execute once the supplier stops blocking release."
-      },
-      returnConfirmed: {
-        es: "Debe regresar confirmado que el expediente quedo completo, que la restriccion desaparecio y que la corriente vuelve a ser ejecutable.",
-        en: "It should come back confirming the packet is complete, the restriction is gone and the stream is executable again."
-      },
-      primaryCta: supplierMasterCta,
-      ctaReason: {
-        es: "CTA principal recomendado: quitar primero la friccion aguas arriba que sigue frenando liquidez.",
-        en: "Recommended primary CTA: remove the upstream friction that is still slowing liquidity."
-      }
-    };
-  }
+        if (context.nextAction.toLowerCase().includes("fiscal") && line.sourceType === "tax") {
+          score += 4;
+        }
 
-  return {
-    immediateModule: {
-      es: "Tesoreria puede continuar como responsable inmediato porque la corriente ya esta suficientemente clara para ejecutar sin reconstruir contexto.",
-      en: "Treasury can continue as the immediate owner because the stream is already clear enough to execute without rebuilding context."
-    },
-    secondHop: {
-      es: "Segundo salto operativo: finanzas para cerrar seguimiento y sostener el proximo refresco semanal.",
-      en: "Second operating hop: finance to close follow-up and sustain the next weekly refresh."
-    },
-    returnConfirmed: {
-      es: "Debe regresar confirmado que la ejecucion salio como se planeo y que el neto semanal se mantuvo controlado.",
-      en: "It should come back confirming execution landed as planned and the weekly net stayed controlled."
-    },
-    primaryCta: treasuryCta,
-    ctaReason: {
-      es: "CTA principal recomendado: ejecutar desde tesoreria sin volver a abrir un circuito ya resuelto.",
-      en: "Recommended primary CTA: execute from treasury without reopening a lane that is already resolved."
-    }
-  };
+        if (context.nextAction.length > 0 && line.nextAction.toLowerCase().includes(context.nextAction.toLowerCase().slice(0, 12))) {
+          score += 1;
+        }
+
+        return { line, score };
+      })
+      .sort((left, right) => right.score - left.score)
+      .find((item) => item.score > 0)
+      ?.line ?? null
+  );
 }
 
 export default function CashFlowPage() {
-  const { activeCompany, apiBaseUrl, session, source, uiLanguage, localizeText } = useAppState();
-  const t = (es: string, en: string) => localizeText({ es, en });
+  const searchParams = useSearchParams();
+  const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
+  const t = useCallback((es: string, en: string) => localizeText({ es, en }), [localizeText]);
+  const paymentRunContext = useMemo(() => buildPaymentRunCashFlowContext(searchParams), [searchParams]);
   const [overview, setOverview] = useState<CashFlowOverviewContract | null>(null);
   const [accountsPayableOverview, setAccountsPayableOverview] = useState<Awaited<ReturnType<typeof fetchAccountsPayableOverview>> | null>(null);
   const [supplierMasterOverview, setSupplierMasterOverview] = useState<Awaited<ReturnType<typeof fetchSupplierMasterOverview>> | null>(null);
@@ -505,6 +472,23 @@ export default function CashFlowPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [appliedPaymentRunContextKey, setAppliedPaymentRunContextKey] = useState<string | null>(null);
+  const [paymentRunMatchedLineId, setPaymentRunMatchedLineId] = useState<string | null>(null);
+  const paymentRunContextKey = useMemo(
+    () =>
+      paymentRunContext
+        ? [
+            paymentRunContext.source,
+            paymentRunContext.runCode,
+            paymentRunContext.runStatus,
+            paymentRunContext.runOwner,
+            String(paymentRunContext.criticalInvoices),
+            String(paymentRunContext.totalAmount),
+            paymentRunContext.nextAction
+          ].join("|")
+        : null,
+    [paymentRunContext]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -592,7 +576,7 @@ export default function CashFlowPage() {
   const selectedWhyNow = useMemo(() => buildCashFlowWhyNow(selectedLine), [selectedLine]);
   const selectedDownstreamEffect = useMemo(() => buildCashFlowDownstreamEffect(selectedLine), [selectedLine]);
   const selectedReportBack = useMemo(() => buildCashFlowReportBack(selectedLine), [selectedLine]);
-  const selectedHumanStep = useMemo(() => localizeText(buildCashFlowHumanStepLabel(selectedLine)), [localizeText, selectedLine]);
+  const selectedHumanStep = useMemo(() => buildCashFlowHumanStep(selectedLine), [selectedLine]);
   const selectedRouteSummary = useMemo(() => buildCashFlowRouteSummary(selectedLine), [selectedLine]);
   const selectedOperationalLinks = useMemo(() => buildCashFlowOperationalLinks(selectedLine), [selectedLine]);
   const treasuryChainPressure = useMemo(
@@ -605,15 +589,47 @@ export default function CashFlowPage() {
       (treasuryOverview?.unavailableInvoices.length ?? 0),
     [accountsPayableOverview, supplierMasterOverview, treasuryOverview]
   );
-  const selectedStation = useMemo(
-    () => buildCashFlowSelectedStation(selectedLine, treasuryChainPressure),
-    [selectedLine, treasuryChainPressure]
-  );
 
   const lineActions = useMemo(() => (selectedLine ? lineActionOptions(selectedLine) : []), [selectedLine]);
-  const selectedHealthLabel = selectedLine ? localizeText(cashFlowHealthLabel(selectedLine.health)) : null;
-  const selectedSourceLabel = selectedLine ? localizeText(cashFlowSourceLabel(selectedLine.sourceType)) : null;
-  const selectedStreamLabel = selectedLine ? localizeText(cashFlowStreamLabel(selectedLine.streamName)) : null;
+  const queueInsights = useMemo<CashFlowQueueInsight[]>(
+    () =>
+      filteredLines.map((line) => ({
+        line,
+        lane: buildCashFlowLane(line)
+      })),
+    [filteredLines]
+  );
+  const queueSummary = useMemo(
+    () => ({
+      negativeWeeklyNet: filteredLines.filter((line) => line.weeklyNet < 0).length,
+      lowConfidence: filteredLines.filter((line) => line.confidencePercent < 75).length,
+      criticalOrWatch: filteredLines.filter((line) => line.health !== "controlled").length,
+      openPressure: filteredLines.reduce((sum, line) => sum + line.openPressureItems, 0)
+    }),
+    [filteredLines]
+  );
+  const selectedLineInsight = useMemo(
+    () => queueInsights.find((item) => item.line.id === selectedLine?.id) ?? null,
+    [queueInsights, selectedLine?.id]
+  );
+  const paymentRunContextRows = useMemo(
+    () =>
+      paymentRunContext
+        ? [
+            { label: t("Corrida", "Payment run"), value: paymentRunContext.runCode },
+            { label: t("Estado", "Status"), value: paymentRunContext.runStatus },
+            { label: t("Responsable", "Owner"), value: paymentRunContext.runOwner },
+            { label: t("Facturas críticas", "Critical invoices"), value: String(paymentRunContext.criticalInvoices) },
+            { label: t("Importe total", "Total amount"), value: paymentRunContext.totalAmount > 0 ? `MXN ${paymentRunContext.totalAmount.toLocaleString()}` : "" },
+            { label: t("Siguiente acción", "Next action"), value: paymentRunContext.nextAction }
+          ].filter((row) => row.value)
+        : [],
+    [paymentRunContext, t]
+  );
+  const hasPaymentRunClearMatch =
+    Boolean(paymentRunContext) &&
+    Boolean(selectedLine) &&
+    paymentRunMatchedLineId === selectedLine?.id;
 
   useEffect(() => {
     if (!overview) {
@@ -636,6 +652,32 @@ export default function CashFlowPage() {
     setActionError(null);
     setActionMessage(null);
   }, [selectedLineId, selectedLine?.id, selectedLine?.nextAction]);
+
+  useEffect(() => {
+    if (!overview || !paymentRunContext || !paymentRunContextKey || appliedPaymentRunContextKey === paymentRunContextKey) {
+      return;
+    }
+
+    const matchedLine = findBestMatchingCashFlowLine(overview, paymentRunContext);
+    if (matchedLine) {
+      setSelectedLineId(matchedLine.id);
+      setSourceFilter(matchedLine.sourceType);
+      setPaymentRunMatchedLineId(matchedLine.id);
+    } else {
+      const fallbackSourceType =
+        paymentRunContext.runStatus === "ready" || paymentRunContext.runStatus === "executed"
+          ? "cash"
+          : "payables";
+      setSourceFilter(fallbackSourceType);
+      setPaymentRunMatchedLineId(null);
+    }
+
+    if (paymentRunContext.nextAction.length > 0) {
+      setNextActionDraft(paymentRunContext.nextAction);
+    }
+
+    setAppliedPaymentRunContextKey(paymentRunContextKey);
+  }, [appliedPaymentRunContextKey, overview, paymentRunContext, paymentRunContextKey]);
 
   async function handleAction(health: CashFlowLineContract["health"], suggestedNextAction: string) {
     if (!selectedLine) {
@@ -693,12 +735,9 @@ export default function CashFlowPage() {
 
   return (
     <AppShell
-      title={{ es: "Flujo de efectivo", en: "Cash flow" }}
-      eyebrow={{ es: "Mesa de liquidez", en: "Liquidity workbench" }}
-      description={{
-        es: "Opera liquidez semanal con senales ligadas de tesoreria, cuentas por pagar, proveedores y finanzas.",
-        en: "Operate weekly liquidity with linked treasury, accounts payable, supplier and finance signals."
-      }}
+      title={t("Flujo de efectivo", "Cash flow")}
+      eyebrow={t("Ejecución de tesorería", "Treasury execution")}
+      description={t("Entradas, salidas y presión de liquidez de corto plazo conectadas con señales operativas y fiscales vivas.", "Short-term inflow, outflow and liquidity pressure tied to live operational and fiscal signals.")}
     >
       <ModuleGate
         moduleKeys={["finance.accounting"]}
@@ -707,141 +746,156 @@ export default function CashFlowPage() {
       >
         {overview ? (
           <>
-            <section className="grid cols2" lang={uiLanguage}>
-              <Card
-                title={selectedStreamLabel ?? t("Mesa de liquidez", "Liquidity workbench")}
-                description={
-                  selectedLine
-                    ? `${selectedLine.code} · ${selectedSourceLabel}`
-                    : t("Selecciona una corriente para abrir su control de liquidez semanal.", "Select a stream to open its weekly liquidity control.")
-                }
-                aside={
-                  selectedLine ? <Badge tone={healthTone(selectedLine.health)}>{selectedHealthLabel}</Badge> : <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? t("modo demo", "demo mode") : t("backend real", "live backend")}</Badge>
-                }
-              >
-                {selectedLine ? (
+            <section className="grid cols4">
+              <KpiCard
+                label={t("Flujos visibles", "Tracked streams")}
+                value={String(filteredSummary.trackedStreams)}
+                footnote={t("Flujos de tesorería visibles con el filtro actual.", "Treasury streams visible in the current operating filter.")}
+              />
+              <KpiCard
+                label={t("Entradas proyectadas", "Projected inflows")}
+                value={`MXN ${filteredSummary.projectedInflows.toLocaleString()}`}
+                footnote={t("Entrada esperada de corto plazo en el subconjunto visible.", "Expected short-term cash intake from the visible subset.")}
+              />
+              <KpiCard
+                label={t("Salidas proyectadas", "Projected outflows")}
+                value={`MXN ${filteredSummary.projectedOutflows.toLocaleString()}`}
+                footnote={t("Salida esperada de corto plazo en el subconjunto visible.", "Expected short-term cash drain from the visible subset.")}
+              />
+              <KpiCard
+                label={t("Neto semanal", "Weekly net")}
+                value={`MXN ${filteredSummary.weeklyNet.toLocaleString()}`}
+                footnote={t("Gap o superávit semanal direccional en los flujos visibles.", "Directional weekly liquidity gap or surplus from visible streams.")}
+              />
+              <KpiCard
+                label={t("Cadena de tesorería", "Treasury chain")}
+                value={String(treasuryChainPressure)}
+                footnote={t("Presión combinada entre proveedores, CXP y carril de liberación de tesorería.", "Combined pressure from supplier fiscal posture, AP blockers and treasury release lane.")}
+              />
+            </section>
+
+            {paymentRunContextRows.length > 0 ? (
+              <section className="grid cols1">
+                <Card
+                  title={t("Contexto recibido desde tesorería", "Context received from treasury")}
+                  description={
+                    hasPaymentRunClearMatch
+                      ? t(
+                          "Se identificó el carril financiero relacionado y quedó seleccionado automáticamente.",
+                          "The related financial lane was identified and selected automatically."
+                        )
+                      : t(
+                          "No hubo un match exacto por referencia, así que se aplicó el carril más coherente y el contexto sigue visible.",
+                          "There was no exact reference match, so the most coherent lane was applied and the context remains visible."
+                        )
+                  }
+                  aside={<Badge tone="info">Precargado desde tesorería / Preloaded from treasury</Badge>}
+                >
                   <div className="detailGrid">
                     <div className="detailRow">
-                      <div className="detailLabel">{t("Caja inicial", "Starting cash")}</div>
-                      <div>MXN {selectedLine.startingCash.toLocaleString()}</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Entradas proyectadas", "Projected inflows")}</div>
-                      <div>MXN {selectedLine.projectedInflows.toLocaleString()}</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Salidas proyectadas", "Projected outflows")}</div>
-                      <div>MXN {selectedLine.projectedOutflows.toLocaleString()}</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Neto semanal", "Weekly net")}</div>
-                      <div>MXN {selectedLine.weeklyNet.toLocaleString()}</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Cobertura", "Coverage")}</div>
-                      <div>{selectedLine.liquidityCoverageWeeks.toFixed(1)} {t("semanas", "weeks")}</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Confianza", "Confidence")}</div>
-                      <div>{selectedLine.confidencePercent}%</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Presion abierta", "Open pressure")}</div>
-                      <div>{selectedLine.openPressureItems}</div>
-                    </div>
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
-                      <div>{selectedHumanStep}</div>
-                    </div>
-                    {selectedStation ? (
-                      <>
-                        <div className="detailRow">
-                          <div className="detailLabel">{t("Modulo responsable inmediato", "Immediate responsible module")}</div>
-                          <div>{localizeText(selectedStation.immediateModule)}</div>
-                        </div>
-                        <div className="detailRow">
-                          <div className="detailLabel">{t("Segundo salto operativo", "Second operating hop")}</div>
-                          <div>{localizeText(selectedStation.secondHop)}</div>
-                        </div>
-                        <div className="detailRow">
-                          <div className="detailLabel">{t("Debe regresar confirmado", "What must come back confirmed")}</div>
-                          <div>{localizeText(selectedStation.returnConfirmed)}</div>
-                        </div>
-                      </>
-                    ) : null}
-                    <div className="detailRow">
-                      <div className="detailLabel">{t("Senales ligadas", "Linked pressure chain")}</div>
-                      <div>{treasuryChainPressure} {t("puntos de presion aguas arriba", "upstream pressure points")}</div>
-                    </div>
-                    {selectedStation ? (
-                      <div className="stack" style={{ gap: 10 }}>
-                        <div className="detailRow">
-                          <div className="detailLabel">{t("CTA principal recomendado", "Recommended primary CTA")}</div>
-                          <div>{localizeText(selectedStation.ctaReason)}</div>
-                        </div>
-                        <div className="row gap wrap">
-                          <Link className="button" href={selectedStation.primaryCta.href}>
-                            {localizeText(selectedStation.primaryCta.label)}
-                          </Link>
-                        </div>
+                      <div className="detailLabel">{t("Estado del contexto", "Context status")}</div>
+                      <div>
+                        <Badge tone="info">
+                          {hasPaymentRunClearMatch
+                            ? t("Contexto aplicado", "Context applied")
+                            : t("Contexto visible", "Context visible")}
+                        </Badge>
                       </div>
-                    ) : null}
-                    <label className="stack" htmlFor="cash-flow-next-action">
-                      <span className="detailLabel">{t("Siguiente accion", "Next action")}</span>
-                      <textarea
-                        id="cash-flow-next-action"
-                        className="field"
-                        rows={4}
-                        lang={uiLanguage}
-                        value={nextActionDraft}
-                        onChange={(event) => setNextActionDraft(event.target.value)}
-                        placeholder={t("Describe la accion siguiente de tesoreria, cobranza o pago", "Describe the next treasury, collection or payment action")}
-                      />
-                    </label>
-                    <div className="row gap wrap">
-                      {selectedOperationalLinks.map((link, index) => (
-                        <Link key={`${link.href}-${link.label.en}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
-                          {localizeText(link.label)}
-                        </Link>
-                      ))}
                     </div>
-                    <div className="cluster">
-                      {lineActions.map((action) => (
-                        <button
-                          key={action.health}
-                          type="button"
-                          className="button"
-                          onClick={() => void handleAction(action.health, action.nextAction)}
-                          disabled={isSaving}
-                        >
-                          {localizeText(action.label)}
-                        </button>
-                      ))}
-                    </div>
-                    {actionError ? <EmptyState title={t("Actualizacion bloqueada", "Update blocked")} description={actionError} /> : null}
-                    {actionMessage ? <EmptyState title={t("Corriente actualizada", "Stream updated")} description={actionMessage} /> : null}
+                    {paymentRunContextRows.map((row) => (
+                      <div key={row.label} className="detailRow">
+                        <div className="detailLabel">{row.label}</div>
+                        <div>{row.value}</div>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <EmptyState
-                    title={t("Selecciona una corriente", "Select a stream")}
-                    description={t("Elige una corriente de liquidez para revisar postura, cobertura y accion siguiente.", "Choose a liquidity stream to review posture, coverage and next action.")}
-                  />
-                )}
+                </Card>
+              </section>
+            ) : null}
+
+            <section className="grid cols2">
+              <Card
+                title={t("Mesa de decisión semanal", "Weekly decision bench")}
+                description={t("Usa esta pantalla para decidir qué flujo requiere contención y cuál ya puede seguir a tesorería.", "Use this board to decide which stream needs containment and which one can continue into treasury.")}
+                aside={<Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? t("modo demo", "demo mode") : t("backend vivo", "live backend")}</Badge>}
+              >
+                <div className="stackSm">
+                  <p className="textMuted">
+                    {t(
+                      "La pantalla ya es operable para prueba humana: revisa presión, actualiza salud del flujo y sigue la cadena de liberación hasta CXP y tesorería.",
+                      "The screen is now operable for human testing: review pressure, update stream health and follow the release chain through AP and treasury."
+                    )}
+                  </p>
+                  <div className="badgeRow">
+                    <Badge tone="info">{t("proveedores", "supplier master")}</Badge>
+                    <Badge tone="info">{t("cuentas por pagar", "accounts payable")}</Badge>
+                    <Badge tone="info">{t("tesorería", "treasury")}</Badge>
+                    <Badge tone="info">{t("flujo de efectivo", "cash flow")}</Badge>
+                  </div>
+                </div>
               </Card>
 
               <Card
-                title={t("Cola de corrientes", "Stream queue")}
-                description={t("Cambia de corriente rapido con los filtros actuales activos.", "Switch streams quickly with the current filters still applied.")}
-                aside={<Badge tone={isLoading ? "info" : "gold"}>{isLoading ? t("actualizando", "refreshing") : t("lista para operar", "ready to operate")}</Badge>}
+                title={t("Carril de liberación", "Release lane")}
+                description={t("Flujo de efectivo ya lee proveedores, CXP y tesorería en un mismo carril operativo.", "Cash flow now reads suppliers, AP and treasury in one operating lane.")}
+                aside={
+                  <Badge tone={treasuryChainPressure > 8 ? "danger" : treasuryChainPressure > 3 ? "warning" : "success"}>
+                    {treasuryChainPressure > 8 ? t("alta presión", "high pressure") : treasuryChainPressure > 3 ? t("vigilancia", "watch") : t("controlado", "controlled")}
+                  </Badge>
+                }
               >
-                <FilterBar summary={`${filteredLines.length} ${t("corrientes visibles", "visible streams")}`}>
+                <div className="detailGrid">
+                <div className="detailRow"><div className="detailLabel">{t("Bloqueos fiscales proveedor", "Supplier fiscal blockers")}</div><div>{supplierMasterOverview?.summary.criticalSuppliers ?? 0} {t("críticos y", "critical and")} {supplierMasterOverview?.summary.incompletePackets ?? 0} {t("expedientes incompletos", "incomplete packets")}</div></div>
+                <div className="detailRow"><div className="detailLabel">{t("Cuentas por pagar", "Accounts payable")}</div><div>{accountsPayableOverview?.summary.blockedInvoices ?? 0} {t("bloqueadas y", "blocked and")} {accountsPayableOverview?.summary.overdueInvoices ?? 0} {t("vencidas", "overdue invoices")}</div></div>
+                <div className="detailRow"><div className="detailLabel">{t("Ejecución tesorería", "Treasury execution")}</div><div>{treasuryOverview?.summary.blockedRuns ?? 0} {t("corridas bloqueadas y", "blocked runs and")} {treasuryOverview?.unavailableInvoices.length ?? 0} {t("facturas inelegibles", "ineligible invoices")}</div></div>
+                <div className="detailRow"><div className="detailLabel">{t("Qué significa", "What this means")}</div><div>{treasuryChainPressure > 0 ? t("Tesorería depende de limpieza fiscal y de CXP antes de liberar con calidad.", "Treasury depends on upstream fiscal and AP cleanup before clean release.") : t("El carril de tesorería está suficientemente limpio para una ejecución predecible.", "Treasury lane is currently clean enough for predictable short-term execution.")}</div></div>
+              </div>
+              <div className="row gap wrap" style={{ marginTop: 16 }}>
+                <Link className="button" href="/supplier-master">{t("Abrir proveedores", "Open supplier master")}</Link>
+                <Link className="buttonGhost" href="/accounts-payable">{t("Abrir CXP", "Open accounts payable")}</Link>
+                <Link className="buttonGhost" href="/treasury/payment-runs">{t("Abrir tesorería", "Open treasury")}</Link>
+                <Link className="buttonGhost" href={buildCashFlowFinanceHref(selectedLine)}>{t("Abrir finanzas", "Open finance")}</Link>
+              </div>
+            </Card>
+
+              <Card title={t("Bandeja de flujo", "Cash flow queue")} description={t("Prioriza los flujos que necesitan contención o los que ya pueden continuar.", "Prioritize the streams that need containment or can already continue.")}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 12,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                    marginBottom: 16
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 4, borderRadius: 18, border: "1px solid rgba(21, 31, 41, 0.08)", padding: "12px 14px", background: "rgba(255,255,255,0.88)" }}>
+                    <span className="detailLabel">{t("Gap semanal", "Weekly gap")}</span>
+                    <strong>{queueSummary.negativeWeeklyNet}</strong>
+                    <span>{t("flujos con neto negativo", "streams with negative net")}</span>
+                  </div>
+                  <div style={{ display: "grid", gap: 4, borderRadius: 18, border: "1px solid rgba(21, 31, 41, 0.08)", padding: "12px 14px", background: "rgba(255,255,255,0.88)" }}>
+                    <span className="detailLabel">{t("Críticos o vigilancia", "Critical or watch")}</span>
+                    <strong>{queueSummary.criticalOrWatch}</strong>
+                    <span>{t("requieren decisión operativa", "require operating decision")}</span>
+                  </div>
+                  <div style={{ display: "grid", gap: 4, borderRadius: 18, border: "1px solid rgba(21, 31, 41, 0.08)", padding: "12px 14px", background: "rgba(255,255,255,0.88)" }}>
+                    <span className="detailLabel">{t("Pronóstico débil", "Weak forecast")}</span>
+                    <strong>{queueSummary.lowConfidence}</strong>
+                    <span>{t("todavía no confiables para secuenciar", "not yet safe for sequencing")}</span>
+                  </div>
+                  <div style={{ display: "grid", gap: 4, borderRadius: 18, border: "1px solid rgba(21, 31, 41, 0.08)", padding: "12px 14px", background: "rgba(255,255,255,0.88)" }}>
+                    <span className="detailLabel">{t("Pendientes abiertos", "Open pressure")}</span>
+                    <strong>{queueSummary.openPressure}</strong>
+                    <span>{t("elementos empujando liquidez", "items pushing liquidity")}</span>
+                  </div>
+                </div>
+                <FilterBar summary={t(`${filteredLines.length} flujos coinciden con los filtros actuales`, `${filteredLines.length} cash flow streams match the current operating filters`)}>
                   <label className="fieldLabel">
                     {t("Salud", "Health")}
                     <select className="field" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}>
                       <option value="all">{t("Todas", "All")}</option>
-                      <option value="critical">{t("Criticas", "Critical")}</option>
-                      <option value="watch">{t("Atencion", "Watch")}</option>
-                      <option value="controlled">{t("Controladas", "Controlled")}</option>
+                      <option value="critical">{t("Crítica", "Critical")}</option>
+                      <option value="watch">{t("Vigilancia", "Watch")}</option>
+                      <option value="controlled">{t("Controlada", "Controlled")}</option>
                     </select>
                   </label>
                   <label className="fieldLabel">
@@ -849,234 +903,230 @@ export default function CashFlowPage() {
                     <select className="field" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as typeof sourceFilter)}>
                       <option value="all">{t("Todos", "All")}</option>
                       <option value="cash">{t("Caja", "Cash")}</option>
-                      <option value="payables">{t("Cuentas por pagar", "Payables")}</option>
+                      <option value="payables">{t("CXP", "Payables")}</option>
                       <option value="collections">{t("Cobranza", "Collections")}</option>
-                      <option value="tax">{t("Impuestos", "Tax")}</option>
+                      <option value="tax">{t("Fiscal", "Tax")}</option>
                       <option value="close">{t("Cierre", "Close")}</option>
                     </select>
                   </label>
                   <label className="fieldLabel" style={{ minWidth: 220 }}>
-                    {t("Buscar", "Search")}
+                    {t("Búsqueda", "Search")}
                     <input
                       className="field"
                       type="search"
                       value={searchFilter}
                       onChange={(event) => setSearchFilter(event.target.value)}
-                      placeholder={t("Corriente, codigo, origen o accion", "Stream, code, source or action")}
+                      placeholder={t("Flujo, código, origen o siguiente acción", "Stream, code, source or next action")}
                     />
                   </label>
-                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? t("modo demo", "demo mode") : t("backend real", "live backend")}</Badge>
+                  <Badge tone={isDemoMode ? "warning" : "success"}>{isDemoMode ? t("modo demo", "demo mode") : t("backend vivo", "live backend")}</Badge>
+                  <Badge tone={isLoading ? "info" : "gold"}>{isLoading ? t("actualizando", "refreshing") : t("flujo listo", "cash flow ready")}</Badge>
                   <Badge tone={filteredSummary.criticalStreams > 0 ? "danger" : filteredSummary.weeklyNet < 0 ? "warning" : "success"}>
                     {filteredSummary.criticalStreams > 0
-                      ? `${filteredSummary.criticalStreams} ${t("criticas", "critical")}`
+                      ? t(`${filteredSummary.criticalStreams} críticas`, `${filteredSummary.criticalStreams} critical`)
                       : filteredSummary.weeklyNet < 0
                         ? t("neto negativo", "negative net")
                         : t("subconjunto controlado", "visible subset controlled")}
                   </Badge>
                   <Badge tone="info">{filteredSummary.averageConfidence}% {t("confianza", "confidence")}</Badge>
                 </FilterBar>
-
-                {filteredLines.length > 0 ? (
+                {queueInsights.length > 0 ? (
                   <div className="list">
-                    {filteredLines.map((line) => (
+                    {queueInsights.map((item) => (
                       <button
-                        key={line.id}
+                        key={item.line.id}
                         type="button"
-                        className={`listItem ${selectedLine?.id === line.id ? "listItemSelected" : ""}`}
-                        onClick={() => setSelectedLineId(line.id)}
+                        className={`listItem ${selectedLine?.id === item.line.id ? "listItemSelected" : ""}`}
+                        onClick={() => setSelectedLineId(item.line.id)}
                       >
-                        <div>
-                          <strong>{localizeText(cashFlowStreamLabel(line.streamName))}</strong>
-                          <p>{line.code} · {localizeText(cashFlowSourceLabel(line.sourceType))} · MXN {line.weeklyNet.toLocaleString()}</p>
+                        <div className="tableCellStack" style={{ alignItems: "flex-start" }}>
+                          <strong>{item.line.streamName}</strong>
+                          <p>{item.line.code} · {localizeText(cashFlowSourceLabel(item.line.sourceType))}</p>
+                          <span className="tableCellMuted">
+                            {`+MXN ${item.line.projectedInflows.toLocaleString()} · -MXN ${item.line.projectedOutflows.toLocaleString()} · MXN ${item.line.weeklyNet.toLocaleString()} ${t("neto", "net")}`}
+                          </span>
+                          <span className="tableCellMuted">
+                            {`${item.line.openPressureItems} ${t("pendientes abiertos", "open pressure items")} · ${item.line.confidencePercent}% ${t("confianza", "confidence")}`}
+                          </span>
                         </div>
-                        <Badge tone={healthTone(line.health)}>{localizeText(cashFlowHealthLabel(line.health))}</Badge>
+                        <div className="tableCellStack" style={{ alignItems: "flex-end" }}>
+                          <Badge tone={item.lane.tone}>{localizeText(item.lane.label)}</Badge>
+                          <Badge tone={healthTone(item.line.health)}>{localizeText(cashFlowHealthLabel(item.line.health))}</Badge>
+                          <span className="tableCellMuted">{localizeText(item.lane.helper)}</span>
+                        </div>
                       </button>
                     ))}
                   </div>
                 ) : (
+                  <EmptyState title={t("Sin flujos para estos filtros", "No streams for these filters")} description={t("Limpia o cambia filtros para recuperar la bandeja activa.", "Clear or change filters to recover the active queue.")} />
+                )}
+              </Card>
+
+              <Card
+                title={t("Flujo seleccionado", "Selected stream")}
+                description={t("Liquidez, presión operativa y siguiente decisión de tesorería.", "Liquidity, operating pressure and next treasury action.")}
+                aside={selectedLine ? <Badge tone={healthTone(selectedLine.health)}>{localizeText(cashFlowHealthLabel(selectedLine.health))}</Badge> : null}
+              >
+                {selectedLine ? (
+                  <div className="detailGrid">
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Carril operativo", "Operating lane")}</div>
+                      <div className="tableCellStack">
+                        <div className="row gap wrap" style={{ alignItems: "center" }}>
+                          <Badge tone={selectedLineInsight?.lane.tone ?? "info"}>
+                            {selectedLineInsight ? localizeText(selectedLineInsight.lane.label) : t("Sin flujo", "No stream")}
+                          </Badge>
+                          <Badge tone={healthTone(selectedLine.health)}>{localizeText(cashFlowHealthLabel(selectedLine.health))}</Badge>
+                        </div>
+                        <span className="tableCellMuted">{selectedLineInsight ? localizeText(selectedLineInsight.lane.helper) : t("Selecciona un flujo para ver el carril operativo.", "Select a stream to inspect the operating lane.")}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Caja inicial", "Starting cash")}</div>
+                      <div>MXN {selectedLine.startingCash.toLocaleString()}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Pendientes abiertos", "Open pressure items")}</div>
+                      <div>{selectedLine.openPressureItems}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Confianza", "Confidence")}</div>
+                      <div>{selectedLine.confidencePercent}%</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Cobertura de liquidez", "Liquidity coverage")}</div>
+                      <div>{selectedLine.liquidityCoverageWeeks.toFixed(1)} {t("semanas", "weeks")}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Por qué ahora", "Why now")}</div>
+                      <div>{selectedWhyNow}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Efecto aguas abajo", "Downstream effect")}</div>
+                      <div>{selectedDownstreamEffect}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Ruta sugerida", "Route summary")}</div>
+                      <div>{selectedRouteSummary}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Reporte", "Report back")}</div>
+                      <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
+                      <div>{selectedHumanStep}</div>
+                    </div>
+
+                    <label className="stack" htmlFor="cash-flow-next-action">
+                      <span className="detailLabel">{t("Siguiente acción", "Next action")}</span>
+                      <textarea
+                        id="cash-flow-next-action"
+                        className="field"
+                        rows={4}
+                        value={nextActionDraft}
+                        onChange={(event) => setNextActionDraft(event.target.value)}
+                        placeholder={t("Describe la acción de tesorería, cobranza o pago que sigue.", "Describe the treasury, collection or payment action required next")}
+                      />
+                    </label>
+                    <div className="row gap wrap">
+                      {selectedOperationalLinks.map((link, index) => (
+                        <Link key={`${link.href}-${link.label}`} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
+                          {localizeText(cashFlowLinkLabel(link.href))}
+                        </Link>
+                      ))}
+                    </div>
+
+                    <div className="cluster">
+                      {lineActions.map((action) => (
+                        <button
+                          key={action.label}
+                          type="button"
+                          className="button"
+                          onClick={() => void handleAction(action.health, action.nextAction)}
+                          disabled={isSaving}
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="row gap wrap">
+                      <Link className="button secondary" href={buildCashFlowFinanceHref(selectedLine)}>{t("Abrir finanzas", "Open finance")}</Link>
+                      <Link className="buttonGhost" href="/accounts-payable">{t("Abrir CXP", "Open accounts payable")}</Link>
+                      <Link className="buttonGhost" href="/treasury/payment-runs">{t("Abrir tesorería", "Open treasury")}</Link>
+                      <Link className="buttonGhost" href="/supplier-master">{t("Abrir proveedores", "Open supplier master")}</Link>
+                    </div>
+
+                    {actionError ? <EmptyState title={t("Actualización bloqueada", "Update blocked")} description={actionError} /> : null}
+                    {actionMessage ? <EmptyState title={t("Flujo actualizado", "Stream updated")} description={actionMessage} /> : null}
+                  </div>
+                ) : (
                   <EmptyState
-                    title={t("Sin corrientes para estos filtros", "No streams for these filters")}
-                    description={t("Limpia filtros o busca otra corriente para volver a la mesa activa.", "Clear filters or search a different stream to return to the active workbench.")}
+                    title={t("Selecciona un flujo", "Select a stream")}
+                    description={t("Elige un flujo desde la bandeja para revisar liquidez y la siguiente acción.", "Choose a stream from the queue to inspect liquidity posture and next action.")}
                   />
                 )}
               </Card>
             </section>
 
-            <details className="captureDetails" lang={uiLanguage}>
-              <summary>{t("Detalles operativos", "Operational details")}</summary>
-              <div className="stack">
-                <section className="grid cols4">
-                  <KpiCard
-                    label={t("Corrientes visibles", "Tracked streams")}
-                    value={String(filteredSummary.trackedStreams)}
-                    footnote={t("Corrientes de tesoreria visibles en los filtros actuales.", "Treasury streams visible in the current operating filter.")}
-                  />
-                  <KpiCard
-                    label={t("Entradas proyectadas", "Projected inflows")}
-                    value={`MXN ${filteredSummary.projectedInflows.toLocaleString()}`}
-                    footnote={t("Entrada esperada de efectivo a corto plazo en el subconjunto visible.", "Expected short-term cash intake from the visible subset.")}
-                  />
-                  <KpiCard
-                    label={t("Salidas proyectadas", "Projected outflows")}
-                    value={`MXN ${filteredSummary.projectedOutflows.toLocaleString()}`}
-                    footnote={t("Salida esperada de efectivo a corto plazo en el subconjunto visible.", "Expected short-term cash drain from the visible subset.")}
-                  />
-                  <KpiCard
-                    label={t("Neto semanal", "Weekly net")}
-                    value={`MXN ${filteredSummary.weeklyNet.toLocaleString()}`}
-                    footnote={t("Brecha o superavit semanal de liquidez del subconjunto visible.", "Directional weekly liquidity gap or surplus from visible streams.")}
-                  />
-                  <KpiCard
-                    label={t("Cadena de tesoreria", "Treasury chain")}
-                    value={String(treasuryChainPressure)}
-                    footnote={t("Presion combinada entre proveedores, cuentas por pagar y liberacion de tesoreria.", "Combined pressure from supplier fiscal posture, AP blockers and treasury release lane.")}
-                  />
-                </section>
+            <section className="grid cols3">
+              <Card title={t("Señal de liquidez", "Liquidity signal")} description={t("Significado inmediato en caja del flujo seleccionado.", "Immediate cash meaning of the selected treasury stream.")}>
+                <p className="sectionText">{selectedStory?.liquiditySignal ?? t("Selecciona un flujo para revisar su señal de liquidez.", "Choose a stream to inspect its liquidity signal.")}</p>
+              </Card>
+              <Card title={t("Confianza del pronóstico", "Forecast confidence")} description={t("Qué tanto puede confiar tesorería en este flujo esta semana.", "How much treasury can trust this stream this week.")}>
+                <p className="sectionText">
+                  {selectedStory?.confidenceSignal ?? t("Selecciona un flujo para revisar la confianza del pronóstico.", "Choose a stream to inspect forecast confidence.")}
+                </p>
+              </Card>
+              <Card title={t("Carril de decisión", "Decision lane")} description={t("Siguiente lente operativo para el flujo seleccionado.", "Next treasury lens for the selected stream.")}>
+                <p className="sectionText">{selectedStory?.decisionLane ?? t("Selecciona un flujo para revisar el carril de decisión.", "Choose a stream to inspect the decision lane.")}</p>
+              </Card>
+            </section>
 
-                <section className="grid cols2">
-                  <Card
-                    title={t("Ruta de liberacion de tesoreria", "Treasury release lane")}
-                    description={t("La liquidez consolida postura fiscal de proveedores, bloqueos de CxP y ejecucion de tesoreria.", "Liquidity reads supplier fiscal posture, AP blockers and treasury execution in one lane.")}
-                    aside={
-                      <Badge tone={treasuryChainPressure > 8 ? "danger" : treasuryChainPressure > 3 ? "warning" : "success"}>
-                        {treasuryChainPressure > 8 ? t("alta presion", "high pressure") : treasuryChainPressure > 3 ? t("atencion", "watch") : t("controlada", "controlled")}
-                      </Badge>
+            <Card title={t("Riesgos del flujo", "Cash flow risks")} description={t("Riesgos que afectan cobranza, CXP, fiscal y continuidad de cierre.", "Risks affecting collections, payables, fiscal pressure and close continuity.")}>
+              {selectedRisks.length > 0 ? (
+                <DataTable
+                  rows={selectedRisks}
+                  columns={[
+                    {
+                      key: "risk",
+                      label: t("Riesgo", "Risk"),
+                      render: (row) => (
+                        <div className="tableCellStack">
+                          <strong>{row.title}</strong>
+                          <span className="tableCellMuted">{row.category}</span>
+                        </div>
+                      )
+                    },
+                    {
+                      key: "severity",
+                      label: t("Severidad", "Severity"),
+                      render: (row) => (
+                        <Badge tone={row.severity === "critical" ? "danger" : row.severity === "warning" ? "warning" : "info"}>
+                          {row.severity}
+                        </Badge>
+                      )
+                    },
+                    {
+                      key: "owner",
+                      label: t("Responsable", "Owner"),
+                      render: (row) => row.owner
                     }
-                  >
-                    <div className="detailGrid">
-                      <div className="detailRow"><div className="detailLabel">{t("Bloqueos fiscales de proveedor", "Supplier fiscal blockers")}</div><div>{supplierMasterOverview?.summary.criticalSuppliers ?? 0} {t("criticos", "critical")} {t("y", "and")} {supplierMasterOverview?.summary.incompletePackets ?? 0} {t("expedientes incompletos", "incomplete packets")}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Cuentas por pagar", "Accounts payable")}</div><div>{accountsPayableOverview?.summary.blockedInvoices ?? 0} {t("facturas bloqueadas", "blocked invoices")} {t("y", "and")} {accountsPayableOverview?.summary.overdueInvoices ?? 0} {t("vencidas", "overdue")}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Ejecucion de tesoreria", "Treasury execution")}</div><div>{treasuryOverview?.summary.blockedRuns ?? 0} {t("corridas bloqueadas", "blocked runs")} {t("y", "and")} {treasuryOverview?.unavailableInvoices.length ?? 0} {t("facturas inelegibles", "ineligible invoices")}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Lectura operativa", "What this means")}</div><div>{treasuryChainPressure > 0 ? t("Tesoreria depende de limpieza fiscal y de CxP antes de liberar sin friccion.", "Treasury depends on upstream fiscal and AP cleanup before clean release.") : t("La ruta de tesoreria esta suficientemente limpia para una ejecucion predecible.", "Treasury lane is currently clean enough for predictable short-term execution.")}</div></div>
-                    </div>
-                    <div className="row gap wrap" style={{ marginTop: 16 }}>
-                      <Link className="button" href="/supplier-master">{t("Abrir catalogo de proveedores", "Open supplier master")}</Link>
-                      <Link className="buttonGhost" href="/accounts-payable">{t("Abrir cuentas por pagar", "Open accounts payable")}</Link>
-                      <Link className="buttonGhost" href="/treasury/payment-runs">{t("Abrir tesoreria", "Open treasury")}</Link>
-                      <Link className="buttonGhost" href="/finance">{t("Abrir finanzas", "Open finance")}</Link>
-                    </div>
-                  </Card>
-
-                  <Card title={t("Tablero completo de corrientes", "Full stream board")} description={t("Vista extendida de entradas, salidas, cobertura y salud.", "Extended view of inflows, outflows, coverage and health.")}>
-                    <DataTable
-                      rows={filteredLines}
-                      columns={[
-                        {
-                          key: "stream",
-                          label: t("Corriente", "Stream"),
-                          render: (row) => (
-                            <button
-                              className="buttonGhost"
-                            type="button"
-                            onClick={() => setSelectedLineId(row.id)}
-                            style={{ justifyContent: "flex-start", paddingInline: 0 }}
-                          >
-                            <div className="tableCellStack">
-                                <strong>{localizeText(cashFlowStreamLabel(row.streamName))}</strong>
-                                <span className="tableCellMuted">{row.code} · {localizeText(cashFlowSourceLabel(row.sourceType))}</span>
-                              </div>
-                            </button>
-                          )
-                        },
-                        {
-                          key: "movement",
-                          label: t("Entradas vs salidas", "Inflow vs outflow"),
-                          render: (row) => (
-                            <div className="tableCellStack">
-                              <strong>+MXN {row.projectedInflows.toLocaleString()}</strong>
-                              <span className="tableCellMuted">-MXN {row.projectedOutflows.toLocaleString()}</span>
-                            </div>
-                          )
-                        },
-                        {
-                          key: "weekly",
-                          label: t("Neto semanal", "Weekly net"),
-                          render: (row) => (
-                            <div className="tableCellStack">
-                              <strong>MXN {row.weeklyNet.toLocaleString()}</strong>
-                              <span className="tableCellMuted">{row.liquidityCoverageWeeks.toFixed(1)} {t("semanas de cobertura", "weeks coverage")}</span>
-                            </div>
-                          )
-                        },
-                        {
-                          key: "health",
-                          label: t("Salud", "Health"),
-                          render: (row) => <Badge tone={healthTone(row.health)}>{localizeText(cashFlowHealthLabel(row.health))}</Badge>
-                        }
-                      ]}
-                    />
-                  </Card>
-                </section>
-
-                <section className="grid cols3">
-                  <Card title={t("Senal de liquidez", "Liquidity signal")} description={t("Lectura inmediata del impacto de caja.", "Immediate cash meaning of the selected stream.")}>
-                    <p className="sectionText">{selectedStory?.liquiditySignal ?? t("Selecciona una corriente para revisar su senal de liquidez.", "Choose a stream to inspect its liquidity signal.")}</p>
-                  </Card>
-                  <Card title={t("Confianza del pronostico", "Forecast confidence")} description={t("Que tanto puede confiar tesoreria esta semana.", "How much treasury can trust this stream this week.")}>
-                    <p className="sectionText">{selectedStory?.confidenceSignal ?? t("Selecciona una corriente para revisar su confianza.", "Choose a stream to inspect forecast confidence.")}</p>
-                  </Card>
-                  <Card title={t("Carril de decision", "Decision lane")} description={t("Siguiente lente operativo para la corriente activa.", "Next treasury lens for the selected stream.")}>
-                    <p className="sectionText">{selectedStory?.decisionLane ?? t("Selecciona una corriente para revisar el carril de decision.", "Choose a stream to inspect the decision lane.")}</p>
-                  </Card>
-                </section>
-
-                <section className="grid cols2">
-                  <Card title={t("Narrativa operativa", "Operational narrative")} description={t("Contexto extendido para seguimiento y reporte.", "Extended context for follow-up and report-back.")}>
-                    <div className="detailGrid">
-                      <div className="detailRow"><div className="detailLabel">{t("Por que ahora", "Why now")}</div><div>{selectedWhyNow}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Efecto aguas abajo", "Downstream effect")}</div><div>{selectedDownstreamEffect}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Resumen de ruta", "Route summary")}</div><div>{selectedRouteSummary}</div></div>
-                      <div className="detailRow"><div className="detailLabel">{t("Ventana de reporte", "Report back")}</div><div>{selectedReportBack}</div></div>
-                    </div>
-                  </Card>
-
-                  <Card title={t("Riesgos de flujo de efectivo", "Cash flow risks")} description={t("Riesgos que afectan cobranza, pagos, presion fiscal y continuidad de cierre.", "Risks affecting collections, payables, fiscal pressure and close continuity.")}>
-                    {selectedRisks.length > 0 ? (
-                      <DataTable
-                        rows={selectedRisks}
-                        columns={[
-                          {
-                            key: "risk",
-                            label: t("Riesgo", "Risk"),
-                            render: (row) => (
-                              <div className="tableCellStack">
-                                <strong>{row.title}</strong>
-                                <span className="tableCellMuted">{row.category}</span>
-                              </div>
-                            )
-                          },
-                          {
-                            key: "severity",
-                            label: t("Severidad", "Severity"),
-                            render: (row) => (
-                              <Badge tone={row.severity === "critical" ? "danger" : row.severity === "warning" ? "warning" : "info"}>
-                                {row.severity}
-                              </Badge>
-                            )
-                          },
-                          {
-                            key: "owner",
-                            label: t("Responsable", "Owner"),
-                            render: (row) => row.owner
-                          }
-                        ]}
-                      />
-                    ) : (
-                      <EmptyState
-                        title={t("Sin riesgos mapeados", "No mapped cash-flow risks")}
-                        description={t("Selecciona una corriente con presion fiscal o de caja para inspeccionar riesgos.", "Select a stream with active fiscal or cash pressure to inspect its risks.")}
-                      />
-                    )}
-                  </Card>
-                </section>
-              </div>
-            </details>
+                  ]}
+                />
+              ) : (
+                <EmptyState
+                  title={t("Sin riesgos mapeados", "No mapped cash-flow risks")}
+                  description={t("Selecciona un flujo con presión fiscal o de caja para revisar sus riesgos.", "Select a treasury stream with active fiscal or cash pressure to inspect its risks.")}
+                />
+              )}
+            </Card>
           </>
         ) : (
           <EmptyState
-            title={error ?? t("Flujo de efectivo no disponible", "Cash flow unavailable")}
-            description={t("No pudimos cargar la proyeccion de tesoreria para la empresa seleccionada. En modo demo esta pantalla debe seguir siendo util desde tesoreria, CxP y proveedores.", "We could not load the treasury projection for the selected company. In demo mode this screen should still be testable through the connected treasury, AP and supplier flow.")}
-            primaryAction={{ label: t("Abrir tesoreria", "Open treasury"), href: "/treasury/payment-runs" }}
+            title={error ?? t("Flujo no disponible", "Cash flow unavailable")}
+            description={t("No pudimos cargar la proyección de tesorería para esta empresa. En demo debe seguir siendo testeable mediante tesorería, CXP y proveedores.", "We could not load the treasury projection for the selected company. In demo mode this screen should still be testable through treasury, AP and supplier flow.")}
+            primaryAction={{ label: t("Abrir tesorería", "Open treasury"), href: "/treasury/payment-runs" }}
             secondaryAction={{ label: t("Abrir finanzas", "Open finance"), href: "/finance" }}
           />
         )}

@@ -22,7 +22,7 @@ Entregable esperado:
 
 3. Ejecutar:
 - `export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" && nvm use 24`
-- `npm run build:web`
+- `npx tsc --noEmit && npm run lint`
 
 4. Mantener todo en `main`.
 5. Reportar archivos tocados.

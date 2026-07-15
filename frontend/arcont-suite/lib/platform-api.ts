@@ -24,6 +24,7 @@ import {
   CompanyModuleStateSchema,
   CompanySchema,
   CreateAccountsPayableInvoiceRequestSchema,
+  CreateSubcontractLineRequestSchema,
   CreateProjectPortfolioItemRequestSchema,
   CreateProjectScheduleActivityRequestSchema,
   ImportProjectScheduleActivitiesRequestSchema,
@@ -151,6 +152,7 @@ import {
   type CompanyModuleStateContract,
   type CompanyContract,
   type CreateAccountsPayableInvoiceRequestContract,
+  type CreateSubcontractLineRequestContract,
   type CreateDocumentControlItemRequestContract,
   type CreateDailyLogEntryRequestContract,
   type CreateFieldMaterialRequestRequestContract,
@@ -254,6 +256,7 @@ import {
 import {
   addDemoTreasuryPaymentRunInvoice,
   createDemoAccountsPayableInvoice,
+  createDemoSubcontractLine,
   createDemoDailyLogEntry,
   createDemoDocumentControlItem,
   createDemoFieldMaterialRequest,
@@ -3275,6 +3278,48 @@ export async function fetchSubcontractOverview(
   }
 
   return companyId ? getDemoSubcontractOverview(companyId) : null;
+}
+
+export async function createSubcontractLine(
+  companyId: string | undefined,
+  input: CreateSubcontractLineRequestContract,
+  options: RequestOptions
+): Promise<ApiResult<SubcontractLineContract>> {
+  const payload = CreateSubcontractLineRequestSchema.parse(input);
+  if (companyId && !options.accessToken) {
+    return {
+      data: createDemoSubcontractLine(companyId, payload),
+      error: null
+    };
+  }
+
+  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+  const response = await requestResult(`/subcontracts/lines${query}`, options, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.data) {
+    if (companyId) {
+      return {
+        data: createDemoSubcontractLine(companyId, payload),
+        error: null
+      };
+    }
+
+    return {
+      data: null,
+      error: response.error
+    };
+  }
+
+  return {
+    data: SubcontractLineSchema.parse(response.data),
+    error: null
+  };
 }
 
 export async function updateSubcontractLine(

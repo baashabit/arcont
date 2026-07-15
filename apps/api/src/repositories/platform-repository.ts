@@ -845,6 +845,8 @@ type UpdateHrWorkforceItemInput = {
   nextAction: string;
 };
 
+type CreateHrWorkforceItemInput = Omit<HrWorkforceItemRecord, "id" | "updatedAt">;
+
 type PostSaleCaseRecord = {
   id: string;
   companyId: string;
@@ -1099,6 +1101,7 @@ export type PlatformRepository = {
   listCrmRisks(companyId: string): Promise<CrmRiskRecord[]>;
   listHrWorkforces(companyId: string): Promise<HrWorkforceItemRecord[]>;
   listHrRisks(companyId: string): Promise<HrRiskRecord[]>;
+  createHrWorkforceItem(input: CreateHrWorkforceItemInput): Promise<HrWorkforceItemRecord>;
   listPostSaleCases(companyId: string): Promise<PostSaleCaseRecord[]>;
   listPostSaleRisks(companyId: string): Promise<PostSaleRiskRecord[]>;
   listComplianceCases(companyId: string): Promise<ComplianceCaseRecord[]>;
@@ -3915,6 +3918,26 @@ export function createInMemoryPlatformRepository(): PlatformRepository {
       );
       return state.hrRisks.filter((risk) => workforceIds.has(risk.workforceId));
     },
+    async createHrWorkforceItem(input) {
+      const workforce: HrWorkforceItemRecord = {
+        id: createPrefixedId("wrk"),
+        companyId: input.companyId,
+        code: input.code,
+        contractorName: input.contractorName,
+        frontName: input.frontName,
+        activeHeadcount: input.activeHeadcount,
+        attendanceRate: input.attendanceRate,
+        productivityRate: input.productivityRate,
+        complianceExpirations: input.complianceExpirations,
+        incidentCount: input.incidentCount,
+        safetyStatus: input.safetyStatus,
+        nextAction: input.nextAction,
+        updatedAt: new Date().toISOString()
+      };
+
+      state.hrWorkforces.unshift(workforce);
+      return workforce;
+    },
     async listPostSaleCases(companyId: string) {
       return state.postSaleCases.filter((item) => item.companyId === companyId);
     },
@@ -6503,6 +6526,33 @@ export function createPostgresPlatformRepository(pool: Pool): PlatformRepository
       );
 
       return result.rows.map(mapHrRiskRow);
+    },
+    async createHrWorkforceItem(input) {
+      const result = await pool.query(
+        `
+          insert into hr_workforce_items
+            (id, company_id, code, contractor_name, front_name, active_headcount, attendance_rate, productivity_rate, compliance_expirations, incident_count, safety_status, next_action)
+          values
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          returning id, company_id, code, contractor_name, front_name, active_headcount, attendance_rate, productivity_rate, compliance_expirations, incident_count, safety_status, next_action, updated_at
+        `,
+        [
+          createPrefixedId("wrk"),
+          input.companyId,
+          input.code,
+          input.contractorName,
+          input.frontName,
+          input.activeHeadcount,
+          input.attendanceRate,
+          input.productivityRate,
+          input.complianceExpirations,
+          input.incidentCount,
+          input.safetyStatus,
+          input.nextAction
+        ]
+      );
+
+      return mapHrWorkforceRow(result.rows[0]);
     },
     async listPostSaleCases(companyId: string) {
       const items = await this.listCompanies();

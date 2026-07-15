@@ -388,9 +388,105 @@ function buildComplianceOperationalLinks(complianceCase: ComplianceCaseContract 
   ];
 }
 
+function complianceLinkLabel(label: string) {
+  switch (label) {
+    case "Open document control":
+      return { es: "Abrir control documental", en: "Open document control" };
+    case "Open post-sale":
+      return { es: "Abrir postventa", en: "Open post-sale" };
+    case "Open close control":
+      return { es: "Abrir control de cierre", en: "Open close control" };
+    default:
+      return { es: "Abrir proyectos", en: "Open projects" };
+  }
+}
+
+function buildComplianceSelectedStation(complianceCase: ComplianceCaseContract | null) {
+  const links = buildComplianceOperationalLinks(complianceCase);
+
+  if (!complianceCase) {
+    return {
+      primaryLabel: { es: "Control documental", en: "Document control" },
+      primaryReason: {
+        es: "Selecciona un expediente para aclarar qué dominio debe absorber primero la presión de cierre y cumplimiento.",
+        en: "Select a folder to clarify which domain should first absorb closure and compliance pressure."
+      },
+      secondaryLabel: { es: "Postventa", en: "Post-sale" },
+      secondaryReason: {
+        es: "Después del primer dominio, la continuidad debe conservar el impacto en cliente y entrega.",
+        en: "After the first domain, continuity should preserve customer and handover impact."
+      },
+      returnRule: {
+        es: "Regresa con dueño, condición de cierre y siguiente corte ya confirmados.",
+        en: "Return with owner, closure condition and next checkpoint already confirmed."
+      },
+      links
+    };
+  }
+
+  if (complianceCase.status === "blocked" || complianceCase.slaHoursRemaining < 0) {
+    return {
+      primaryLabel: { es: "Control documental", en: "Document control" },
+      primaryReason: {
+        es: "El expediente está bloqueado o vencido; primero debe cerrarse el hueco documental que mantiene viva la contingencia.",
+        en: "The folder is blocked or overdue, so the documentary gap keeping the contingency alive must close first."
+      },
+      secondaryLabel: { es: "Postventa", en: "Post-sale" },
+      secondaryReason: {
+        es: "Después del expediente, postventa debe absorber el impacto en cliente y devolver claridad de continuidad.",
+        en: "After the folder, post-sale should absorb customer impact and return continuity clarity."
+      },
+      returnRule: {
+        es: "Regresa con bloqueo contenido, dueño visible y decisión clara de si el expediente vuelve al carril activo.",
+        en: "Return with the blocker contained, the owner visible and a clear decision on whether the folder returns to the active lane."
+      },
+      links
+    };
+  }
+
+  if (complianceCase.openFindings > 0 || complianceCase.documentCompletion < 95) {
+    return {
+      primaryLabel: { es: "Control documental", en: "Document control" },
+      primaryReason: {
+        es: "Todavía hay hallazgos o evidencia incompleta; el cierre documental debe sostenerse antes de tratar el expediente como defendible.",
+        en: "Open findings or incomplete evidence remain, so documentary closure must hold before the folder is treated as defensible."
+      },
+      secondaryLabel: { es: "Control de cierre", en: "Close control" },
+      secondaryReason: {
+        es: "Después de la evidencia, cierre debe absorber la postura final y proteger que no se normalice deuda de gobernanza.",
+        en: "After evidence improves, close control should absorb final posture and prevent governance debt from being normalized."
+      },
+      returnRule: {
+        es: "Regresa con hallazgos cerrados o evidencia suficiente, y con una postura de cierre ya defendible.",
+        en: "Return with findings closed or enough evidence in place, and with a closure posture that is already defensible."
+      },
+      links
+    };
+  }
+
+  return {
+    primaryLabel: { es: "Postventa", en: "Post-sale" },
+    primaryReason: {
+      es: "El expediente ya está cerca del cierre limpio y ahora el siguiente turno útil es sostener continuidad con cliente y entrega.",
+      en: "The folder is already near clean closure and the next useful turn is sustaining customer and handover continuity."
+    },
+    secondaryLabel: { es: "Control de cierre", en: "Close control" },
+    secondaryReason: {
+      es: "Después de postventa, cierre debe absorber la confirmación formal y la disciplina del último checkpoint.",
+      en: "After post-sale, close control should absorb formal confirmation and last-checkpoint discipline."
+    },
+    returnRule: {
+      es: "Regresa con entrega o cierre confirmados y con el expediente realmente fuera de riesgo.",
+      en: "Return with handover or closure confirmed and with the folder truly out of risk."
+    },
+    links
+  };
+}
+
 export default function CompliancePage() {
-  const { activeCompany, apiBaseUrl, session, source } = useAppState();
+  const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const searchParams = useSearchParams();
+  const t = (es: string, en: string) => localizeText({ es, en });
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
   const [overview, setOverview] = useState<ComplianceOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<ComplianceBridgeContext>(null);
@@ -506,7 +602,8 @@ export default function CompliancePage() {
   const selectedHumanStep = useMemo(() => buildComplianceHumanStep(selectedCase), [selectedCase]);
   const selectedReportBack = useMemo(() => buildComplianceReportBack(selectedCase), [selectedCase]);
   const selectedRouteSummary = useMemo(() => buildComplianceRouteSummary(selectedCase), [selectedCase]);
-  const selectedOperationalLinks = useMemo(() => buildComplianceOperationalLinks(selectedCase), [selectedCase]);
+  const selectedCaseStation = useMemo(() => buildComplianceSelectedStation(selectedCase), [selectedCase]);
+  const selectedOperationalLinks = useMemo(() => selectedCaseStation.links, [selectedCaseStation]);
 
   const actionOptions = useMemo(() => (selectedCase ? complianceActionOptions(selectedCase) : []), [selectedCase]);
 
@@ -877,8 +974,26 @@ export default function CompliancePage() {
                       <div>{selectedHumanStep}</div>
                     </div>
                     <div className="detailRow">
+                      <div className="detailLabel">{t("Módulo responsable", "Responsible module")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(selectedCaseStation.primaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(selectedCaseStation.primaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div>
+                      <div className="tableCellStack">
+                        <strong>{localizeText(selectedCaseStation.secondaryLabel)}</strong>
+                        <span className="tableCellMuted">{localizeText(selectedCaseStation.secondaryReason)}</span>
+                      </div>
+                    </div>
+                    <div className="detailRow">
                       <div className="detailLabel">Report back</div>
                       <div>{selectedReportBack}</div>
+                    </div>
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Qué debe regresar confirmado", "What must return confirmed")}</div>
+                      <div>{localizeText(selectedCaseStation.returnRule)}</div>
                     </div>
                     <div className="detailRow">
                       <div className="detailLabel">Next action</div>
@@ -906,7 +1021,9 @@ export default function CompliancePage() {
                       <div className="row gap wrap">
                         {selectedOperationalLinks.map((link, index) => (
                           <Link key={link.href + link.label} className={index === 0 ? "button secondary" : "buttonGhost"} href={link.href}>
-                            {link.label}
+                            {index === 0
+                              ? t(`Ir primero a ${localizeText(selectedCaseStation.primaryLabel)}`, `Go first to ${localizeText(selectedCaseStation.primaryLabel)}`)
+                              : localizeText(complianceLinkLabel(link.label))}
                           </Link>
                         ))}
                       </div>

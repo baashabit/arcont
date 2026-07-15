@@ -27,6 +27,7 @@ import type {
   HrRiskContract,
   HrWorkforceItemContract,
   CreateAccountsPayableInvoiceRequestContract,
+  CreateSubcontractLineRequestContract,
   CreateTreasuryPaymentRunRequestContract,
   CreateProjectPortfolioItemRequestContract,
   CreateProjectScheduleActivityRequestContract,
@@ -3926,6 +3927,96 @@ export function updateDemoHrWorkforceItem(
   );
 
   return updated;
+}
+
+export function createDemoSubcontractLine(
+  companyId: string,
+  input: CreateSubcontractLineRequestContract
+): SubcontractLineContract {
+  const key = getSubcontractStorageKey(companyId);
+  const lines = readStorage(key, () => createSubcontractSeed(companyId));
+  const projects = readStorage(getProjectStorageKey(companyId), () => createProjectSeed(companyId));
+  const normalizedProjectName = input.projectName.trim();
+  const normalizedFrontName = input.frontName.trim();
+  const normalizedCode = input.code.trim().toUpperCase();
+  const project =
+    projects.find((item) => item.name.trim().toLowerCase() === normalizedProjectName.toLowerCase()) ??
+    projects.find(
+      (item) =>
+        item.name.trim().toLowerCase().includes(normalizedProjectName.toLowerCase()) ||
+        normalizedProjectName.toLowerCase().includes(item.name.trim().toLowerCase())
+    ) ??
+    null;
+  const frontName =
+    normalizedFrontName.toLowerCase().includes(normalizedProjectName.toLowerCase())
+      ? normalizedFrontName
+      : `${normalizedProjectName} · ${normalizedFrontName}`;
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+  const qualityReleaseReadiness = project?.qualityReleaseReadiness ?? clamp(
+    (input.subcontractHealth === "controlled" ? 90 : input.subcontractHealth === "watch" ? 82 : 72) -
+      input.complianceExpirations * 3 -
+      input.incidentCount * 5,
+    40,
+    100
+  );
+  const progressPercent = project?.progress ?? clamp(
+    Math.round(input.productivityRate + (input.subcontractHealth === "controlled" ? 4 : input.subcontractHealth === "watch" ? 1 : -4)),
+    20,
+    100
+  );
+  const progressGap = Number((progressPercent - input.productivityRate).toFixed(1));
+  const contractAmount = Math.round(
+    input.activeHeadcount * 185000 + input.productivityRate * 12000 + (project?.activeFronts ?? 1) * 210000
+  );
+  const earnedAmount = Math.round(
+    contractAmount * clamp(progressPercent / 100 - input.complianceExpirations * 0.02, 0.15, 1)
+  );
+  const invoicedAmount = Math.round(
+    earnedAmount * clamp(input.attendanceRate / 100 + input.productivityRate / 250, 0.35, 0.96)
+  );
+  const paidAmount = Math.round(
+    invoicedAmount * clamp(1 - input.incidentCount * 0.08 - input.complianceExpirations * 0.05, 0.42, 0.95)
+  );
+  const retentionAmount = Math.round(invoicedAmount * 0.1);
+  const latestDailyLogStatus =
+    input.subcontractHealth === "critical" || input.incidentCount > 0
+      ? "flagged"
+      : input.subcontractHealth === "watch"
+        ? "submitted"
+        : "approved";
+  const line: SubcontractLineContract = {
+    id: `sub_demo_${Date.now()}_${lines.length + 1}`,
+    workforceId: `wf_demo_${Date.now()}_${lines.length + 1}`,
+    companyId,
+    projectId: project?.id ?? null,
+    code: normalizedCode,
+    contractorName: input.contractorName.trim(),
+    frontName,
+    projectName: project?.name ?? normalizedProjectName,
+    projectStatus: project?.status ?? (input.subcontractHealth === "critical" ? "at_risk" : "active"),
+    subcontractHealth: input.subcontractHealth,
+    latestDailyLogStatus,
+    qualityReleaseReadiness,
+    contractAmount,
+    earnedAmount,
+    invoicedAmount,
+    paidAmount,
+    retentionAmount,
+    pendingDestajo: Math.max(invoicedAmount - paidAmount, 0),
+    productivityRate: input.productivityRate,
+    attendanceRate: input.attendanceRate,
+    complianceExpirations: input.complianceExpirations,
+    incidentCount: input.incidentCount,
+    activeHeadcount: input.activeHeadcount,
+    progressPercent,
+    progressGap,
+    nextAction: input.nextAction.trim(),
+    updatedAt: nowIso()
+  };
+
+  writeStorage(key, [line, ...lines]);
+
+  return line;
 }
 
 export function updateDemoSubcontractLine(

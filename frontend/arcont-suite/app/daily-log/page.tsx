@@ -44,13 +44,101 @@ type DailyLogCreateForm = {
   nextAction: string;
 };
 
-type DailyLogFieldPreload = {
-  source: "field";
+type DailyLogPreloadSource = "field" | "quality";
+
+type DailyLogContextualPreload = {
+  source: DailyLogPreloadSource;
   projectName: string;
   frontName: string;
-  owner: string;
+  supervisor: string;
   nextAction: string;
+  qualityOpenFindings: string;
+  qualityReleaseReadiness: string;
 };
+
+function normalizeDailyLogValue(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function buildDailyLogContextualPreload(
+  searchParams: ReturnType<typeof useSearchParams>
+): DailyLogContextualPreload | null {
+  const source = searchParams.get("source")?.trim();
+
+  if (source === "field") {
+    const projectName = searchParams.get("projectName")?.trim() ?? "";
+    const frontName = searchParams.get("frontName")?.trim() ?? "";
+    const supervisor = searchParams.get("owner")?.trim() ?? "";
+    const nextAction = searchParams.get("nextAction")?.trim() ?? "";
+
+    if (![projectName, frontName, supervisor, nextAction].some((value) => value.length > 0)) {
+      return null;
+    }
+
+    return {
+      source,
+      projectName,
+      frontName,
+      supervisor,
+      nextAction,
+      qualityOpenFindings: "",
+      qualityReleaseReadiness: ""
+    };
+  }
+
+  if (source === "quality") {
+    const projectName = searchParams.get("projectName")?.trim() ?? "";
+    const frontName = searchParams.get("areaName")?.trim() || searchParams.get("frontName")?.trim() || "";
+    const supervisor = searchParams.get("contractorName")?.trim() ?? "";
+    const nextAction = searchParams.get("nextAction")?.trim() ?? "";
+    const qualityOpenFindings = searchParams.get("openFindings")?.trim() ?? "";
+    const qualityReleaseReadiness = searchParams.get("releaseReadiness")?.trim() ?? "";
+
+    if (
+      ![projectName, frontName, supervisor, nextAction, qualityOpenFindings, qualityReleaseReadiness].some(
+        (value) => value.length > 0
+      )
+    ) {
+      return null;
+    }
+
+    return {
+      source,
+      projectName,
+      frontName,
+      supervisor,
+      nextAction,
+      qualityOpenFindings,
+      qualityReleaseReadiness
+    };
+  }
+
+  return null;
+}
+
+function findRelatedDailyLogEntry(
+  overview: DailyLogOverviewContract | null,
+  preload: DailyLogContextualPreload
+) {
+  if (!overview) {
+    return null;
+  }
+
+  const projectName = normalizeDailyLogValue(preload.projectName);
+  const frontName = normalizeDailyLogValue(preload.frontName);
+
+  if (!projectName || !frontName) {
+    return null;
+  }
+
+  return (
+    overview.entries.find(
+      (entry) =>
+        normalizeDailyLogValue(entry.projectName) === projectName &&
+        normalizeDailyLogValue(entry.frontName) === frontName
+    ) ?? null
+  );
+}
 
 function statusTone(status: DailyLogEntryContract["status"]) {
   switch (status) {
@@ -279,57 +367,6 @@ function createDefaultCreateForm(): DailyLogCreateForm {
   };
 }
 
-function normalizeFieldValue(value: string) {
-  return value.trim().toLocaleLowerCase();
-}
-
-function buildFieldPreload(searchParams: ReturnType<typeof useSearchParams>): DailyLogFieldPreload | null {
-  if (searchParams.get("source") !== "field") {
-    return null;
-  }
-
-  const projectName = searchParams.get("projectName")?.trim() ?? "";
-  const frontName = searchParams.get("frontName")?.trim() ?? "";
-  const owner = searchParams.get("owner")?.trim() ?? "";
-  const nextAction = searchParams.get("nextAction")?.trim() ?? "";
-
-  if (!projectName && !frontName && !owner && !nextAction) {
-    return null;
-  }
-
-  return {
-    source: "field",
-    projectName,
-    frontName,
-    owner,
-    nextAction
-  };
-}
-
-function findRelatedFieldEntry(entries: DailyLogEntryContract[], preload: DailyLogFieldPreload) {
-  const projectName = normalizeFieldValue(preload.projectName);
-  const frontName = normalizeFieldValue(preload.frontName);
-  const owner = normalizeFieldValue(preload.owner);
-
-  return (
-    entries.find((entry) => {
-      if (projectName && normalizeFieldValue(entry.projectName) !== projectName) {
-        return false;
-      }
-
-      if (frontName && normalizeFieldValue(entry.frontName) !== frontName) {
-        return false;
-      }
-
-      if (owner && normalizeFieldValue(entry.supervisor) !== owner) {
-        return false;
-      }
-
-      return Boolean(projectName && frontName);
-    }) ?? null
-  );
-}
-
 function createDailyLogExample(): DailyLogCreateForm {
   return {
     projectName: "Torre Demo",
@@ -479,7 +516,7 @@ function buildApprovalReadiness(entry: DailyLogEntryContract | null, t: Translat
   };
 }
 
-function buildEscalationDestination(entry: DailyLogEntryContract | null, t: Translate) {
+function buildEscalationDestination(entry: DailyLogEntryContract | null, nextActionDraft: string, t: Translate) {
   if (!entry) {
     return {
       label: t("Sin destino activo", "No active destination"),
@@ -500,7 +537,7 @@ function buildEscalationDestination(entry: DailyLogEntryContract | null, t: Tran
     return {
       label: t("Enviar a calidad", "Route to quality"),
       description: t("La liberación está limitada por hallazgos o evidencia incompleta.", "Release posture is being constrained by findings or missing readiness evidence."),
-      href: "/quality"
+      href: buildQualityHrefFromDailyLog(entry, nextActionDraft)
     };
   }
 
@@ -508,7 +545,7 @@ function buildEscalationDestination(entry: DailyLogEntryContract | null, t: Tran
     return {
       label: t("Coordinar en operaciones", "Coordinate in operations"),
       description: t("La continuidad del subcontrato requiere atención transversal antes del siguiente turno.", "Commercial or subcontract continuity needs cross-domain attention before the next shift."),
-      href: "/operations"
+      href: buildOperationsHrefFromDailyLog(entry, nextActionDraft)
     };
   }
 
@@ -669,7 +706,66 @@ function buildDailyLogRouteSummary(entry: DailyLogEntryContract | null, t: Trans
   return t("Esta bitácora puede seguir por equipo o seguimiento normal de campo con la historia del turno intacta.", "This log can continue through equipment or normal field follow-through with the current shift story intact.");
 }
 
-function buildDailyLogOperationalLinks(entry: DailyLogEntryContract | null, t: Translate) {
+function buildQualityHrefFromDailyLog(entry: DailyLogEntryContract | null, nextActionDraft: string) {
+  if (!entry?.projectName?.trim()) {
+    return "/quality";
+  }
+
+  const params = new URLSearchParams({
+    source: "daily-log",
+    projectName: entry.projectName
+  });
+
+  if (entry.frontName.trim()) {
+    params.set("areaName", entry.frontName.trim());
+  }
+
+  if (entry.supervisor.trim()) {
+    params.set("contractorName", entry.supervisor.trim());
+  }
+
+  params.set("checklistName", `Seguimiento de bitácora - ${entry.frontName}`);
+  params.set("openFindings", String(entry.qualityOpenFindings));
+  params.set("releaseReadiness", String(entry.qualityReleaseReadiness));
+
+  const nextAction = nextActionDraft.trim() || entry.nextAction;
+  if (nextAction.trim()) {
+    params.set("nextAction", nextAction.trim());
+  }
+
+  return `/quality?${params.toString()}`;
+}
+
+function buildOperationsHrefFromDailyLog(entry: DailyLogEntryContract | null, nextActionDraft: string) {
+  if (!entry?.projectName?.trim()) {
+    return "/operations";
+  }
+
+  const params = new URLSearchParams({
+    source: "daily-log",
+    projectName: entry.projectName
+  });
+
+  if (entry.frontName.trim()) {
+    params.set("frontName", entry.frontName.trim());
+  }
+
+  if (entry.supervisor.trim()) {
+    params.set("owner", entry.supervisor.trim());
+  }
+
+  params.set("pendingDestajo", String(entry.pendingDestajo));
+  params.set("subcontractHealth", entry.subcontractHealth);
+
+  const nextAction = nextActionDraft.trim() || entry.nextAction;
+  if (nextAction.trim()) {
+    params.set("nextAction", nextAction.trim());
+  }
+
+  return `/operations?${params.toString()}`;
+}
+
+function buildDailyLogOperationalLinks(entry: DailyLogEntryContract | null, nextActionDraft: string, t: Translate) {
   if (!entry) {
     return [
       { label: t("Abrir campo", "Open field"), href: "/field" },
@@ -681,22 +777,22 @@ function buildDailyLogOperationalLinks(entry: DailyLogEntryContract | null, t: T
   if (entry.blockersCount > 0 || entry.status === "flagged") {
     return [
       { label: t("Abrir campo", "Open field"), href: "/field" },
-      { label: t("Abrir operaciones", "Open operations"), href: "/operations" },
+      { label: t("Abrir operaciones", "Open operations"), href: buildOperationsHrefFromDailyLog(entry, nextActionDraft) },
       { label: t("Abrir calidad", "Open quality"), href: "/quality" }
     ];
   }
 
   if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
     return [
-      { label: t("Abrir calidad", "Open quality"), href: "/quality" },
+      { label: t("Abrir calidad", "Open quality"), href: buildQualityHrefFromDailyLog(entry, nextActionDraft) },
       { label: t("Abrir campo", "Open field"), href: "/field" },
-      { label: t("Abrir operaciones", "Open operations"), href: "/operations" }
+      { label: t("Abrir operaciones", "Open operations"), href: buildOperationsHrefFromDailyLog(entry, nextActionDraft) }
     ];
   }
 
   if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
     return [
-      { label: t("Abrir operaciones", "Open operations"), href: "/operations" },
+      { label: t("Abrir operaciones", "Open operations"), href: buildOperationsHrefFromDailyLog(entry, nextActionDraft) },
       { label: t("Abrir campo", "Open field"), href: "/field" },
       { label: t("Abrir equipo", "Open equipment"), href: "/equipment" }
     ];
@@ -705,8 +801,99 @@ function buildDailyLogOperationalLinks(entry: DailyLogEntryContract | null, t: T
   return [
     { label: t("Abrir equipo", "Open equipment"), href: "/equipment" },
     { label: t("Abrir campo", "Open field"), href: "/field" },
-    { label: t("Abrir operaciones", "Open operations"), href: "/operations" }
+    { label: t("Abrir operaciones", "Open operations"), href: buildOperationsHrefFromDailyLog(entry, nextActionDraft) }
   ];
+}
+
+function buildDailyLogRouteDesk(entry: DailyLogEntryContract | null, nextActionDraft: string, t: Translate) {
+  if (!entry) {
+    return {
+      primaryLink: {
+        label: t("Abrir bitácora", "Open daily log"),
+        href: "/daily-log",
+        reason: t("Selecciona una bitácora para definir quién toma el siguiente turno.", "Select a daily log to define who takes the next shift.")
+      },
+      secondaryLink: {
+        label: t("Abrir campo", "Open field"),
+        href: "/field",
+        reason: t("Cuando exista un frente activo, aquí se aclarará el segundo salto operativo.", "Once an active front exists, this will clarify the secondary operational jump.")
+      },
+      returnRule: t("Vuelve con dueño, evidencia y condición de continuidad ya confirmados.", "Return with owner, evidence and continuation condition already confirmed.")
+    };
+  }
+
+  if (entry.blockersCount > 0 || entry.status === "flagged") {
+    return {
+      primaryLink: {
+        label: t("Escalar en campo", "Escalate in field"),
+        href: "/field",
+        reason: t("El frente sigue bloqueado y la contención principal todavía debe vivir con la cuadrilla en campo.", "The front is still blocked and primary containment still belongs with the crew in field.")
+      },
+      secondaryLink: {
+        label: t("Abrir operaciones", "Open operations"),
+        href: buildOperationsHrefFromDailyLog(entry, nextActionDraft),
+        reason: t("Después de contener el bloqueo, operaciones debe absorber coordinación, destajo o presión transversal del frente.", "After containing the blocker, operations should absorb coordination, destajo or cross-domain pressure from the front.")
+      },
+      returnRule: t("Vuelve cuando el bloqueo tenga dueño, contención explícita y decisión clara de arranque o espera.", "Return once the blocker has an owner, explicit containment and a clear go-or-wait decision.")
+    };
+  }
+
+  if (entry.qualityOpenFindings > 2 || entry.qualityReleaseReadiness < 75) {
+    return {
+      primaryLink: {
+        label: t("Enviar a calidad", "Route to quality"),
+        href: buildQualityHrefFromDailyLog(entry, nextActionDraft),
+        reason: t("La liberación del turno sigue débil y calidad debe tomar primero la corrección o la reinspección.", "Shift release is still weak and quality should take corrective work or reinspection first.")
+      },
+      secondaryLink: {
+        label: t("Abrir campo", "Open field"),
+        href: "/field",
+        reason: t("Campo debe ejecutar la corrección y regresar con evidencia suficiente para que calidad no reconstruya la historia del turno.", "Field should execute the correction and come back with enough evidence so quality does not have to rebuild the shift story.")
+      },
+      returnRule: t("Vuelve cuando calidad y campo dejen explícitos los hallazgos resueltos y la nueva postura de liberación.", "Return once quality and field make the resolved findings and new release posture explicit.")
+    };
+  }
+
+  if (entry.subcontractHealth === "critical" || entry.pendingDestajo > 0) {
+    return {
+      primaryLink: {
+        label: t("Coordinar en operaciones", "Coordinate in operations"),
+        href: buildOperationsHrefFromDailyLog(entry, nextActionDraft),
+        reason: t("La presión real está en subcontrato o destajo y operaciones debe ordenar la recuperación antes del siguiente turno.", "Real pressure sits in subcontract or destajo posture, so operations should organize recovery before the next shift.")
+      },
+      secondaryLink: {
+        label: t("Abrir campo", "Open field"),
+        href: "/field",
+        reason: t("Campo confirma si el frente sigue ejecutable una vez que operaciones reasigne dueño, cuadrilla o prioridad.", "Field confirms whether the front remains executable once operations reassigns owner, crew or priority.")
+      },
+      returnRule: t("Vuelve cuando la presión de subcontrato tenga responsable, recuperación asignada y efecto claro sobre el turno siguiente.", "Return once subcontract pressure has a clear owner, assigned recovery and a concrete effect on the next shift.")
+    };
+  }
+
+  return {
+    primaryLink: {
+      label: t("Revisar equipo", "Check equipment"),
+      href: "/equipment",
+      reason: t("Si el frente ya no está bloqueado, el siguiente control útil es confirmar la continuidad real de activos.", "If the front is no longer blocked, the next useful control is confirming real asset continuity.")
+    },
+    secondaryLink: {
+      label: t("Abrir campo", "Open field"),
+      href: "/field",
+      reason: t("Después de equipo, campo debe confirmar que el relevo puede correr sin reconstruir contexto del turno.", "After equipment, field should confirm the handoff can continue without rebuilding shift context.")
+    },
+    returnRule: t("Vuelve con liberación de activos confirmada y siguiente acción lista para el nuevo relevo.", "Return with asset release confirmed and the next action ready for the new handoff.")
+  };
+}
+
+function buildDailyLogOrderedLinks(entry: DailyLogEntryContract | null, nextActionDraft: string, t: Translate) {
+  const routeDesk = buildDailyLogRouteDesk(entry, nextActionDraft, t);
+  const links = [
+    { label: routeDesk.primaryLink.label, href: routeDesk.primaryLink.href },
+    { label: routeDesk.secondaryLink.label, href: routeDesk.secondaryLink.href },
+    ...buildDailyLogOperationalLinks(entry, nextActionDraft, t)
+  ];
+
+  return links.filter((link, index, array) => array.findIndex((candidate) => candidate.href === link.href) === index);
 }
 
 function buildDailyLogSchedulePhase(entry: DailyLogEntryContract) {
@@ -881,10 +1068,10 @@ function actionGuard(entry: DailyLogEntryContract, status: DailyLogEntryContract
 
 export default function DailyLogPage() {
   const { activeCompany, apiBaseUrl, session, source, uiLanguage, localizeText } = useAppState();
-  const searchParams = useSearchParams();
   const t = useCallback((es: string, en: string) => localizeText({ es, en }), [localizeText]);
+  const searchParams = useSearchParams();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
-  const fieldPreload = useMemo(() => buildFieldPreload(searchParams), [searchParams]);
+  const contextualPreload = useMemo(() => buildDailyLogContextualPreload(searchParams), [searchParams]);
   const [overview, setOverview] = useState<DailyLogOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<DailyLogEquipmentBridge>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -903,10 +1090,18 @@ export default function DailyLogPage() {
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<"control" | "capture" | "queue">("control");
   const [createForm, setCreateForm] = useState<DailyLogCreateForm>(createDefaultCreateForm);
-  const [activeFieldPreload, setActiveFieldPreload] = useState<DailyLogFieldPreload | null>(null);
-  const preloadAppliedRef = useRef(false);
-  const preloadNextActionRef = useRef<string | null>(null);
-  const preloadSelectedEntryIdRef = useRef<string | null>(null);
+  const [activeContextualPreload, setActiveContextualPreload] = useState<DailyLogContextualPreload | null>(null);
+  const contextualPreloadRef = useRef<{
+    formApplied: boolean;
+    selectionApplied: boolean;
+    selectedEntryId: string | null;
+    nextAction: string | null;
+  }>({
+    formApplied: false,
+    selectionApplied: false,
+    selectedEntryId: null,
+    nextAction: null
+  });
   const createFormNumbers = useMemo(
     () => ({
       progressPercent: Number(createForm.progressPercent),
@@ -972,6 +1167,41 @@ export default function DailyLogPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken, t]);
 
+  useEffect(() => {
+    if (!contextualPreload) {
+      return;
+    }
+
+    setActiveContextualPreload(contextualPreload);
+
+    if (!contextualPreloadRef.current.formApplied) {
+      contextualPreloadRef.current.formApplied = true;
+      setCreateForm((current) => ({
+        ...current,
+        projectName: contextualPreload.projectName || current.projectName,
+        frontName: contextualPreload.frontName || current.frontName,
+        supervisor: contextualPreload.supervisor || current.supervisor,
+        nextAction: contextualPreload.nextAction || current.nextAction,
+        qualityOpenFindings: contextualPreload.qualityOpenFindings || current.qualityOpenFindings,
+        qualityReleaseReadiness: contextualPreload.qualityReleaseReadiness || current.qualityReleaseReadiness
+      }));
+    }
+
+    if (!overview || contextualPreloadRef.current.selectionApplied) {
+      return;
+    }
+
+    contextualPreloadRef.current.selectionApplied = true;
+    const relatedEntry = findRelatedDailyLogEntry(overview, contextualPreload);
+
+    if (relatedEntry) {
+      contextualPreloadRef.current.selectedEntryId = relatedEntry.id;
+      contextualPreloadRef.current.nextAction = contextualPreload.nextAction || null;
+      setSelectedEntryId(relatedEntry.id);
+      setWorkspaceView("control");
+    }
+  }, [contextualPreload, overview]);
+
   const filteredEntries = useMemo(() => {
     if (!overview) {
       return [];
@@ -1012,13 +1242,23 @@ export default function DailyLogPage() {
 
   const selectedStory = useMemo(() => buildDailyLogEquipmentStory(selectedEntry, bridgeContext, t), [bridgeContext, selectedEntry, t]);
   const approvalReadiness = useMemo(() => buildApprovalReadiness(selectedEntry, t), [selectedEntry, t]);
-  const escalationDestination = useMemo(() => buildEscalationDestination(selectedEntry, t), [selectedEntry, t]);
+  const escalationDestination = useMemo(
+    () => buildEscalationDestination(selectedEntry, nextActionDraft, t),
+    [nextActionDraft, selectedEntry, t]
+  );
   const downstreamReadiness = useMemo(() => buildDownstreamReadiness(selectedEntry, t), [selectedEntry, t]);
   const selectedWhyNow = useMemo(() => buildDailyLogWhyNow(selectedEntry, t), [selectedEntry, t]);
   const selectedHumanStep = useMemo(() => buildDailyLogHumanStep(selectedEntry, t), [selectedEntry, t]);
   const selectedReportBack = useMemo(() => buildDailyLogReportBack(selectedEntry, t), [selectedEntry, t]);
   const selectedRouteSummary = useMemo(() => buildDailyLogRouteSummary(selectedEntry, t), [selectedEntry, t]);
-  const selectedOperationalLinks = useMemo(() => buildDailyLogOperationalLinks(selectedEntry, t), [selectedEntry, t]);
+  const selectedRouteDesk = useMemo(
+    () => buildDailyLogRouteDesk(selectedEntry, nextActionDraft, t),
+    [nextActionDraft, selectedEntry, t]
+  );
+  const selectedOrderedOperationalLinks = useMemo(
+    () => buildDailyLogOrderedLinks(selectedEntry, nextActionDraft, t),
+    [nextActionDraft, selectedEntry, t]
+  );
   const selectedScheduleHref = useMemo(() => buildDailyLogScheduleHref(selectedEntry, nextActionDraft), [nextActionDraft, selectedEntry]);
   const entryActions = useMemo(() => (selectedEntry ? actionOptions(selectedEntry, t) : []), [selectedEntry, t]);
   const createGate = useMemo(
@@ -1078,50 +1318,27 @@ export default function DailyLogPage() {
   }, [filteredEntries, overview, selectedEntryId]);
 
   useEffect(() => {
-    if (preloadAppliedRef.current || !fieldPreload) {
-      return;
-    }
-
-    setActiveFieldPreload(fieldPreload);
-    setCreateForm((current) => ({
-      ...current,
-      projectName: fieldPreload.projectName || current.projectName,
-      frontName: fieldPreload.frontName || current.frontName,
-      supervisor: fieldPreload.owner || current.supervisor,
-      nextAction: fieldPreload.nextAction || current.nextAction
-    }));
-
-    if (!overview) {
-      return;
-    }
-
-    preloadAppliedRef.current = true;
-    const relatedEntry = findRelatedFieldEntry(overview.entries, fieldPreload);
-
-    if (relatedEntry) {
-      preloadSelectedEntryIdRef.current = relatedEntry.id;
-      setSelectedEntryId(relatedEntry.id);
-      if (fieldPreload.nextAction) {
-        preloadNextActionRef.current = fieldPreload.nextAction;
-      }
-      setWorkspaceView("control");
-      return;
-    }
-
-    setWorkspaceView("capture");
-  }, [fieldPreload, overview]);
-
-  useEffect(() => {
-    if (selectedEntry?.id && preloadSelectedEntryIdRef.current === selectedEntry.id && preloadNextActionRef.current) {
-      setNextActionDraft(preloadNextActionRef.current);
-      preloadSelectedEntryIdRef.current = null;
-      preloadNextActionRef.current = null;
+    if (
+      selectedEntry?.id &&
+      contextualPreloadRef.current.selectedEntryId === selectedEntry.id &&
+      contextualPreloadRef.current.nextAction
+    ) {
+      setNextActionDraft(contextualPreloadRef.current.nextAction);
+      contextualPreloadRef.current.selectedEntryId = null;
+      contextualPreloadRef.current.nextAction = null;
     } else {
       setNextActionDraft(selectedEntry?.nextAction ?? "");
     }
     setActionError(null);
     setActionMessage(null);
   }, [selectedEntryId, selectedEntry?.id, selectedEntry?.nextAction]);
+
+  const isContextuallySelectedEntry = Boolean(
+    activeContextualPreload &&
+      selectedEntry &&
+      normalizeDailyLogValue(selectedEntry.projectName) === normalizeDailyLogValue(activeContextualPreload.projectName) &&
+      normalizeDailyLogValue(selectedEntry.frontName) === normalizeDailyLogValue(activeContextualPreload.frontName)
+  );
 
   async function handleAction(status: DailyLogEntryContract["status"], suggestedNextAction: string) {
     if (!selectedEntry) {
@@ -1374,10 +1591,18 @@ export default function DailyLogPage() {
                     : t("Abre un frente de la cola para capturar decisiones del turno y dejar el relevo listo.", "Open a front from the queue to record shift decisions and leave the handoff ready.")
                 }
                 aside={
-                  <div className="row gap wrap" style={{ justifyContent: "flex-end" }}>
-                    {activeFieldPreload ? <Badge tone="info">Precargado desde campo / Preloaded from field</Badge> : null}
-                    {selectedEntry ? <Badge tone={statusTone(selectedEntry.status)}>{localizeText(statusLabel(selectedEntry.status))}</Badge> : null}
-                  </div>
+                  selectedEntry ? (
+                    <div className="tableCellStack">
+                      {isContextuallySelectedEntry && activeContextualPreload ? (
+                        <Badge tone="info">
+                          {activeContextualPreload.source === "quality"
+                            ? t("Precargado desde calidad", "Preloaded from quality")
+                            : t("Precargado desde campo", "Preloaded from field")}
+                        </Badge>
+                      ) : null}
+                      <Badge tone={statusTone(selectedEntry.status)}>{localizeText(statusLabel(selectedEntry.status))}</Badge>
+                    </div>
+                  ) : null
                 }
               >
                 {selectedEntry ? (
@@ -1426,6 +1651,49 @@ export default function DailyLogPage() {
                         <div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div>
                         <div>{selectedHumanStep}</div>
                       </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Módulo responsable", "Responsible module")}</div>
+                        <div className="tableCellStack">
+                          <strong>{selectedRouteDesk.primaryLink.label}</strong>
+                          <span className="tableCellMuted">{selectedRouteDesk.primaryLink.reason}</span>
+                        </div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div>
+                        <div className="tableCellStack">
+                          <strong>{selectedRouteDesk.secondaryLink.label}</strong>
+                          <span className="tableCellMuted">{selectedRouteDesk.secondaryLink.reason}</span>
+                        </div>
+                      </div>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Compromiso al volver", "Return commitment")}</div>
+                        <div>{selectedRouteDesk.returnRule}</div>
+                      </div>
+                      {isContextuallySelectedEntry && activeContextualPreload ? (
+                        <div className="detailRow">
+                          <div className="detailLabel">{t("Contexto recibido", "Received context")}</div>
+                          <div className="tableCellStack">
+                            <strong>
+                              {activeContextualPreload.source === "quality"
+                                ? t("La inspección de calidad ya aterrizó este frente en bitácora.", "The quality inspection already landed this front in daily log.")
+                                : t("La captura de campo ya aterrizó este frente en bitácora.", "The field capture already landed this front in daily log.")}
+                            </strong>
+                            <span className="tableCellMuted">
+                              {[activeContextualPreload.projectName, activeContextualPreload.frontName].filter(Boolean).join(" · ")}
+                            </span>
+                            {activeContextualPreload.supervisor ? (
+                              <span className="tableCellMuted">
+                                {t("Responsable sugerido", "Suggested owner")}: {activeContextualPreload.supervisor}
+                              </span>
+                            ) : null}
+                            {activeContextualPreload.nextAction ? (
+                              <span className="tableCellMuted">
+                                {t("Siguiente acción sugerida", "Suggested next action")}: {activeContextualPreload.nextAction}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="detailRow">
                         <div className="detailLabel">{t("Equipo", "Equipment")}</div>
                         <div className="tableCellStack">
@@ -1491,8 +1759,10 @@ export default function DailyLogPage() {
                     </div>
 
                     <div className="row gap wrap">
-                      <Link className="button" href={escalationDestination.href}>
-                        {escalationDestination.label}
+                      <Link className="button" href={selectedOrderedOperationalLinks[0]?.href ?? escalationDestination.href}>
+                        {selectedOrderedOperationalLinks[0]
+                          ? t(`Ir primero a ${selectedOrderedOperationalLinks[0].label}`, `Go first to ${selectedOrderedOperationalLinks[0].label}`)
+                          : escalationDestination.label}
                       </Link>
                       {selectedScheduleHref ? (
                         <Link className="buttonGhost" href={selectedScheduleHref}>
@@ -1502,7 +1772,7 @@ export default function DailyLogPage() {
                       <button type="button" className="buttonGhost" onClick={() => setWorkspaceView("capture")}>
                         {t("Registrar nuevo frente", "Log new front")}
                       </button>
-                      {selectedOperationalLinks.map((link) => (
+                      {selectedOrderedOperationalLinks.slice(1).map((link) => (
                         <Link key={link.href + link.label} className="buttonGhost" href={link.href}>
                           {link.label}
                         </Link>
@@ -1620,7 +1890,6 @@ export default function DailyLogPage() {
                   "Captura la historia mínima de campo para que supervisión y el siguiente relevo puedan continuar sin pedir contexto extra.",
                   "Capture the minimum field story so supervision and the next handoff can continue without asking for extra context."
                 )}
-                aside={activeFieldPreload ? <Badge tone="info">Precargado desde campo / Preloaded from field</Badge> : null}
               >
                 <p className="tableCellMuted">
                   {t(
@@ -1628,6 +1897,43 @@ export default function DailyLogPage() {
                     "Fill project, front, owner and next action first. Presets help you start fast, but the final capture should read like the field team actually works."
                   )}
                 </p>
+
+                {activeContextualPreload ? (
+                  <div className="detailRow" style={{ marginBottom: 16 }}>
+                    <div className="detailLabel">{t("Contexto recibido", "Received context")}</div>
+                    <div className="tableCellStack">
+                      <Badge tone="info">
+                        {activeContextualPreload.source === "quality"
+                          ? t("Precargado desde calidad", "Preloaded from quality")
+                          : t("Precargado desde campo", "Preloaded from field")}
+                      </Badge>
+                      <span>
+                        {activeContextualPreload.source === "quality"
+                          ? t(
+                              "La bitácora ya trae proyecto, frente, responsable y señal de liberación desde calidad.",
+                              "The log already brings project, front, owner and release signal from quality."
+                            )
+                          : t(
+                              "La bitácora ya trae proyecto, frente, responsable y siguiente acción desde campo.",
+                              "The log already brings project, front, owner and next action from field."
+                            )}
+                      </span>
+                      <span className="tableCellMuted">
+                        {[activeContextualPreload.projectName, activeContextualPreload.frontName].filter(Boolean).join(" · ")}
+                      </span>
+                      {activeContextualPreload.supervisor ? (
+                        <span className="tableCellMuted">
+                          {t("Responsable sugerido", "Suggested owner")}: {activeContextualPreload.supervisor}
+                        </span>
+                      ) : null}
+                      {activeContextualPreload.nextAction ? (
+                        <span className="tableCellMuted">
+                          {t("Siguiente acción sugerida", "Suggested next action")}: {activeContextualPreload.nextAction}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="row gap wrap" style={{ marginBottom: 16 }}>
                   <button type="button" className="buttonGhost" onClick={() => setCreateForm(createDailyLogExample())}>

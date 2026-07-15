@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
@@ -73,14 +74,73 @@ function tone(status: AccountsPayableInvoiceContract["satStatus"] | AccountsPaya
 }
 
 function paymentRouteLabel(href: string) {
-  switch (href) {
-    case "/supplier-master":
-      return { es: "Abrir proveedores", en: "Open suppliers" };
-    case "/treasury/payment-runs":
-      return { es: "Abrir corridas de pago", en: "Open payment runs" };
-    default:
-      return { es: "Abrir finanzas", en: "Open finance" };
+  if (href.startsWith("/supplier-master")) {
+    return { es: "Abrir proveedores", en: "Open suppliers" };
   }
+
+  if (href.startsWith("/treasury/payment-runs")) {
+    return { es: "Abrir corridas de pago", en: "Open payment runs" };
+  }
+
+  if (href.startsWith("/procurement/purchase-orders")) {
+    return { es: "Abrir compras", en: "Open purchase orders" };
+  }
+
+  if (href.startsWith("/inventory/receiving")) {
+    return { es: "Abrir recepción", en: "Open receiving" };
+  }
+
+  return { es: "Abrir finanzas", en: "Open finance" };
+}
+
+function buildAccountsPayablePurchaseOrdersHref(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice?.purchaseOrderCode?.trim()) {
+    return "/procurement/purchase-orders";
+  }
+
+  const query = new URLSearchParams({
+    source: "accounts-payable",
+    purchaseOrderCode: invoice.purchaseOrderCode,
+    supplierName: invoice.supplierName,
+    projectName: invoice.projectName,
+    receiptCode: invoice.receiptCode ?? "",
+    nextAction: invoice.nextAction
+  });
+
+  return `/procurement/purchase-orders?${query.toString()}`;
+}
+
+function buildAccountsPayableReceivingHref(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice?.purchaseOrderCode?.trim()) {
+    return "/inventory/receiving";
+  }
+
+  const query = new URLSearchParams({
+    purchaseReference: invoice.purchaseOrderCode,
+    supplierName: invoice.supplierName,
+    projectName: invoice.projectName,
+    nextAction: invoice.nextAction
+  });
+
+  return `/inventory/receiving?${query.toString()}`;
+}
+
+function buildAccountsPayablePaymentRunsHref(invoice: AccountsPayableInvoiceContract | null) {
+  if (!invoice) {
+    return "/treasury/payment-runs";
+  }
+
+  const query = new URLSearchParams({
+    source: "accounts-payable",
+    invoiceCode: invoice.code,
+    supplierName: invoice.supplierName,
+    projectName: invoice.projectName,
+    purchaseOrderCode: invoice.purchaseOrderCode ?? "",
+    receiptCode: invoice.receiptCode ?? "",
+    nextAction: invoice.nextAction
+  });
+
+  return `/treasury/payment-runs?${query.toString()}`;
 }
 
 function invoiceStatusLabel(status: AccountsPayableInvoiceContract["status"]) {
@@ -427,6 +487,71 @@ function buildInvoiceHumanStep(invoice: AccountsPayableInvoiceContract | null) {
   return "Move into treasury or supplier follow-through now while the invoice is still clean enough to release without rework.";
 }
 
+function findBestMatchingInvoice(
+  overview: AccountsPayableOverviewContract,
+  context: {
+    supplierName: string;
+    projectName: string;
+    purchaseOrderCode: string;
+    receiptCode: string;
+  }
+): AccountsPayableInvoiceContract | null {
+  const normalizedSupplierName = context.supplierName.trim().toLowerCase();
+  const normalizedProjectName = context.projectName.trim().toLowerCase();
+  const normalizedPurchaseOrderCode = context.purchaseOrderCode.trim().toLowerCase();
+  const normalizedReceiptCode = context.receiptCode.trim().toLowerCase();
+
+  let bestScore = 0;
+  let bestInvoice: AccountsPayableInvoiceContract | null = null;
+
+  for (const invoice of overview.invoices) {
+    let score = 0;
+
+    if (normalizedPurchaseOrderCode.length > 0) {
+      const invoicePurchaseOrderCode = invoice.purchaseOrderCode?.trim().toLowerCase() ?? "";
+      if (invoicePurchaseOrderCode === normalizedPurchaseOrderCode) {
+        score += 8;
+      } else if (invoicePurchaseOrderCode.includes(normalizedPurchaseOrderCode)) {
+        score += 3;
+      }
+    }
+
+    if (normalizedReceiptCode.length > 0) {
+      const invoiceReceiptCode = invoice.receiptCode?.trim().toLowerCase() ?? "";
+      if (invoiceReceiptCode === normalizedReceiptCode) {
+        score += 7;
+      } else if (invoiceReceiptCode.includes(normalizedReceiptCode)) {
+        score += 2;
+      }
+    }
+
+    if (normalizedSupplierName.length > 0) {
+      const invoiceSupplierName = invoice.supplierName.trim().toLowerCase();
+      if (invoiceSupplierName === normalizedSupplierName) {
+        score += 4;
+      } else if (invoiceSupplierName.includes(normalizedSupplierName)) {
+        score += 2;
+      }
+    }
+
+    if (normalizedProjectName.length > 0) {
+      const invoiceProjectName = invoice.projectName.trim().toLowerCase();
+      if (invoiceProjectName === normalizedProjectName) {
+        score += 3;
+      } else if (invoiceProjectName.includes(normalizedProjectName)) {
+        score += 1;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestInvoice = invoice;
+    }
+  }
+
+  return bestScore > 0 ? bestInvoice : null;
+}
+
 function buildInvoiceOperationalLinks(invoice: AccountsPayableInvoiceContract | null) {
   if (!invoice) {
     return [
@@ -439,32 +564,213 @@ function buildInvoiceOperationalLinks(invoice: AccountsPayableInvoiceContract | 
   if (invoice.status === "blocked" || invoice.satStatus === "critical") {
     return [
       { label: "Open supplier master", href: "/supplier-master" },
-      { label: "Open finance", href: "/finance" },
-      { label: "Open payment runs", href: "/treasury/payment-runs" }
+      { label: "Open purchase orders", href: buildAccountsPayablePurchaseOrdersHref(invoice) },
+      { label: "Open payment runs", href: buildAccountsPayablePaymentRunsHref(invoice) }
     ];
   }
 
   if (invoice.receiptEvidenceStatus === "missing") {
     return [
-      { label: "Open finance", href: "/finance" },
+      { label: "Open receiving", href: buildAccountsPayableReceivingHref(invoice) },
+      { label: "Open purchase orders", href: buildAccountsPayablePurchaseOrdersHref(invoice) },
       { label: "Open supplier master", href: "/supplier-master" },
-      { label: "Open payment runs", href: "/treasury/payment-runs" }
+      { label: "Open payment runs", href: buildAccountsPayablePaymentRunsHref(invoice) }
     ];
   }
 
   if (invoice.complementStatus === "risk" || invoice.packetCompletion < 100) {
     return [
-      { label: "Open supplier master", href: "/supplier-master" },
-      { label: "Open finance", href: "/finance" },
-      { label: "Open payment runs", href: "/treasury/payment-runs" }
+      { label: "Open purchase orders", href: buildAccountsPayablePurchaseOrdersHref(invoice) },
+      { label: "Open receiving", href: buildAccountsPayableReceivingHref(invoice) },
+      { label: "Open payment runs", href: buildAccountsPayablePaymentRunsHref(invoice) }
     ];
   }
 
   return [
-    { label: "Open payment runs", href: "/treasury/payment-runs" },
-    { label: "Open supplier master", href: "/supplier-master" },
-    { label: "Open finance", href: "/finance" }
+    { label: "Open payment runs", href: buildAccountsPayablePaymentRunsHref(invoice) },
+    { label: "Open purchase orders", href: buildAccountsPayablePurchaseOrdersHref(invoice) },
+    { label: "Open receiving", href: buildAccountsPayableReceivingHref(invoice) }
   ];
+}
+
+function buildInvoiceRoutingDesk(input: {
+  invoice: AccountsPayableInvoiceContract | null;
+  supplierReady: boolean;
+}) {
+  const { invoice, supplierReady } = input;
+  const fallbackLinks = buildInvoiceOperationalLinks(invoice);
+  const links: Array<{ label: string; href: string }> = [];
+  const pushLink = (label: string, href: string) => {
+    if (!links.some((item) => item.href === href)) {
+      links.push({ label, href });
+    }
+  };
+
+  if (!invoice) {
+    pushLink("Open supplier master", "/supplier-master");
+    pushLink("Open payment runs", "/treasury/payment-runs");
+    pushLink("Open finance", "/finance");
+    fallbackLinks.forEach((link) => pushLink(link.label, link.href));
+    return {
+      primaryLabel: paymentRouteLabel(links[0].href),
+      primaryReason: {
+        es: "Selecciona una factura para aclarar qué dominio debe absorber primero la liberación de pago.",
+        en: "Select an invoice to clarify which domain should first absorb payment release."
+      },
+      secondaryLabel: paymentRouteLabel(links[1].href),
+      secondaryReason: {
+        es: "Después del primer dominio, la continuidad debe conservar proveedor, fecha y traza de tesorería.",
+        en: "After the first domain, continuity should preserve supplier, date and treasury traceability."
+      },
+      returnRule: {
+        es: "Regresa con dueño, fecha y condición de liberación ya confirmados.",
+        en: "Return with owner, date and release condition already confirmed."
+      },
+      links
+    };
+  }
+
+  if (invoice.status === "blocked" || invoice.satStatus === "critical") {
+    pushLink("Open supplier master", "/supplier-master");
+    pushLink("Open finance", "/finance");
+    pushLink("Open purchase orders", buildAccountsPayablePurchaseOrdersHref(invoice));
+    fallbackLinks.forEach((link) => pushLink(link.label, link.href));
+    return {
+      primaryLabel: paymentRouteLabel(links[0].href),
+      primaryReason: {
+        es: "El bloqueo fiscal o de flujo debe aclararse primero con proveedor y perfil maestro antes de volver a intentar liberar la factura.",
+        en: "The fiscal or workflow blocker should first be clarified with supplier master before trying to release the invoice again."
+      },
+      secondaryLabel: paymentRouteLabel(links[1].href),
+      secondaryReason: {
+        es: "Después de contener el bloqueo, finanzas debe validar que la postura SAT y el expediente ya sostienen la liberación.",
+        en: "After containing the blocker, finance should validate SAT posture and packet quality are now sustaining release."
+      },
+      returnRule: {
+        es: "Regresa con SAT contenido, proveedor controlado y criterio claro de si la factura puede volver al carril activo.",
+        en: "Return with SAT contained, supplier controlled and a clear decision on whether the invoice can return to the active lane."
+      },
+      links
+    };
+  }
+
+  if (!supplierReady) {
+    pushLink("Open supplier master", "/supplier-master");
+    pushLink("Open finance", "/finance");
+    pushLink("Open payment runs", buildAccountsPayablePaymentRunsHref(invoice));
+    fallbackLinks.forEach((link) => pushLink(link.label, link.href));
+    return {
+      primaryLabel: paymentRouteLabel(links[0].href),
+      primaryReason: {
+        es: "La factura todavía no debe brincar a tesorería porque el proveedor no sostiene cumplimiento ni postura SAT limpia.",
+        en: "The invoice should not jump to treasury yet because the supplier does not sustain clean compliance and SAT posture."
+      },
+      secondaryLabel: paymentRouteLabel(links[1].href),
+      secondaryReason: {
+        es: "Después de completar proveedor, finanzas debe confirmar que el expediente realmente quedó liberable.",
+        en: "After completing supplier posture, finance should confirm the packet is truly releasable."
+      },
+      returnRule: {
+        es: "Regresa con proveedor completo, SAT controlado y la factura ya lista para programación real.",
+        en: "Return with supplier complete, SAT controlled and the invoice ready for real scheduling."
+      },
+      links
+    };
+  }
+
+  if (invoice.receiptEvidenceStatus === "missing") {
+    pushLink("Open receiving", buildAccountsPayableReceivingHref(invoice));
+    pushLink("Open purchase orders", buildAccountsPayablePurchaseOrdersHref(invoice));
+    pushLink("Open supplier master", "/supplier-master");
+    fallbackLinks.forEach((link) => pushLink(link.label, link.href));
+    return {
+      primaryLabel: paymentRouteLabel(links[0].href),
+      primaryReason: {
+        es: "La recepción sigue siendo el cuello real y debe cerrar primero la evidencia antes de comprometer efectivo.",
+        en: "Receiving is still the real bottleneck and should close evidence first before cash is committed."
+      },
+      secondaryLabel: paymentRouteLabel(links[1].href),
+      secondaryReason: {
+        es: "Después de recuperar evidencia, compras debe conservar la traza comercial exacta de la misma factura.",
+        en: "After recovering evidence, procurement should preserve the exact commercial trace of the same invoice."
+      },
+      returnRule: {
+        es: "Regresa con evidencia de recepción visible, OC intacta y la factura limpia para tesorería.",
+        en: "Return with receiving evidence visible, the PO intact and the invoice clean for treasury."
+      },
+      links
+    };
+  }
+
+  if (invoice.complementStatus === "risk" || invoice.packetCompletion < 100) {
+    pushLink("Open finance", "/finance");
+    pushLink("Open receiving", buildAccountsPayableReceivingHref(invoice));
+    pushLink("Open payment runs", buildAccountsPayablePaymentRunsHref(invoice));
+    fallbackLinks.forEach((link) => pushLink(link.label, link.href));
+    return {
+      primaryLabel: paymentRouteLabel(links[0].href),
+      primaryReason: {
+        es: "El expediente fiscal todavía debe cerrarse en finanzas antes de programar cualquier salida bancaria.",
+        en: "The fiscal packet still needs to close in finance before any bank outflow is scheduled."
+      },
+      secondaryLabel: paymentRouteLabel(links[1].href),
+      secondaryReason: {
+        es: "Después del expediente, recepción debe sostener la evidencia para que el pago no quede defendido solo en papel.",
+        en: "After the packet, receiving should sustain the evidence so payment is not defended only on paper."
+      },
+      returnRule: {
+        es: "Regresa con complemento y expediente completos, evidencia visible y criterio claro de programación.",
+        en: "Return with complement and packet complete, visible evidence and clear scheduling criteria."
+      },
+      links
+    };
+  }
+
+  if (invoice.status === "scheduled") {
+    pushLink("Open payment runs", buildAccountsPayablePaymentRunsHref(invoice));
+    pushLink("Open finance", "/finance");
+    pushLink("Open supplier master", "/supplier-master");
+    fallbackLinks.forEach((link) => pushLink(link.label, link.href));
+    return {
+      primaryLabel: paymentRouteLabel(links[0].href),
+      primaryReason: {
+        es: "La presión ya está en la corrida bancaria y tesorería debe confirmar que la ejecución sigue viva y consistente.",
+        en: "Pressure now sits in the bank run and treasury should confirm execution is still alive and consistent."
+      },
+      secondaryLabel: paymentRouteLabel(links[1].href),
+      secondaryReason: {
+        es: "Después de tesorería, finanzas debe absorber conciliación y postura de salida sin perder la misma factura.",
+        en: "After treasury, finance should absorb reconciliation and outflow posture without losing the same invoice."
+      },
+      returnRule: {
+        es: "Regresa con corrida confirmada, fecha de ejecución vigente y criterio claro de si ya se paga o se resecuencia.",
+        en: "Return with the run confirmed, execution date still valid and a clear decision on whether to pay or resequence."
+      },
+      links
+    };
+  }
+
+  pushLink("Open payment runs", buildAccountsPayablePaymentRunsHref(invoice));
+  pushLink("Open finance", "/finance");
+  pushLink("Open receiving", buildAccountsPayableReceivingHref(invoice));
+  fallbackLinks.forEach((link) => pushLink(link.label, link.href));
+  return {
+    primaryLabel: paymentRouteLabel(links[0].href),
+    primaryReason: {
+      es: "La factura ya está limpia para liberarse y el siguiente turno útil es sostener su programación en tesorería.",
+      en: "The invoice is already clean enough to release and the next useful turn is sustaining it in treasury scheduling."
+    },
+    secondaryLabel: paymentRouteLabel(links[1].href),
+    secondaryReason: {
+      es: "Después de la corrida, finanzas debe confirmar el impacto de caja y mantener la trazabilidad del pago.",
+      en: "After the run, finance should confirm cash impact and preserve payment traceability."
+    },
+    returnRule: {
+      es: "Regresa con corrida, fecha y seguimiento financiero ya confirmados sobre la misma factura.",
+      en: "Return with the run, date and financial follow-through already confirmed on the same invoice."
+    },
+    links
+  };
 }
 
 function buildCreateInvoiceGate(input: {
@@ -703,7 +1009,20 @@ function buildCreateInvoiceHumanStepSpanish(input: {
 
 export default function AccountsPayablePage() {
   const { activeCompany, apiBaseUrl, session, localizeText, uiLanguage } = useAppState();
+  const searchParams = useSearchParams();
+  const createContextSource = searchParams.get("source");
   const t = useCallback((es: string, en: string) => localizeText({ es, en }), [localizeText]);
+  const createPrefillContext = useMemo(
+    () => ({
+      source: createContextSource,
+      supplierName: searchParams.get("supplierName")?.trim() ?? "",
+      projectName: searchParams.get("projectName")?.trim() ?? "",
+      purchaseOrderCode: searchParams.get("purchaseOrderCode")?.trim() ?? "",
+      receiptCode: searchParams.get("receiptCode")?.trim() ?? "",
+      nextAction: searchParams.get("nextAction")?.trim() ?? ""
+    }),
+    [createContextSource, searchParams]
+  );
   const [overview, setOverview] = useState<AccountsPayableOverviewContract | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | AccountsPayableInvoiceContract["status"]>("all");
@@ -717,6 +1036,15 @@ export default function AccountsPayablePage() {
   const [supplierMasterHint, setSupplierMasterHint] = useState<string | null>(null);
   const [supplierMasterOverview, setSupplierMasterOverview] = useState<Awaited<ReturnType<typeof fetchSupplierMasterOverview>> | null>(null);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [appliedCreatePrefillKey, setAppliedCreatePrefillKey] = useState<string | null>(null);
+  const [createPrefillMatchedInvoiceId, setCreatePrefillMatchedInvoiceId] = useState<string | null>(null);
+  const createPrefillKey = useMemo(
+    () =>
+      [createPrefillContext.source, createPrefillContext.supplierName, createPrefillContext.projectName, createPrefillContext.purchaseOrderCode, createPrefillContext.receiptCode, createPrefillContext.nextAction]
+        .filter((value) => value && value.length > 0)
+        .join("|") || null,
+    [createPrefillContext]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -778,7 +1106,9 @@ export default function AccountsPayablePage() {
         invoice.code.toLowerCase().includes(normalizedSearch) ||
         invoice.supplierName.toLowerCase().includes(normalizedSearch) ||
         invoice.invoiceNumber.toLowerCase().includes(normalizedSearch) ||
-        invoice.projectName.toLowerCase().includes(normalizedSearch);
+        invoice.projectName.toLowerCase().includes(normalizedSearch) ||
+        (invoice.purchaseOrderCode ?? "").toLowerCase().includes(normalizedSearch) ||
+        (invoice.receiptCode ?? "").toLowerCase().includes(normalizedSearch);
 
       return matchesStatus && matchesSat && matchesSearch;
     });
@@ -863,7 +1193,15 @@ export default function AccountsPayablePage() {
     [paymentDateDraft, selectedInvoice, selectedInvoiceSupplierProfile, selectedInvoiceSupplierReadyForPayment]
   );
   const selectedInvoiceHumanStep = useMemo(() => buildInvoiceHumanStep(selectedInvoice), [selectedInvoice]);
-  const selectedInvoiceOperationalLinks = useMemo(() => buildInvoiceOperationalLinks(selectedInvoice), [selectedInvoice]);
+  const selectedInvoiceRoutingDesk = useMemo(
+    () =>
+      buildInvoiceRoutingDesk({
+        invoice: selectedInvoice,
+        supplierReady: selectedInvoiceSupplierReadyForPayment
+      }),
+    [selectedInvoice, selectedInvoiceSupplierReadyForPayment]
+  );
+  const selectedInvoiceOperationalLinks = useMemo(() => selectedInvoiceRoutingDesk.links, [selectedInvoiceRoutingDesk]);
   const selectedInvoiceGateLabel = !selectedInvoice
     ? t("Sin factura seleccionada", "No invoice selected")
     : paymentReleaseGate.tone === "success"
@@ -1011,6 +1349,39 @@ export default function AccountsPayablePage() {
         nextAction: createForm.nextAction
       })
     : createInvoiceHumanStep;
+  const createContextBadgeLabel = createContextSource === "subcontracts"
+    ? t("Precargada desde subcontratos", "Prefilled from subcontracts")
+    : createContextSource === "purchase-orders"
+      ? t("Precargada desde órdenes de compra", "Prefilled from purchase orders")
+      : null;
+  const createContextHelperText = createContextSource === "subcontracts"
+    ? t(
+        "La captura llegó desde subcontratos para no recapturar proveedor, obra y referencia operativa.",
+        "This capture came from subcontracts so supplier, project and operating reference do not need to be re-entered."
+      )
+    : createContextSource === "purchase-orders"
+      ? t(
+          "La captura llegó desde compras para conservar proveedor, obra, OC, recepción y siguiente acción sin reconstruir el contexto.",
+          "This capture came from purchase orders so supplier, project, PO, receiving and next action stay aligned without rebuilding context."
+        )
+      : null;
+  const createContextRows = useMemo(
+    () =>
+      createContextBadgeLabel
+        ? [
+            { label: t("Proveedor", "Supplier"), value: createPrefillContext.supplierName },
+            { label: t("Obra", "Project"), value: createPrefillContext.projectName },
+            { label: t("Código OC", "PO code"), value: createPrefillContext.purchaseOrderCode },
+            { label: t("Código de recepción", "Receipt code"), value: createPrefillContext.receiptCode },
+            { label: t("Próxima acción", "Next action"), value: createPrefillContext.nextAction }
+          ].filter((row) => row.value)
+        : [],
+    [createContextBadgeLabel, createPrefillContext, t]
+  );
+  const hasCreateContextMatch =
+    Boolean(createContextBadgeLabel) &&
+    Boolean(selectedInvoice) &&
+    createPrefillMatchedInvoiceId === selectedInvoice?.id;
 
   useEffect(() => {
     if (!createForm.supplierProfileId) {
@@ -1028,9 +1399,71 @@ export default function AccountsPayablePage() {
         : {
             ...current,
             supplierName: selectedProfile.supplierName
-          }
+        }
     );
   }, [availableSupplierProfiles, createForm.supplierProfileId]);
+
+  useEffect(() => {
+    const { supplierName, projectName, purchaseOrderCode, receiptCode, nextAction } = createPrefillContext;
+    const matchedProfile =
+      availableSupplierProfiles.find(
+        (item) => item.supplierName.trim().toLowerCase() === supplierName.toLowerCase()
+      ) ?? null;
+
+    if (![supplierName, projectName, purchaseOrderCode, receiptCode, nextAction].some((value) => value.length > 0)) {
+      return;
+    }
+
+    setCreateForm((current) => {
+      if (
+        current.supplierName === supplierName &&
+        current.projectName === projectName &&
+        current.purchaseOrderCode === purchaseOrderCode &&
+        current.receiptCode === receiptCode &&
+        current.nextAction === nextAction &&
+        current.supplierProfileId === (matchedProfile?.id ?? current.supplierProfileId)
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        supplierProfileId: matchedProfile?.id ?? current.supplierProfileId,
+        supplierName: supplierName || current.supplierName,
+        projectName: projectName || current.projectName,
+        purchaseOrderCode: purchaseOrderCode || current.purchaseOrderCode,
+        receiptCode: receiptCode || current.receiptCode,
+        nextAction: nextAction || current.nextAction
+      };
+    });
+  }, [availableSupplierProfiles, createPrefillContext]);
+
+  useEffect(() => {
+    if (!overview || !createPrefillKey || appliedCreatePrefillKey === createPrefillKey) {
+      return;
+    }
+
+    const preloadTerms = [
+      createPrefillContext.purchaseOrderCode,
+      createPrefillContext.receiptCode,
+      createPrefillContext.supplierName,
+      createPrefillContext.projectName
+    ].filter((value) => value.length > 0);
+
+    if (preloadTerms.length > 0) {
+      setSearchFilter(preloadTerms.join(" "));
+    }
+
+    const matchedInvoice = findBestMatchingInvoice(overview, createPrefillContext);
+    if (matchedInvoice) {
+      setSelectedId(matchedInvoice.id);
+      setCreatePrefillMatchedInvoiceId(matchedInvoice.id);
+    } else {
+      setCreatePrefillMatchedInvoiceId(null);
+    }
+
+    setAppliedCreatePrefillKey(createPrefillKey);
+  }, [appliedCreatePrefillKey, createPrefillContext, createPrefillKey, overview]);
 
   function refreshSummary(invoices: AccountsPayableInvoiceContract[]) {
     const now = Date.now();
@@ -1271,6 +1704,41 @@ export default function AccountsPayablePage() {
               />
             </section>
 
+            {createContextRows.length > 0 ? (
+              <section className="grid cols1">
+                <Card
+                  title={t("Contexto recibido", "Received context")}
+                  description={
+                    hasCreateContextMatch
+                      ? t(
+                          "Se encontró una factura relacionada y quedó abierta sin perder el contexto de compras.",
+                          "A related invoice was found and opened without losing the purchasing context."
+                        )
+                      : t(
+                          "No hubo una factura clara para abrir; el contexto sigue visible y el alta queda preparada.",
+                          "No clear invoice was found to open; the context remains visible and the create flow stays prepared."
+                        )
+                  }
+                  aside={createContextBadgeLabel ? <Badge tone="info">{createContextBadgeLabel}</Badge> : null}
+                >
+                  <div className="detailGrid">
+                    <div className="detailRow">
+                      <div className="detailLabel">{t("Estado del contexto", "Context status")}</div>
+                      <div>
+                        <Badge tone="info">{hasCreateContextMatch ? t("Contexto aplicado", "Context applied") : t("Contexto visible", "Context visible")}</Badge>
+                      </div>
+                    </div>
+                    {createContextRows.map((row) => (
+                      <div key={row.label} className="detailRow">
+                        <div className="detailLabel">{row.label}</div>
+                        <div>{row.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </section>
+            ) : null}
+
             <section className="grid cols2">
               <Card
                 title={t("Control de factura", "Invoice control")}
@@ -1302,6 +1770,9 @@ export default function AccountsPayablePage() {
                     </div>
                     <div className="detailRow"><div className="detailLabel">{t("Puerta de pago", "Payment gate")}</div><div className="tableCellStack"><Badge tone={paymentReleaseGate.tone}>{selectedInvoiceGateLabel}</Badge><span className="tableCellMuted">{selectedInvoiceGateSummary}</span>{(uiLanguage === "es" ? selectedInvoiceGateChecksSpanish : paymentReleaseGate.checks).map((check) => <span key={check} className="tableCellMuted">{check}</span>)}</div></div>
                     <div className="detailRow"><div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div><div>{selectedInvoiceHumanStepLocalized}</div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Módulo responsable", "Responsible module")}</div><div className="tableCellStack"><strong>{localizeText(selectedInvoiceRoutingDesk.primaryLabel)}</strong><span className="tableCellMuted">{localizeText(selectedInvoiceRoutingDesk.primaryReason)}</span></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div><div className="tableCellStack"><strong>{localizeText(selectedInvoiceRoutingDesk.secondaryLabel)}</strong><span className="tableCellMuted">{localizeText(selectedInvoiceRoutingDesk.secondaryReason)}</span></div></div>
+                    <div className="detailRow"><div className="detailLabel">{t("Qué debe regresar confirmado", "What must return confirmed")}</div><div>{localizeText(selectedInvoiceRoutingDesk.returnRule)}</div></div>
                     <label className="detailRow"><div className="detailLabel">{t("Fecha de pago", "Payment date")}</div><input className="field" type="date" value={paymentDateDraft} onChange={(event) => setPaymentDateDraft(event.target.value)} /></label>
                     <label className="stack"><span className="detailLabel">{t("Próxima acción", "Next action")}</span><textarea className="field" rows={3} value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} /></label>
                     <div className="cluster">
@@ -1310,7 +1781,7 @@ export default function AccountsPayablePage() {
                       <button type="button" className="buttonGhost" disabled={isSaving} onClick={() => void handleUpdate("blocked", "critical", "risk")}>{t("Bloquear factura", "Block invoice")}</button>
                       <button type="button" className="button" disabled={isSaving || !selectedInvoiceSupplierReadyForPayment} onClick={() => void handleUpdate("paid", "controlled", "complete")}>{t("Marcar pagada", "Mark paid")}</button>
                     </div>
-                    <div className="row gap wrap">{selectedInvoiceOperationalLinks.map((link, index) => <Link key={`${link.href}-${link.label}`} className={index === 0 ? "buttonSecondary" : "buttonGhost"} href={link.href}>{localizeText(paymentRouteLabel(link.href))}</Link>)}</div>
+                    <div className="row gap wrap">{selectedInvoiceOperationalLinks.map((link, index) => <Link key={`${link.href}-${link.label}`} className={index === 0 ? "buttonSecondary" : "buttonGhost"} href={link.href}>{index === 0 ? t(`Ir primero a ${localizeText(selectedInvoiceRoutingDesk.primaryLabel)}`, `Go first to ${localizeText(selectedInvoiceRoutingDesk.primaryLabel)}`) : localizeText(paymentRouteLabel(link.href))}</Link>)}</div>
                     {!selectedInvoiceSupplierReadyForPayment ? <Badge tone="warning">{t("Completa y controla el perfil fiscal del proveedor antes de programar o pagar.", "Complete and control the supplier fiscal profile before scheduling or paying.")}</Badge> : null}
                     {message ? <Badge tone="success">{message}</Badge> : null}
                     {error ? <Badge tone="danger">{error}</Badge> : null}
@@ -1411,7 +1882,10 @@ export default function AccountsPayablePage() {
                         <div className="detailRow"><div className="detailLabel">{t("Expediente fiscal", "Fiscal packet")}</div><div>{selectedInvoice.packetCompletion}% · {selectedInvoice.complementStatus}</div></div>
                         <div className="detailRow"><div className="detailLabel">{t("Puerta de pago", "Payment gate")}</div><div className="tableCellStack"><Badge tone={paymentReleaseGate.tone}>{selectedInvoiceGateLabel}</Badge><span className="tableCellMuted">{selectedInvoiceGateSummary}</span>{(uiLanguage === "es" ? selectedInvoiceGateChecksSpanish : paymentReleaseGate.checks).map((check) => <span key={check} className="tableCellMuted">{check}</span>)}</div></div>
                         <div className="detailRow"><div className="detailLabel">{t("Siguiente paso humano", "Next human step")}</div><div>{selectedInvoiceHumanStepLocalized}</div></div>
-                        <div className="detailRow"><div className="detailLabel">{t("Accesos operativos", "Operational links")}</div><div className="row gap wrap">{selectedInvoiceOperationalLinks.map((link) => <Link key={`${link.href}-${link.label}`} className="buttonGhost" href={link.href}>{localizeText(paymentRouteLabel(link.href))}</Link>)}</div></div>
+                        <div className="detailRow"><div className="detailLabel">{t("Módulo responsable", "Responsible module")}</div><div className="tableCellStack"><strong>{localizeText(selectedInvoiceRoutingDesk.primaryLabel)}</strong><span className="tableCellMuted">{localizeText(selectedInvoiceRoutingDesk.primaryReason)}</span></div></div>
+                        <div className="detailRow"><div className="detailLabel">{t("Segundo salto", "Secondary jump")}</div><div className="tableCellStack"><strong>{localizeText(selectedInvoiceRoutingDesk.secondaryLabel)}</strong><span className="tableCellMuted">{localizeText(selectedInvoiceRoutingDesk.secondaryReason)}</span></div></div>
+                        <div className="detailRow"><div className="detailLabel">{t("Qué debe regresar confirmado", "What must return confirmed")}</div><div>{localizeText(selectedInvoiceRoutingDesk.returnRule)}</div></div>
+                        <div className="detailRow"><div className="detailLabel">{t("Accesos operativos", "Operational links")}</div><div className="row gap wrap">{selectedInvoiceOperationalLinks.map((link, index) => <Link key={`${link.href}-${link.label}`} className={index === 0 ? "buttonSecondary" : "buttonGhost"} href={link.href}>{index === 0 ? t(`Ir primero a ${localizeText(selectedInvoiceRoutingDesk.primaryLabel)}`, `Go first to ${localizeText(selectedInvoiceRoutingDesk.primaryLabel)}`) : localizeText(paymentRouteLabel(link.href))}</Link>)}</div></div>
                       </div>
                     ) : (
                       <EmptyState title={t("Selecciona una factura", "Select an invoice")} description={t("Elige una factura para revisar su trazabilidad fiscal y de recepción.", "Choose an invoice to inspect its fiscal and receiving traceability.")} />
@@ -1443,7 +1917,11 @@ export default function AccountsPayablePage() {
                 </section>
 
                 <section className="grid cols2">
-                  <Card title={t("Alta de factura", "Register invoice")} description={t("Captura una factura directamente en el backend del tenant con trazabilidad mínima suficiente.", "Capture an invoice directly in the tenant backend with enough minimum traceability.")}>
+                  <Card
+                    title={t("Alta de factura", "Register invoice")}
+                    description={t("Captura una factura directamente en el backend del tenant con trazabilidad mínima suficiente.", "Capture an invoice directly in the tenant backend with enough minimum traceability.")}
+                    aside={createContextBadgeLabel ? <Badge tone="info">{createContextBadgeLabel}</Badge> : null}
+                  >
                     <div className="row gap wrap" style={{ marginBottom: 16 }}>
                       <button
                         type="button"
@@ -1477,6 +1955,21 @@ export default function AccountsPayablePage() {
                       <Link className="buttonGhost" href="/supplier-master">{t("Abrir proveedores", "Open suppliers")}</Link>
                       <Link className="buttonGhost" href="/treasury/payment-runs">{t("Abrir corridas de pago", "Open payment runs")}</Link>
                     </div>
+                    {createContextHelperText ? (
+                      <p className="tableCellMuted" style={{ marginBottom: 16 }}>
+                        {createContextHelperText}
+                      </p>
+                    ) : null}
+                    {createContextRows.length > 0 ? (
+                      <div className="detailGrid" style={{ marginBottom: 16 }}>
+                        {createContextRows.map((row) => (
+                          <div key={row.label} className="detailRow">
+                            <div className="detailLabel">{row.label}</div>
+                            <div>{row.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="detailGrid">
                       <label className="detailRow"><div className="detailLabel">{t("Perfil de proveedor", "Supplier profile")}</div><select className="selectField" value={createForm.supplierProfileId} onChange={(event) => setCreateForm((current) => ({ ...current, supplierProfileId: event.target.value }))}><option value="">{t("Sin perfil ligado", "No linked profile")}</option>{availableSupplierProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.supplierName} · {profile.complianceStatus} · {profile.satStatus}</option>)}</select></label>
                       <label className="detailRow"><div className="detailLabel">{t("Proveedor", "Supplier")}</div><input className="field" value={createForm.supplierName} onChange={(event) => setCreateForm((current) => ({ ...current, supplierName: event.target.value }))} /></label>

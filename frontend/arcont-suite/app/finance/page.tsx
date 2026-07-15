@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -262,6 +263,7 @@ function buildFinanceOperationalLinks(item: FinanceLedgerItemContract | null) {
 
   if (item.closeReadiness < 90) {
     return [
+      { label: "Open close control", href: buildFinanceCloseControlHref(item) },
       { label: "Open treasury", href: "/treasury/payment-runs" },
       { label: "Open finance", href: "/finance" },
       { label: "Open supplier master", href: "/supplier-master" }
@@ -283,9 +285,106 @@ function buildFinanceOperationalLinks(item: FinanceLedgerItemContract | null) {
   ];
 }
 
+function buildFinanceCloseControlHref(item: FinanceLedgerItemContract | null) {
+  if (!item) {
+    return "/close-control";
+  }
+
+  const query = new URLSearchParams({
+    source: "finance",
+    metricName: item.metricName,
+    satStatus: item.satStatus,
+    closeReadiness: String(item.closeReadiness),
+    urgentItems: String(item.urgentItems),
+    cashImpact: String(item.cashImpact),
+    note: item.note
+  });
+
+  return `/close-control?${query.toString()}`;
+}
+
+type CashFlowFinanceContext = {
+  source: "cash-flow";
+  lineCode: string;
+  streamName: string;
+  sourceType: string;
+  health: string;
+  weeklyNet: number;
+  openPressureItems: number;
+  nextAction: string;
+};
+
+function buildCashFlowFinanceContext(
+  searchParams: ReturnType<typeof useSearchParams>
+): CashFlowFinanceContext | null {
+  if (searchParams.get("source") !== "cash-flow") {
+    return null;
+  }
+
+  const weeklyNetValue = Number(searchParams.get("weeklyNet") ?? "0");
+  const openPressureItemsValue = Number(searchParams.get("openPressureItems") ?? "0");
+
+  const context = {
+    source: "cash-flow" as const,
+    lineCode: searchParams.get("lineCode")?.trim() ?? "",
+    streamName: searchParams.get("streamName")?.trim() ?? "",
+    sourceType: searchParams.get("sourceType")?.trim() ?? "",
+    health: searchParams.get("health")?.trim() ?? "",
+    weeklyNet: Number.isFinite(weeklyNetValue) ? weeklyNetValue : 0,
+    openPressureItems: Number.isFinite(openPressureItemsValue) ? openPressureItemsValue : 0,
+    nextAction: searchParams.get("nextAction")?.trim() ?? ""
+  };
+
+  return Object.values(context).some((value) => (typeof value === "string" ? value.length > 0 : value !== 0)) ? context : null;
+}
+
+function findBestMatchingFinanceItem(
+  overview: FinanceOverviewContract,
+  context: CashFlowFinanceContext
+) {
+  return (
+    overview.items
+      .map((item) => {
+        let score = 0;
+        const metricName = item.metricName.toLowerCase();
+
+        if (context.sourceType === "cash" && metricName.includes("cash")) {
+          score += 8;
+        }
+
+        if (context.sourceType === "payables" && metricName.includes("payable")) {
+          score += 8;
+        }
+
+        if ((context.sourceType === "tax" || context.sourceType === "close") && (metricName.includes("close") || metricName.includes("fiscal"))) {
+          score += 8;
+        }
+
+        if (context.health === "critical" && item.satStatus === "critical") {
+          score += 2;
+        }
+
+        if (context.openPressureItems > 0 && item.urgentItems > 0) {
+          score += 1;
+        }
+
+        if (context.weeklyNet < 0 && item.cashImpact < 0) {
+          score += 1;
+        }
+
+        return { item, score };
+      })
+      .sort((left, right) => right.score - left.score)
+      .find((item) => item.score > 0)
+      ?.item ?? null
+  );
+}
+
 export default function FinancePage() {
+  const searchParams = useSearchParams();
   const { activeCompany, apiBaseUrl, session, source } = useAppState();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
+  const cashFlowContext = useMemo(() => buildCashFlowFinanceContext(searchParams), [searchParams]);
   const [overview, setOverview] = useState<FinanceOverviewContract | null>(null);
   const [treasuryOverview, setTreasuryOverview] = useState<TreasuryPaymentRunsOverviewContract | null>(null);
   const [accountsPayableOverview, setAccountsPayableOverview] = useState<Awaited<ReturnType<typeof fetchAccountsPayableOverview>> | null>(null);
@@ -299,6 +398,24 @@ export default function FinancePage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [appliedCashFlowContextKey, setAppliedCashFlowContextKey] = useState<string | null>(null);
+  const [cashFlowMatchedItemId, setCashFlowMatchedItemId] = useState<string | null>(null);
+  const cashFlowContextKey = useMemo(
+    () =>
+      cashFlowContext
+        ? [
+            cashFlowContext.source,
+            cashFlowContext.lineCode,
+            cashFlowContext.streamName,
+            cashFlowContext.sourceType,
+            cashFlowContext.health,
+            String(cashFlowContext.weeklyNet),
+            String(cashFlowContext.openPressureItems),
+            cashFlowContext.nextAction
+          ].join("|")
+        : null,
+    [cashFlowContext]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -415,6 +532,25 @@ export default function FinancePage() {
   const selectedRouteSummary = useMemo(() => buildFinanceRouteSummary(selectedItem), [selectedItem]);
   const selectedOperationalLinks = useMemo(() => buildFinanceOperationalLinks(selectedItem), [selectedItem]);
   const actionOptions = useMemo(() => (selectedItem ? financeActionOptions(selectedItem) : []), [selectedItem]);
+  const cashFlowContextRows = useMemo(
+    () =>
+      cashFlowContext
+        ? [
+            { label: "Cash-flow line", value: cashFlowContext.lineCode },
+            { label: "Stream", value: cashFlowContext.streamName },
+            { label: "Source type", value: cashFlowContext.sourceType },
+            { label: "Health", value: cashFlowContext.health },
+            { label: "Weekly net", value: `MXN ${cashFlowContext.weeklyNet.toLocaleString()}` },
+            { label: "Open pressure", value: String(cashFlowContext.openPressureItems) },
+            { label: "Next action", value: cashFlowContext.nextAction }
+          ].filter((row) => row.value)
+        : [],
+    [cashFlowContext]
+  );
+  const hasCashFlowClearMatch =
+    Boolean(cashFlowContext) &&
+    Boolean(selectedItem) &&
+    cashFlowMatchedItemId === selectedItem?.id;
 
   useEffect(() => {
     if (!overview) {
@@ -437,6 +573,26 @@ export default function FinancePage() {
     setActionError(null);
     setActionMessage(null);
   }, [selectedItemId, selectedItem?.id, selectedItem?.note]);
+
+  useEffect(() => {
+    if (!overview || !cashFlowContext || !cashFlowContextKey || appliedCashFlowContextKey === cashFlowContextKey) {
+      return;
+    }
+
+    const matchedItem = findBestMatchingFinanceItem(overview, cashFlowContext);
+    if (matchedItem) {
+      setSelectedItemId(matchedItem.id);
+      setCashFlowMatchedItemId(matchedItem.id);
+    } else {
+      setCashFlowMatchedItemId(null);
+    }
+
+    if (cashFlowContext.nextAction.length > 0) {
+      setNoteDraft(cashFlowContext.nextAction);
+    }
+
+    setAppliedCashFlowContextKey(cashFlowContextKey);
+  }, [appliedCashFlowContextKey, cashFlowContext, cashFlowContextKey, overview]);
 
   async function handleFinanceAction(
     satStatus: FinanceLedgerItemContract["satStatus"],
@@ -563,6 +719,35 @@ export default function FinancePage() {
                 footnote="Combined friction across supplier master, AP and treasury release lane."
               />
             </section>
+
+            {cashFlowContextRows.length > 0 ? (
+              <section className="grid cols1">
+                <Card
+                  title="Cash-flow context"
+                  description={
+                    hasCashFlowClearMatch
+                      ? "A related finance signal was identified and selected from cash flow."
+                      : "No exact finance signal match was found, so the incoming cash-flow context stays visible for manual continuation."
+                  }
+                  aside={<Badge tone="info">Precargado desde flujo de efectivo / Preloaded from cash flow</Badge>}
+                >
+                  <div className="detailGrid">
+                    <div className="detailRow">
+                      <div className="detailLabel">Context status</div>
+                      <div>
+                        <Badge tone="info">{hasCashFlowClearMatch ? "Context applied" : "Context visible"}</Badge>
+                      </div>
+                    </div>
+                    {cashFlowContextRows.map((row) => (
+                      <div key={row.label} className="detailRow">
+                        <div className="detailLabel">{row.label}</div>
+                        <div>{row.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </section>
+            ) : null}
 
             <section className="grid cols2">
               <Card

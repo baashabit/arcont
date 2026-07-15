@@ -159,6 +159,99 @@ export function createSubcontractsService(repository: PlatformRepository) {
     async getOverview(companyId: string) {
       return buildOverview(companyId);
     },
+    async createLine(input: {
+      companyId: string;
+      code: string;
+      contractorName: string;
+      projectName: string;
+      frontName: string;
+      activeHeadcount: number;
+      attendanceRate: number;
+      productivityRate: number;
+      complianceExpirations: number;
+      incidentCount: number;
+      subcontractHealth: "controlled" | "watch" | "critical";
+      nextAction: string;
+    }) {
+      const overview = await buildOverview(input.companyId);
+      const normalizedCode = input.code.trim().toUpperCase();
+      if (overview.lines.some((item) => item.code.trim().toUpperCase() === normalizedCode)) {
+        throw validationError("SUBCONTRACTS_DUPLICATE_CODE", "Subcontract code already exists", {
+          companyId: input.companyId,
+          code: normalizedCode
+        });
+      }
+
+      if (
+        input.subcontractHealth === "controlled" &&
+        (input.complianceExpirations > 0 || input.incidentCount > 0)
+      ) {
+        throw validationError(
+          "SUBCONTRACTS_CONTROLLED_WITH_OPEN_ISSUES",
+          "Controlled subcontract cannot be created while compliance expirations or incidents remain open",
+          {
+            companyId: input.companyId,
+            complianceExpirations: input.complianceExpirations,
+            incidentCount: input.incidentCount
+          }
+        );
+      }
+
+      if (input.subcontractHealth === "controlled" && input.attendanceRate < 85) {
+        throw validationError(
+          "SUBCONTRACTS_CONTROLLED_WITH_LOW_ATTENDANCE",
+          "Controlled subcontract cannot be created while attendance remains too low",
+          {
+            companyId: input.companyId,
+            attendanceRate: input.attendanceRate
+          }
+        );
+      }
+
+      const projectName = input.projectName.trim();
+      const frontName = input.frontName.trim();
+      const persistedFrontName = frontName.toLowerCase().includes(projectName.toLowerCase())
+        ? frontName
+        : `${projectName} · ${frontName}`;
+      const createdWorkforce = await repository.createHrWorkforceItem({
+        companyId: input.companyId,
+        code: normalizedCode,
+        contractorName: input.contractorName.trim(),
+        frontName: persistedFrontName,
+        activeHeadcount: input.activeHeadcount,
+        attendanceRate: input.attendanceRate,
+        productivityRate: input.productivityRate,
+        complianceExpirations: input.complianceExpirations,
+        incidentCount: input.incidentCount,
+        safetyStatus: input.subcontractHealth,
+        nextAction: input.nextAction.trim()
+      });
+
+      await repository.addAuditEvent({
+        companyId: input.companyId,
+        actorUserId: undefined,
+        aggregateType: "subcontract_line",
+        aggregateId: `sub_${createdWorkforce.id}`,
+        action: "subcontracts.line.created",
+        metadata: {
+          workforceId: createdWorkforce.id,
+          code: createdWorkforce.code,
+          contractorName: createdWorkforce.contractorName,
+          subcontractHealth: createdWorkforce.safetyStatus
+        }
+      });
+
+      const refreshed = await buildOverview(input.companyId);
+      const createdLine = refreshed.lines.find((item) => item.workforceId === createdWorkforce.id);
+      if (!createdLine) {
+        throw notFound("SUBCONTRACTS_CREATE_LINE_NOT_FOUND", "Subcontract line not found after creation", {
+          companyId: input.companyId,
+          workforceId: createdWorkforce.id
+        });
+      }
+
+      return createdLine;
+    },
     async updateLine(input: {
       companyId: string;
       lineId: string;

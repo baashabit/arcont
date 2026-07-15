@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { ModuleGate } from "@/components/domain/module-gate";
 import { useAppState } from "@/components/providers/app-state-provider";
@@ -294,6 +295,177 @@ function createPurchaseOrderExample(requisitionId?: string) {
   };
 }
 
+type RequisitionPreloadContext = {
+  source: "requisitions";
+  requisitionCode: string;
+  projectName: string;
+  frontName: string;
+  requestedBy: string;
+  category: string;
+  nextAction: string;
+};
+
+type AccountsPayablePurchaseOrderPreloadContext = {
+  source: "accounts-payable";
+  purchaseOrderCode: string;
+  supplierName: string;
+  projectName: string;
+  receiptCode: string;
+  nextAction: string;
+};
+
+function normalizePurchaseOrderPreloadValue(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function buildRequisitionPreloadContext(
+  searchParams: ReturnType<typeof useSearchParams>
+): RequisitionPreloadContext | null {
+  if (searchParams.get("source") !== "requisitions") {
+    return null;
+  }
+
+  const context = {
+    source: "requisitions" as const,
+    requisitionCode: searchParams.get("requisitionCode")?.trim() ?? "",
+    projectName: searchParams.get("projectName")?.trim() ?? "",
+    frontName: searchParams.get("frontName")?.trim() ?? "",
+    requestedBy: searchParams.get("requestedBy")?.trim() || searchParams.get("owner")?.trim() || "",
+    category: searchParams.get("category")?.trim() ?? "",
+    nextAction: searchParams.get("nextAction")?.trim() ?? ""
+  };
+
+  return Object.values(context).some((value) => typeof value === "string" && value.length > 0) ? context : null;
+}
+
+function buildAccountsPayablePurchaseOrderPreloadContext(
+  searchParams: ReturnType<typeof useSearchParams>
+): AccountsPayablePurchaseOrderPreloadContext | null {
+  if (searchParams.get("source") !== "accounts-payable") {
+    return null;
+  }
+
+  const context = {
+    source: "accounts-payable" as const,
+    purchaseOrderCode: searchParams.get("purchaseOrderCode")?.trim() ?? "",
+    supplierName: searchParams.get("supplierName")?.trim() ?? "",
+    projectName: searchParams.get("projectName")?.trim() ?? "",
+    receiptCode: searchParams.get("receiptCode")?.trim() ?? "",
+    nextAction: searchParams.get("nextAction")?.trim() ?? ""
+  };
+
+  return Object.values(context).some((value) => typeof value === "string" && value.length > 0) ? context : null;
+}
+
+function findBestMatchingPurchaseOrder(
+  overview: ProcurementPurchaseOrdersOverviewContract,
+  context: RequisitionPreloadContext
+) {
+  const normalizedRequisitionCode = normalizePurchaseOrderPreloadValue(context.requisitionCode);
+  const normalizedProjectName = normalizePurchaseOrderPreloadValue(context.projectName);
+  const normalizedFrontName = normalizePurchaseOrderPreloadValue(context.frontName);
+  const normalizedCategory = normalizePurchaseOrderPreloadValue(context.category);
+  const normalizedNextAction = normalizePurchaseOrderPreloadValue(context.nextAction);
+
+  return (
+    overview.purchaseOrders
+      .map((order) => {
+        let score = 0;
+
+        if (normalizedRequisitionCode && normalizePurchaseOrderPreloadValue(order.requisitionCode) === normalizedRequisitionCode) {
+          score += 8;
+        }
+
+        if (normalizedProjectName && normalizePurchaseOrderPreloadValue(order.projectName) === normalizedProjectName) {
+          score += 4;
+        }
+
+        if (normalizedCategory && normalizePurchaseOrderPreloadValue(order.category).includes(normalizedCategory)) {
+          score += 3;
+        }
+
+        if (normalizedFrontName && normalizePurchaseOrderPreloadValue(order.category).includes(normalizedFrontName)) {
+          score += 2;
+        }
+
+        if (normalizedNextAction && normalizePurchaseOrderPreloadValue(order.nextAction).includes(normalizedNextAction)) {
+          score += 1;
+        }
+
+        return { order, score };
+      })
+      .sort((left, right) => right.score - left.score)
+      .find((item, index, collection) => item.score > 0 && (index === 0 || item.score > (collection[1]?.score ?? 0)))
+      ?.order ?? null
+  );
+}
+
+function findBestMatchingPurchaseOrderFromAccountsPayable(
+  overview: ProcurementPurchaseOrdersOverviewContract,
+  context: AccountsPayablePurchaseOrderPreloadContext
+) {
+  const normalizedPurchaseOrderCode = normalizePurchaseOrderPreloadValue(context.purchaseOrderCode);
+  const normalizedSupplierName = normalizePurchaseOrderPreloadValue(context.supplierName);
+  const normalizedProjectName = normalizePurchaseOrderPreloadValue(context.projectName);
+  const normalizedNextAction = normalizePurchaseOrderPreloadValue(context.nextAction);
+
+  return (
+    overview.purchaseOrders
+      .map((order) => {
+        let score = 0;
+
+        if (normalizedPurchaseOrderCode && normalizePurchaseOrderPreloadValue(order.code) === normalizedPurchaseOrderCode) {
+          score += 10;
+        }
+
+        if (normalizedSupplierName && normalizePurchaseOrderPreloadValue(order.supplierName) === normalizedSupplierName) {
+          score += 4;
+        }
+
+        if (normalizedProjectName && normalizePurchaseOrderPreloadValue(order.projectName) === normalizedProjectName) {
+          score += 3;
+        }
+
+        if (normalizedNextAction && normalizePurchaseOrderPreloadValue(order.nextAction).includes(normalizedNextAction)) {
+          score += 1;
+        }
+
+        return { order, score };
+      })
+      .sort((left, right) => right.score - left.score)
+      .find((item, index, collection) => item.score > 0 && (index === 0 || item.score > (collection[1]?.score ?? 0)))
+      ?.order ?? null
+  );
+}
+
+function findMatchingEligibleRequisition(
+  requisitionsOverview: NonNullable<PurchaseOrderBridgeContext>["requisitions"],
+  context: RequisitionPreloadContext
+) {
+  const normalizedRequisitionCode = normalizePurchaseOrderPreloadValue(context.requisitionCode);
+  const normalizedProjectName = normalizePurchaseOrderPreloadValue(context.projectName);
+  const normalizedFrontName = normalizePurchaseOrderPreloadValue(context.frontName);
+  const normalizedCategory = normalizePurchaseOrderPreloadValue(context.category);
+
+  return (
+    requisitionsOverview.requisitions.find((item) => {
+      if (item.status !== "approved" && item.status !== "sourcing") {
+        return false;
+      }
+
+      if (normalizedRequisitionCode && normalizePurchaseOrderPreloadValue(item.code) === normalizedRequisitionCode) {
+        return true;
+      }
+
+      return (
+        (!normalizedProjectName || normalizePurchaseOrderPreloadValue(item.projectName) === normalizedProjectName) &&
+        (!normalizedFrontName || normalizePurchaseOrderPreloadValue(item.frontName) === normalizedFrontName) &&
+        (!normalizedCategory || normalizePurchaseOrderPreloadValue(item.category).includes(normalizedCategory))
+      );
+    }) ?? null
+  );
+}
+
 function buildPurchaseOrderWorkflow(
   order: ProcurementPurchaseOrderContract | null,
   linkedReceiptCount: number,
@@ -471,9 +643,84 @@ function buildPurchaseOrderRouteSummary(
   return "This order can continue through supplier execution and receiving with the current procurement context intact.";
 }
 
+function buildContextualHref(path: string, params: Record<string, string | null | undefined>) {
+  const query = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (!value) {
+      return;
+    }
+
+    const normalizedValue = value.trim();
+    if (normalizedValue.length === 0) {
+      return;
+    }
+
+    query.set(key, normalizedValue);
+  });
+
+  const serialized = query.toString();
+  return serialized ? `${path}?${serialized}` : path;
+}
+
+function buildPurchaseOrderReceivingHref(order: ProcurementPurchaseOrderContract | null) {
+  if (!order) {
+    return "/inventory/receiving";
+  }
+
+  return buildContextualHref("/inventory/receiving", {
+    source: "purchase-orders",
+    purchaseReference: order.code,
+    supplierName: order.supplierName,
+    projectName: order.projectName,
+    nextAction: order.nextAction
+  });
+}
+
+function buildPurchaseOrderMovementsHref(order: ProcurementPurchaseOrderContract | null, linkedReceiptCode?: string | null) {
+  if (!order) {
+    return "/inventory/movements";
+  }
+
+  return buildContextualHref("/inventory/movements", {
+    source: "purchase-orders",
+    purchaseReference: order.code,
+    upstreamReceiptCode: linkedReceiptCode ?? null
+  });
+}
+
+function buildPurchaseOrderSupplierControlHref(order: ProcurementPurchaseOrderContract | null) {
+  if (!order) {
+    return "/supplier-control";
+  }
+
+  return buildContextualHref("/supplier-control", {
+    source: "purchase-orders",
+    supplierName: order.supplierName,
+    projectName: order.projectName,
+    nextAction: order.nextAction
+  });
+}
+
+function buildPurchaseOrderAccountsPayableHref(order: ProcurementPurchaseOrderContract | null, linkedReceiptCode?: string | null) {
+  if (!order) {
+    return "/accounts-payable";
+  }
+
+  return buildContextualHref("/accounts-payable", {
+    source: "purchase-orders",
+    supplierName: order.supplierName,
+    projectName: order.projectName,
+    purchaseOrderCode: order.code,
+    receiptCode: linkedReceiptCode ?? null,
+    nextAction: order.nextAction
+  });
+}
+
 function buildPurchaseOrderOperationalLinks(
   order: ProcurementPurchaseOrderContract | null,
-  linkedReceiptCount: number
+  linkedReceiptCount: number,
+  linkedReceiptCode?: string | null
 ) {
   if (!order) {
     return [
@@ -485,24 +732,24 @@ function buildPurchaseOrderOperationalLinks(
 
   if (order.status === "blocked") {
     return [
-      { label: "Open supplier control", href: "/supplier-control" },
-      { label: "Open receiving", href: "/inventory/receiving" },
-      { label: "Open accounts payable", href: "/accounts-payable" }
+      { label: "Open supplier control", href: buildPurchaseOrderSupplierControlHref(order) },
+      { label: "Open receiving", href: buildPurchaseOrderReceivingHref(order) },
+      { label: "Open accounts payable", href: buildPurchaseOrderAccountsPayableHref(order, linkedReceiptCode) }
     ];
   }
 
   if (linkedReceiptCount > 0) {
     return [
-      { label: "Open receiving", href: "/inventory/receiving" },
-      { label: "Open movement", href: "/inventory/movements" },
-      { label: "Open accounts payable", href: "/accounts-payable" }
+      { label: "Open receiving", href: buildPurchaseOrderReceivingHref(order) },
+      { label: "Open movement", href: buildPurchaseOrderMovementsHref(order, linkedReceiptCode) },
+      { label: "Open accounts payable", href: buildPurchaseOrderAccountsPayableHref(order, linkedReceiptCode) }
     ];
   }
 
   return [
-    { label: "Open receiving", href: "/inventory/receiving" },
-    { label: "Open supplier control", href: "/supplier-control" },
-    { label: "Open accounts payable", href: "/accounts-payable" }
+    { label: "Open receiving", href: buildPurchaseOrderReceivingHref(order) },
+    { label: "Open supplier control", href: buildPurchaseOrderSupplierControlHref(order) },
+    { label: "Open accounts payable", href: buildPurchaseOrderAccountsPayableHref(order, linkedReceiptCode) }
   ];
 }
 
@@ -586,8 +833,10 @@ function buildCreatePurchaseOrderHumanStep(input: {
 }
 
 export default function ProcurementPurchaseOrdersPage() {
+  const searchParams = useSearchParams();
   const { activeCompany, apiBaseUrl, session, source, localizeText } = useAppState();
   const isDemoMode = !session.authenticated || source === "mock" || !session.accessToken;
+  const t = useCallback((es: string, en: string) => localizeText({ es, en }), [localizeText]);
   const [overview, setOverview] = useState<ProcurementPurchaseOrdersOverviewContract | null>(null);
   const [bridgeContext, setBridgeContext] = useState<PurchaseOrderBridgeContext>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -601,6 +850,10 @@ export default function ProcurementPurchaseOrdersPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
+  const [requisitionMatchedPurchaseOrderId, setRequisitionMatchedPurchaseOrderId] = useState<string | null>(null);
+  const [appliedRequisitionPreloadKey, setAppliedRequisitionPreloadKey] = useState<string | null>(null);
+  const [accountsPayableMatchedPurchaseOrderId, setAccountsPayableMatchedPurchaseOrderId] = useState<string | null>(null);
+  const [appliedAccountsPayablePreloadKey, setAppliedAccountsPayablePreloadKey] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<"control" | "queue" | "create">("control");
   const [createForm, setCreateForm] = useState({
     requisitionId: "",
@@ -626,6 +879,40 @@ export default function ProcurementPurchaseOrdersPage() {
     nextAction: createForm.nextAction,
     committedEta: createForm.committedEta
   }), [createForm]);
+  const requisitionPreloadContext = useMemo(() => buildRequisitionPreloadContext(searchParams), [searchParams]);
+  const requisitionPreloadKey = useMemo(
+    () =>
+      requisitionPreloadContext
+        ? [
+            requisitionPreloadContext.source,
+            requisitionPreloadContext.requisitionCode,
+            requisitionPreloadContext.projectName,
+            requisitionPreloadContext.frontName,
+            requisitionPreloadContext.requestedBy,
+            requisitionPreloadContext.category,
+            requisitionPreloadContext.nextAction
+          ].join("|")
+        : null,
+    [requisitionPreloadContext]
+  );
+  const accountsPayablePreloadContext = useMemo(
+    () => buildAccountsPayablePurchaseOrderPreloadContext(searchParams),
+    [searchParams]
+  );
+  const accountsPayablePreloadKey = useMemo(
+    () =>
+      accountsPayablePreloadContext
+        ? [
+            accountsPayablePreloadContext.source,
+            accountsPayablePreloadContext.purchaseOrderCode,
+            accountsPayablePreloadContext.supplierName,
+            accountsPayablePreloadContext.projectName,
+            accountsPayablePreloadContext.receiptCode,
+            accountsPayablePreloadContext.nextAction
+          ].join("|")
+        : null,
+    [accountsPayablePreloadContext]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -677,6 +964,97 @@ export default function ProcurementPurchaseOrdersPage() {
     };
   }, [activeCompany.id, apiBaseUrl, session.accessToken]);
 
+  useEffect(() => {
+    if (!overview || !requisitionPreloadContext || !requisitionPreloadKey || appliedRequisitionPreloadKey === requisitionPreloadKey) {
+      return;
+    }
+
+    const exactProjectExists =
+      requisitionPreloadContext.projectName.length > 0 &&
+      overview.purchaseOrders.some((item) => item.projectName === requisitionPreloadContext.projectName);
+    if (exactProjectExists) {
+      setProjectFilter(requisitionPreloadContext.projectName);
+    }
+
+    const preloadTerms = [
+      requisitionPreloadContext.requisitionCode,
+      requisitionPreloadContext.projectName,
+      requisitionPreloadContext.frontName,
+      requisitionPreloadContext.category
+    ].filter(Boolean);
+    if (preloadTerms.length > 0) {
+      setSearchFilter(preloadTerms.join(" "));
+    }
+
+    const matchedPurchaseOrder = findBestMatchingPurchaseOrder(overview, requisitionPreloadContext);
+    if (matchedPurchaseOrder) {
+      setSelectedPurchaseOrderId(matchedPurchaseOrder.id);
+      setRequisitionMatchedPurchaseOrderId(matchedPurchaseOrder.id);
+      setWorkspaceView("control");
+      setAppliedRequisitionPreloadKey(requisitionPreloadKey);
+      return;
+    }
+
+    setRequisitionMatchedPurchaseOrderId(null);
+
+    const matchedRequisition = bridgeContext
+      ? findMatchingEligibleRequisition(bridgeContext.requisitions, requisitionPreloadContext)
+      : null;
+    if (matchedRequisition) {
+      setCreateForm((current) => ({
+        ...current,
+        requisitionId: matchedRequisition.id,
+        nextAction: requisitionPreloadContext.nextAction || current.nextAction
+      }));
+      setWorkspaceView("create");
+    } else {
+      setWorkspaceView("queue");
+    }
+
+    setAppliedRequisitionPreloadKey(requisitionPreloadKey);
+  }, [appliedRequisitionPreloadKey, bridgeContext, overview, requisitionPreloadContext, requisitionPreloadKey]);
+
+  useEffect(() => {
+    if (
+      !overview ||
+      !accountsPayablePreloadContext ||
+      !accountsPayablePreloadKey ||
+      appliedAccountsPayablePreloadKey === accountsPayablePreloadKey
+    ) {
+      return;
+    }
+
+    const exactProjectExists =
+      accountsPayablePreloadContext.projectName.length > 0 &&
+      overview.purchaseOrders.some((item) => item.projectName === accountsPayablePreloadContext.projectName);
+    if (exactProjectExists) {
+      setProjectFilter(accountsPayablePreloadContext.projectName);
+    }
+
+    const preloadTerms = [
+      accountsPayablePreloadContext.purchaseOrderCode,
+      accountsPayablePreloadContext.supplierName,
+      accountsPayablePreloadContext.projectName,
+      accountsPayablePreloadContext.receiptCode
+    ].filter(Boolean);
+    if (preloadTerms.length > 0) {
+      setSearchFilter(preloadTerms.join(" "));
+    }
+
+    const matchedPurchaseOrder = findBestMatchingPurchaseOrderFromAccountsPayable(overview, accountsPayablePreloadContext);
+    if (matchedPurchaseOrder) {
+      setSelectedPurchaseOrderId(matchedPurchaseOrder.id);
+      setAccountsPayableMatchedPurchaseOrderId(matchedPurchaseOrder.id);
+      setWorkspaceView("control");
+      setAppliedAccountsPayablePreloadKey(accountsPayablePreloadKey);
+      return;
+    }
+
+    setAccountsPayableMatchedPurchaseOrderId(null);
+    setWorkspaceView("queue");
+    setAppliedAccountsPayablePreloadKey(accountsPayablePreloadKey);
+  }, [accountsPayablePreloadContext, accountsPayablePreloadKey, appliedAccountsPayablePreloadKey, overview]);
+
   const projectOptions = useMemo(() => {
     if (!overview) {
       return [];
@@ -699,9 +1077,11 @@ export default function ProcurementPurchaseOrdersPage() {
       const matchesSearch =
         normalizedSearch.length === 0 ||
         item.code.toLowerCase().includes(normalizedSearch) ||
+        item.requisitionCode.toLowerCase().includes(normalizedSearch) ||
         item.projectName.toLowerCase().includes(normalizedSearch) ||
         item.supplierName.toLowerCase().includes(normalizedSearch) ||
-        item.category.toLowerCase().includes(normalizedSearch);
+        item.category.toLowerCase().includes(normalizedSearch) ||
+        item.nextAction.toLowerCase().includes(normalizedSearch);
 
       return matchesProject && matchesStatus && matchesSearch;
     });
@@ -789,8 +1169,8 @@ export default function ProcurementPurchaseOrdersPage() {
     [linkedReceipts.length, selectedFieldOrigin, selectedPurchaseOrder]
   );
   const purchaseOrderOperationalLinks = useMemo(
-    () => buildPurchaseOrderOperationalLinks(selectedPurchaseOrder, linkedReceipts.length),
-    [linkedReceipts.length, selectedPurchaseOrder]
+    () => buildPurchaseOrderOperationalLinks(selectedPurchaseOrder, linkedReceipts.length, linkedReceipts[0]?.code ?? null),
+    [linkedReceipts, selectedPurchaseOrder]
   );
   const eligibleRequisitions = useMemo(
     () =>
@@ -801,7 +1181,48 @@ export default function ProcurementPurchaseOrdersPage() {
     () => buildPurchaseOrderContinuitySpanish(selectedPurchaseOrder, linkedReceipts.length),
     [linkedReceipts.length, selectedPurchaseOrder]
   );
-  const t = (es: string, en: string) => localizeText({ es, en });
+  const requisitionContextRows = useMemo(
+    () =>
+      requisitionPreloadContext
+        ? [
+            { label: t("Requisición", "Requisition"), value: requisitionPreloadContext.requisitionCode },
+            { label: t("Proyecto", "Project"), value: requisitionPreloadContext.projectName },
+            { label: t("Frente", "Front"), value: requisitionPreloadContext.frontName },
+            { label: t("Solicita", "Requested by"), value: requisitionPreloadContext.requestedBy },
+            { label: t("Categoría", "Category"), value: requisitionPreloadContext.category },
+            { label: t("Siguiente acción", "Next action"), value: requisitionPreloadContext.nextAction }
+          ].filter((row) => row.value)
+        : [],
+    [requisitionPreloadContext, t]
+  );
+  const accountsPayableContextRows = useMemo(
+    () =>
+      accountsPayablePreloadContext
+        ? [
+            { label: t("Código OC", "PO code"), value: accountsPayablePreloadContext.purchaseOrderCode },
+            { label: t("Proveedor", "Supplier"), value: accountsPayablePreloadContext.supplierName },
+            { label: t("Proyecto", "Project"), value: accountsPayablePreloadContext.projectName },
+            { label: t("Código de recepción", "Receipt code"), value: accountsPayablePreloadContext.receiptCode },
+            { label: t("Siguiente acción", "Next action"), value: accountsPayablePreloadContext.nextAction }
+          ].filter((row) => row.value)
+        : [],
+    [accountsPayablePreloadContext, t]
+  );
+  const hasRequisitionClearMatch =
+    Boolean(requisitionPreloadContext) &&
+    Boolean(selectedPurchaseOrder) &&
+    requisitionMatchedPurchaseOrderId === selectedPurchaseOrder?.id;
+  const hasAccountsPayableClearMatch =
+    Boolean(accountsPayablePreloadContext) &&
+    Boolean(selectedPurchaseOrder) &&
+    accountsPayableMatchedPurchaseOrderId === selectedPurchaseOrder?.id;
+  const selectedPurchaseOrderReceivingHref = buildPurchaseOrderReceivingHref(selectedPurchaseOrder);
+  const selectedPurchaseOrderMovementHref = buildPurchaseOrderMovementsHref(selectedPurchaseOrder, linkedReceipts[0]?.code ?? null);
+  const selectedPurchaseOrderSupplierControlHref = buildPurchaseOrderSupplierControlHref(selectedPurchaseOrder);
+  const selectedPurchaseOrderAccountsPayableHref = buildPurchaseOrderAccountsPayableHref(
+    selectedPurchaseOrder,
+    linkedReceipts[0]?.code ?? null
+  );
 
   useEffect(() => {
     if (!overview) {
@@ -995,6 +1416,16 @@ export default function ProcurementPurchaseOrdersPage() {
                   {t("Compromiso de compra", "Purchase commitment")}
                   <span className="mono">{t("corte de recepción", "receiving cut")}</span>
                 </span>
+                {requisitionPreloadContext ? (
+                  <div className="row gap wrap" style={{ marginTop: 12 }}>
+                    <Badge tone="info">Precargado desde requisiciones / Preloaded from requisitions</Badge>
+                  </div>
+                ) : null}
+                {accountsPayablePreloadContext ? (
+                  <div className="row gap wrap" style={{ marginTop: 12 }}>
+                    <Badge tone="info">Precargado desde cuentas por pagar / Preloaded from accounts payable</Badge>
+                  </div>
+                ) : null}
                 <h2>{selectedPurchaseOrder?.code ?? t("Selecciona una orden", "Select a purchase order")}</h2>
                 <p>{t("Convierte una requisición aprobada en un compromiso controlado y acompáñalo hasta recepción, movimiento y factura sin volver a capturar datos.", "Turn an approved requisition into a controlled commitment and carry it to receiving, movement and invoice without re-entering data.")}</p>
                 <label className="purchaseOrderContextControl">
@@ -1013,6 +1444,8 @@ export default function ProcurementPurchaseOrdersPage() {
                 <div className="row gap wrap">
                   {selectedPurchaseOrder ? <Badge tone={statusTone(selectedPurchaseOrder.status)}>{localizeText(purchaseOrderStatusLabel(selectedPurchaseOrder.status))}</Badge> : null}
                   {selectedPurchaseOrder ? <Badge tone={invoiceTone(selectedPurchaseOrder.invoiceMatchStatus)}>{localizeText(invoiceMatchLabel(selectedPurchaseOrder.invoiceMatchStatus))}</Badge> : null}
+                  {requisitionPreloadContext ? <Badge tone="info">{hasRequisitionClearMatch ? t("Contexto aplicado", "Context applied") : t("Contexto visible", "Context visible")}</Badge> : null}
+                  {accountsPayablePreloadContext ? <Badge tone="info">{hasAccountsPayableClearMatch ? t("Contexto aplicado", "Context applied") : t("Contexto visible", "Context visible")}</Badge> : null}
                 </div>
                 <strong>{selectedPurchaseOrder?.nextAction ?? t("Sin siguiente acción", "No next action")}</strong>
                 <p>{selectedPurchaseOrder ? `${selectedPurchaseOrder.projectName} · ${selectedPurchaseOrder.supplierName}` : t("Selecciona una orden para comenzar", "Select an order to begin")}</p>
@@ -1023,6 +1456,44 @@ export default function ProcurementPurchaseOrdersPage() {
                 </div>
               </div>
             </section>
+
+            {requisitionPreloadContext && !hasRequisitionClearMatch ? (
+              <section className="grid cols1">
+                <Card
+                  title={t("Contexto recibido desde requisiciones", "Context received from requisitions")}
+                  description={t("No hubo una orden clara para abrir. Se aplicaron filtros y, si era posible, se preparó el alta desde la requisición elegible.", "No clear order was found to open. Filters were applied and, when possible, the create flow was prepared from the eligible requisition.")}
+                  aside={<Badge tone="info">Precargado desde requisiciones / Preloaded from requisitions</Badge>}
+                >
+                  <div className="detailGrid">
+                    {requisitionContextRows.map((row) => (
+                      <div key={row.label} className="detailRow">
+                        <div className="detailLabel">{row.label}</div>
+                        <div>{row.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </section>
+            ) : null}
+
+            {accountsPayablePreloadContext && !hasAccountsPayableClearMatch ? (
+              <section className="grid cols1">
+                <Card
+                  title={t("Contexto recibido desde cuentas por pagar", "Context received from accounts payable")}
+                  description={t("No hubo una orden clara para abrir. Se aplicaron filtros para mantener visible la OC vinculada por CXP.", "No clear order was found to open. Filters were applied so the PO linked from AP stays visible.")}
+                  aside={<Badge tone="info">Precargado desde cuentas por pagar / Preloaded from accounts payable</Badge>}
+                >
+                  <div className="detailGrid">
+                    {accountsPayableContextRows.map((row) => (
+                      <div key={row.label} className="detailRow">
+                        <div className="detailLabel">{row.label}</div>
+                        <div>{row.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </section>
+            ) : null}
 
             <div className="purchaseOrderWorkspaceTabs" role="tablist" aria-label={t("Vistas de órdenes de compra", "Purchase order views")}>
               {([
@@ -1061,10 +1532,42 @@ export default function ProcurementPurchaseOrdersPage() {
                         <label className="detailRow"><div className="detailLabel">{t("Acción comprometida", "Committed action")}</div><textarea id="purchase-order-next-action" className="textarea" value={nextActionDraft} onChange={(event) => setNextActionDraft(event.target.value)} placeholder={t("Ej. Confirmar salida y ventana de descarga hoy", "E.g. Confirm dispatch and unloading window today")} /></label>
                       </div>
                     ) : <EmptyState title={t("Sin orden seleccionada", "No purchase order selected")} description={t("Elige una orden desde la bandeja para actualizarla.", "Select an order from the queue to update it.")} />}
-                    {selectedPurchaseOrder ? <div className="row gap wrap" style={{ marginTop: 20 }}><button type="button" className="button" disabled={isSaving || nextActionDraft.trim().length < 8} onClick={() => void handleAction(selectedPurchaseOrder.status, selectedPurchaseOrder.nextAction)}>{isSaving ? t("Guardando...", "Saving...") : t("Guardar acción", "Save action")}</button><Link className="buttonGhost" href={`/supplier-control?supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}>{t("Abrir proveedor", "Open supplier")}</Link></div> : null}
+                    {selectedPurchaseOrder ? <div className="row gap wrap" style={{ marginTop: 20 }}><button type="button" className="button" disabled={isSaving || nextActionDraft.trim().length < 8} onClick={() => void handleAction(selectedPurchaseOrder.status, selectedPurchaseOrder.nextAction)}>{isSaving ? t("Guardando...", "Saving...") : t("Guardar acción", "Save action")}</button><Link className="buttonGhost" href={selectedPurchaseOrderSupplierControlHref}>{t("Abrir proveedor", "Open supplier")}</Link></div> : null}
                   </Card>
 
                   <Card title={t("Decisión operativa", "Operational decision")} description={t(purchaseOrderContinuityCopy.description, selectedPurchaseOrder ? "Keep status changes connected to supplier commitment, receiving and fiscal readiness." : "Select an order to decide its next operational step.")} aside={<Badge tone={selectedPurchaseOrder?.invoiceMatchStatus === "risk" ? "danger" : selectedPurchaseOrder?.status === "blocked" ? "danger" : "success"}>{t(purchaseOrderContinuityCopy.label, selectedPurchaseOrder?.status === "blocked" ? "Unblock required" : "Ready to continue")}</Badge>}>
+                    {requisitionPreloadContext ? (
+                      <div className="detailGrid" style={{ marginBottom: 18 }}>
+                        <div className="detailRow">
+                          <div className="detailLabel">Requisition</div>
+                          <div>
+                            <Badge tone="info">Precargado desde requisiciones / Preloaded from requisitions</Badge>
+                          </div>
+                        </div>
+                        {requisitionContextRows.map((row) => (
+                          <div key={row.label} className="detailRow">
+                            <div className="detailLabel">{row.label}</div>
+                            <div>{row.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {accountsPayablePreloadContext ? (
+                      <div className="detailGrid" style={{ marginBottom: 18 }}>
+                        <div className="detailRow">
+                          <div className="detailLabel">{t("Cuentas por pagar", "Accounts payable")}</div>
+                          <div>
+                            <Badge tone="info">Precargado desde cuentas por pagar / Preloaded from accounts payable</Badge>
+                          </div>
+                        </div>
+                        {accountsPayableContextRows.map((row) => (
+                          <div key={row.label} className="detailRow">
+                            <div className="detailLabel">{row.label}</div>
+                            <div>{row.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <p className="sectionText">{t("Cada cambio debe conservar la fecha, la logística y la trazabilidad de la requisición que originó esta compra.", "Every change must keep the date, logistics and requisition traceability that originated this purchase.")}</p>
                     <div className="row gap wrap" style={{ marginTop: 18 }}>
                       {selectedPurchaseOrder ? actionOptions.map((option) => (
@@ -1075,7 +1578,7 @@ export default function ProcurementPurchaseOrdersPage() {
                     </div>
                     {selectedPurchaseOrder?.receivedPercent && selectedPurchaseOrder.receivedPercent < 95 ? <p className="tableCellMuted" style={{ marginTop: 16 }}>{t("La recepción debe alcanzar al menos 95% antes de cerrar esta orden.", "Receipt must reach at least 95% before closing this order.")}</p> : null}
                     {selectedPurchaseOrder?.invoiceMatchStatus === "risk" ? <p className="tableCellMuted" style={{ marginTop: 8 }}>{t("Corrige el riesgo fiscal antes de marcar la orden como recibida.", "Resolve fiscal risk before marking the order received.")}</p> : null}
-                    {selectedPurchaseOrder && actionOptions.length === 0 ? <div className="row gap wrap" style={{ marginTop: 18 }}><Link className="button" href={`/inventory/receiving?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}&supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}>{t("Ver recepción", "View receiving")}</Link><Link className="buttonGhost" href={`/inventory/movements?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}`}>{t("Ver movimientos", "View movements")}</Link></div> : null}
+                    {selectedPurchaseOrder && actionOptions.length === 0 ? <div className="row gap wrap" style={{ marginTop: 18 }}><Link className="button" href={selectedPurchaseOrderReceivingHref}>{t("Ver recepción", "View receiving")}</Link><Link className="buttonGhost" href={selectedPurchaseOrderMovementHref}>{t("Ver movimientos", "View movements")}</Link></div> : null}
                     {actionMessage ? <p className="formSuccess">{actionMessage}</p> : null}
                     {actionError ? <p className="formError">{actionError}</p> : null}
                   </Card>
@@ -1083,7 +1586,7 @@ export default function ProcurementPurchaseOrdersPage() {
 
                 <section className="grid cols2">
                   <Card title={t("Continuar el flujo", "Continue the flow")} description={t("La orden mantiene la misma referencia al pasar a recepción, almacén y cuentas por pagar.", "The order keeps the same reference as it moves to receiving, warehouse and accounts payable.")}>
-                    {selectedPurchaseOrder ? <div className="row gap wrap"><Link className="button" href={`/inventory/receiving?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}&supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}>{t("Preparar recepción", "Prepare receiving")}</Link><Link className="buttonGhost" href={`/inventory/movements?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}`}>{t("Movimientos", "Movements")}</Link><Link className="buttonGhost" href="/accounts-payable">{t("Cuentas por pagar", "Accounts payable")}</Link></div> : null}
+                    {selectedPurchaseOrder ? <div className="row gap wrap"><Link className="button" href={selectedPurchaseOrderReceivingHref}>{t("Preparar recepción", "Prepare receiving")}</Link><Link className="buttonGhost" href={selectedPurchaseOrderMovementHref}>{t("Movimientos", "Movements")}</Link><Link className="buttonGhost" href={selectedPurchaseOrderAccountsPayableHref}>{t("Cuentas por pagar", "Accounts payable")}</Link></div> : null}
                   </Card>
                   <Card title={t("Señales de ejecución", "Execution signals")} description={t("Lectura rápida de recepción, proveedor y riesgos asociados a la orden activa.", "Fast read of receipt, supplier and risk signals associated with the active order.")}>
                     <div className="detailGrid"><div className="detailRow"><div className="detailLabel">{t("Entradas ligadas", "Linked receipts")}</div><div>{linkedReceipts.length}</div></div><div className="detailRow"><div className="detailLabel">{t("Riesgos activos", "Active risks")}</div><div>{selectedRisks.length > 0 ? `${selectedRisks.length} ${t("requieren atención", "need attention")}` : t("Sin riesgos explícitos", "No explicit risks")}</div></div><div className="detailRow"><div className="detailLabel">{t("Origen de obra", "Site origin")}</div><div>{selectedFieldOrigin ? selectedFieldOrigin.fieldRequestId : t("Captura directa de compras", "Direct procurement capture")}</div></div></div>
@@ -1112,6 +1615,22 @@ export default function ProcurementPurchaseOrdersPage() {
             {workspaceView === "create" ? (
               <section className="grid cols2">
                 <Card title={t("Alta de orden de compra", "Create purchase order")} description={t("Abre un compromiso de proveedor solo desde una requisición aprobada o en cotización.", "Open a supplier commitment only from an approved or sourcing requisition.")}>
+                  {requisitionPreloadContext ? (
+                    <div className="detailGrid" style={{ marginBottom: 18 }}>
+                      <div className="detailRow">
+                        <div className="detailLabel">{t("Contexto recibido", "Received context")}</div>
+                        <div>
+                          <Badge tone="info">Precargado desde requisiciones / Preloaded from requisitions</Badge>
+                        </div>
+                      </div>
+                      {requisitionContextRows.map((row) => (
+                        <div key={row.label} className="detailRow">
+                          <div className="detailLabel">{row.label}</div>
+                          <div>{row.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="row gap wrap" style={{ marginBottom: 18 }}><button type="button" className="buttonGhost" onClick={() => setCreateForm(createPurchaseOrderExample(eligibleRequisitions[0]?.id))}>{t("Cargar ejemplo", "Load example")}</button><button type="button" className="buttonGhost" onClick={() => setCreateForm((current) => ({ ...current, requisitionId: eligibleRequisitions[0]?.id ?? "", supplierName: "Proveedor estratégico", buyer: "Comprador responsable", totalAmount: "150000", committedEta: "2026-07-20", logisticsMode: "Entrega directa a obra", nextAction: "" }))}>{t("Limpiar esenciales", "Clear essentials")}</button></div>
                   <div className="captureCompactGrid">
                     <label className="captureField captureFieldWide"><span>{t("Requisición de origen", "Source requisition")}</span><select className="selectField" value={createForm.requisitionId} onChange={(event) => setCreateForm((current) => ({ ...current, requisitionId: event.target.value }))}><option value="">{t("Selecciona una requisición", "Select a requisition")}</option>{eligibleRequisitions.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.projectName} · {item.category}</option>)}</select></label>
@@ -1447,13 +1966,13 @@ export default function ProcurementPurchaseOrdersPage() {
                           <div className="row gap wrap" style={{ marginTop: 16 }}>
                             <Link
                               className="buttonGhost"
-                              href={`/inventory/receiving?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}&supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}
+                              href={selectedPurchaseOrderReceivingHref}
                             >
                               Open receiving
                             </Link>
                             <Link
                               className="buttonGhost"
-                              href={`/inventory/movements?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}&upstreamReceiptCode=${encodeURIComponent(linkedReceipts[0]?.code ?? "")}`}
+                              href={selectedPurchaseOrderMovementHref}
                             >
                               Open movement
                             </Link>
@@ -1465,7 +1984,7 @@ export default function ProcurementPurchaseOrdersPage() {
                           <div className="row gap wrap" style={{ marginTop: 16 }}>
                             <Link
                               className="button"
-                              href={`/inventory/receiving?purchaseReference=${encodeURIComponent(selectedPurchaseOrder.code)}&supplierName=${encodeURIComponent(selectedPurchaseOrder.supplierName)}`}
+                              href={selectedPurchaseOrderReceivingHref}
                             >
                               Create receipt
                             </Link>
